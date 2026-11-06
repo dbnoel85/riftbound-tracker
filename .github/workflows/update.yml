@@ -35,6 +35,9 @@ jobs:
         env:
           FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '' }}
         run: python scripts/update_prices.py
+      - name: Pull meta decks
+        continue-on-error: true
+        run: python scripts/update_decks.py
       - name: Save new data
         run: |
           git config user.name "price-bot"
