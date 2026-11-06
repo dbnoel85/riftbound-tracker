@@ -584,7 +584,7 @@ const SECTION_ORDER = [['Legend', 'Legend'], ['Champion', 'Chosen champion'], ['
 
 function loadDecks() {
   if (D.data) return Promise.resolve();
-  if (!D.loading) D.loading = Promise.all([fetch('data/decks.json').then((r) => r.json()), fetch('data/rbcards.json').then((r) => r.json())])
+  if (!D.loading) D.loading = Promise.all([fetch('data/decks.json').then((r) => r.json()), fetch('data/rbcards.json').then((r) => r.json()), loadHashes()])
     .then(([d, rb]) => { D.data = d; D.rb = rb; buildDeckIndexes(); })
     .catch((e) => { D.loading = null; throw e; });
   return D.loading;
@@ -623,9 +623,15 @@ function cardPrice(name) {
   for (const it of list) if (it.m != null && (best == null || it.m < best.m)) best = it;
   return best; // cheapest printing
 }
-function cardRef(name) { // a TCGplayer printing to open (prefer normal, then cheapest)
+function cardRef(name) { // the printing to show: has a picture, standard art, non-foil
   const list = D.byName.get(normName(name)) || [];
-  return list.find((i) => i.s === 'Normal') || list[0] || null;
+  const h = S.hashes || {};
+  let best = null, bs = -1;
+  for (const i of list) {
+    const sc = (h[String(i.p)] ? 4 : 0) + (/\(/.test(i.n) ? 0 : 2) + (i.s === 'Normal' ? 1 : 0);
+    if (sc > bs) { bs = sc; best = i; }
+  }
+  return best;
 }
 function sectionOf(id, legendTags) {
   const c = D.rb[id]; if (!c) return 'Unit';
@@ -906,6 +912,7 @@ function wireScore() {
 }
 
 async function init() {
+  document.addEventListener('error', (e) => { const t = e.target; if (t.tagName === 'IMG' && !t.dataset.dead) { t.dataset.dead = 1; t.removeAttribute('src'); t.classList.add('thumb'); t.alt = ''; } }, true);
   if (location.hash === '#card') { try { history.replaceState(null, '', location.pathname); } catch {} }
   wire();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
