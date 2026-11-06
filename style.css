@@ -217,3 +217,4 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 
 .chips.wins{justify-content:stretch}.chips.wins button{flex:1}
 .rk{color:var(--gold);margin-right:4px}
+.item .meta.wrap{white-space:normal;line-height:1.55}

@@ -960,7 +960,7 @@ async function renderDecks() {
       ${img(leg && leg.img)}
       <div class="info">
         <div class="nm">${a.tier ? `<span class="tier ${esc(a.tier)}">${esc(a.tier)}</span>` : ''}${esc(a.name)}</div>
-        <div class="meta">${domTags(a.colors)} <b class="rk">#${a.pos ?? a.rank}</b> ${pctTxt(a.winrate)} wins · top 8 ${pctTxt(a.top8)} · ${a.share}% of decks${a.enough === false ? ' · <span class="part">small sample</span>' : ''}</div>
+        <div class="meta wrap">${domTags(a.colors)} <b class="rk">#${a.pos ?? a.rank}</b> ${pctTxt(a.winrate)} wins · top 8 ${pctTxt(a.top8)} · ${a.share}% of decks${a.enough === false ? ' · <span class="part">small sample</span>' : ''}</div>
         ${an ? `<div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div><div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>`
         : '<div class="meta">No public decklist yet</div>'}
       </div>
