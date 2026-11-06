@@ -279,7 +279,11 @@ async function openDetail(k) {
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
   $('#sheet-content').innerHTML = html;
+  const wasOpen = !$('#sheet').classList.contains('hidden');
   $('#sheet').classList.remove('hidden');
+  $('#sheet .sheet-body').scrollTop = 0;
+  // let the phone's Back gesture/button close the card instead of leaving the app
+  if (!wasOpen) { try { history.pushState({ sheet: 1 }, '', '#card'); } catch {} }
   const upd = () => {
     const e = S.inv.items[k];
     $('#qty').textContent = e ? e.qty : 0;
@@ -313,7 +317,14 @@ async function drawChart(it) {
     <text x="6" y="12" fill="#9aa1bd" font-size="10">${money(hi)}</text><text x="6" y="118" fill="#9aa1bd" font-size="10">${money(lo)}</text>
     <text x="294" y="118" fill="#9aa1bd" font-size="10" text-anchor="end">${fmtDate(ser[0].d)} – now</text>`;
 }
-function closeSheet() { $('#sheet').classList.add('hidden'); }
+function hideSheet() { $('#sheet').classList.add('hidden'); refreshCurrent(); }
+function closeSheet() {
+  if ($('#sheet').classList.contains('hidden')) return;
+  if (history.state && history.state.sheet) history.back(); // popstate below hides it
+  else hideSheet();
+}
+window.addEventListener('popstate', () => { if (!$('#sheet').classList.contains('hidden')) hideSheet(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 function refreshCurrent() { if (S.view === 'collection') renderCollection(); if (S.view === 'movers') renderMovers(); }
 
 /* ---------------------------------------------------------------- scanner */
@@ -511,7 +522,7 @@ function wire() {
     if (add) { e.stopPropagation(); addCard(add.dataset.add); return; }
     const row = e.target.closest('.list .item[data-k]');
     if (row) openDetail(row.dataset.k);
-    if (e.target.closest('[data-close]')) { closeSheet(); refreshCurrent(); }
+    if (e.target.closest('[data-close]')) { e.preventDefault(); closeSheet(); }
   });
   $('#btn-capture').onclick = async () => {
     const c = grabFromVideo(); if (!c) { toast('Camera not ready — try Photo'); return; }
@@ -528,6 +539,7 @@ function wire() {
 }
 
 async function init() {
+  if (location.hash === '#card') { try { history.replaceState(null, '', location.pathname); } catch {} }
   wire();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
