@@ -2,6 +2,8 @@
 
 A phone app (installable web app) for tracking a Riftbound TCG collection.
 
+**Open the app:** https://dbnoel85.github.io/riftbound-tracker/
+
 - **Scan** cards with the phone camera (reads the card number/name and matches the artwork), or **add** them by searching.
 - Every printing is covered: all sets, promos, alternate arts, signatures, overnumbered, normal and foil.
 - **TCGplayer market prices** refresh daily; **weekly change** in $ and % for each card and the whole collection.
