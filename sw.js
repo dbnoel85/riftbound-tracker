@@ -1,5 +1,5 @@
 // Offline support: app shell cached; price data always tries the network first.
-const SHELL = 'rbt-shell-v6';
+const SHELL = 'rbt-shell-v7';
 const IMG = 'rbt-img-v1';
 const FILES = ['fonts/marcellus-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', './', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
@@ -22,7 +22,7 @@ self.addEventListener('fetch', (e) => {
   }
   if (url.origin !== location.origin) return;
   // data + app code: network first, fall back to cache when offline
-  e.respondWith(fetch(e.request).then((r) => {
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then((r) => { // always check for a newer version
     if (r.ok && !url.pathname.includes('/vendor/')) { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(e.request, copy)); }
     return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: true })));
