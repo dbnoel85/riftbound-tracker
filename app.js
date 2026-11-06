@@ -551,7 +551,13 @@ async function identify(canvas, { useName = true } = {}) {
       if (cands.length) why = 'name';
     }
   }
-  // 3) score: text evidence first, artwork decides between versions
+  // 3) nothing readable: fall back to the artwork alone (only close matches)
+  if (!cands.length) {
+    const all = [];
+    for (const [pid, items] of S.byPid) { if (items[0].sealed) continue; const d = scoreHash(pid); if (d < 70) all.push({ pid, items, art: true, d }); }
+    all.sort((x, y) => x.d - y.d); cands = all.slice(0, 5); if (cands.length) why = 'art';
+  }
+  // 4) score: text evidence first, artwork decides between versions
   for (const c of cands) {
     c.d = scoreHash(c.pid);
     const grp = S.groups.get(c.items[0].g);
@@ -561,7 +567,8 @@ async function identify(canvas, { useName = true } = {}) {
   cands.sort((a, b) => b.s - a.s);
   const [a, b] = cands;
   let sure = false;
-  if (a && (a.code || (a.name >= 0.99 && a.d < 90))) {
+  if (a && a.art) sure = a.d <= 38 && (!b || b.d - a.d >= 18);   // picture alone: only when it's unmistakable
+  else if (a && ((a.code && a.d <= 75) || (a.name >= 0.99 && a.d < 90))) {
     if (!b) sure = true;
     else if (a.code && b.code && a.sufOk !== b.sufOk && codes.some((c) => c.suf)) sure = a.sufOk; // a printed letter (e.g. 066a) settles it
     else if (b.d - a.d >= 12) sure = true;                       // artwork clearly closer
@@ -600,7 +607,7 @@ function showAdded(it, product, cands) {
 function showMaybe(res) {
   if (!res.cands.length) return;
   $('#scan-status').textContent = 'Which one is it? Tap to add:';
-  $('#scan-results').innerHTML = res.cands.slice(0, 3).map((c) => productRow(c.items, `<div class="match">${c.code ? 'number match' : c.name ? 'name match' : ''}</div>`)).join('');
+  $('#scan-results').innerHTML = res.cands.slice(0, 3).map((c) => productRow(c.items, `<div class="match">${c.code ? 'number match' : c.name ? 'name match' : 'artwork match'}</div>`)).join('');
 }
 async function runScan(canvas, manual) {
   if (SCAN.busy) return; SCAN.busy = true;
