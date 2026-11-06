@@ -496,6 +496,22 @@ function parseCode(text) {
 }
 const baseName = (s) => s.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
+/* the number sits on one thin line at the bottom-left; try a few tight windows so trim lines don't confuse the reader */
+const CODE_WINDOWS = [[0.04, 0.948, 0.46, 0.042], [0.04, 0.938, 0.46, 0.046], [0.04, 0.958, 0.46, 0.04], [0.04, 0.925, 0.46, 0.05]];
+async function readCode(canvas) {
+  const cs = Math.max(1.5, 1900 / canvas.width);
+  for (const box of CODE_WINDOWS) {
+    try {
+      const codes = parseCode(await ocr(cropScaled(canvas, box, cs, true), 'code'));
+      if (codes.some((c) => c.known)) return codes;
+    } catch (e) { console.warn(e); return []; }
+  }
+  return [];
+}
+function rotated(canvas) { // battlefields are printed sideways
+  const c = document.createElement('canvas'); c.width = canvas.height; c.height = canvas.width;
+  const x = c.getContext('2d'); x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(canvas, 0, 0); return c;
+}
 /** Returns { sure, best, cands, why } */
 async function identify(canvas, { useName = true } = {}) {
   const hashes = await loadHashes();
@@ -504,12 +520,19 @@ async function identify(canvas, { useName = true } = {}) {
   let cands = [], why = '';
   // 1) collector number — the most reliable signal
   let codes = [];
-  const cs = Math.max(1.5, 1900 / canvas.width);
-  try { codes = parseCode(await ocr(cropScaled(canvas, CODE_BOX, cs, true), 'code')); } catch (e) { console.warn(e); }
+  codes = await readCode(canvas);
   const idx = numIndex();
   for (const c of codes) {
     const hits = idx.get(`${c.n}/${c.tot}`);
     if (hits && hits.length) { cands = hits.map((x) => ({ ...x, code: true, sufOk: x.suf === c.suf })); why = 'number'; break; }
+  }
+  if (!cands.length) { // maybe a battlefield held sideways
+    const r = rotated(canvas); const r2 = rotated(rotated(r));
+    for (const rc of [r, r2]) {
+      const cc = parseCode((await ocr(cropScaled(rc, [0.03, 0.9, 0.5, 0.1], Math.max(1.5, 1900 / rc.width), true), 'code').catch(() => '')));
+      for (const c of cc) { const hits = idx.get(`${c.n}/${c.tot}`); if (hits && hits.length) { cands = hits.map((x) => ({ ...x, code: true, sufOk: x.suf === c.suf })); why = 'number'; codes = cc; break; } }
+      if (cands.length) break;
+    }
   }
   // 2) card name
   if (!cands.length && useName) {
@@ -533,11 +556,17 @@ async function identify(canvas, { useName = true } = {}) {
     c.d = scoreHash(c.pid);
     const grp = S.groups.get(c.items[0].g);
     c.main = grp && MAIN_SETS.has(grp.abbr);
-    c.s = (c.code ? 60 : 0) + (c.sufOk ? 10 : 0) + (c.name ? 30 * c.name : 0) + Math.max(0, 80 - c.d) * 0.6 + (c.main ? 3 : 0);
+    c.s = (c.code ? 60 : 0) + (c.sufOk && c.suf ? 10 : 0) + (c.name ? 30 * c.name : 0) + Math.max(0, 80 - c.d) * 0.6 + (c.main ? 3 : 0);
   }
   cands.sort((a, b) => b.s - a.s);
   const [a, b] = cands;
-  const sure = !!a && (a.code || (a.name >= 0.99 && a.d < 90)) && (!b || a.s - b.s >= 6 || (a.d < 60 && b.d - a.d >= 10));
+  let sure = false;
+  if (a && (a.code || (a.name >= 0.99 && a.d < 90))) {
+    if (!b) sure = true;
+    else if (a.code && b.code && a.sufOk !== b.sufOk && codes.some((c) => c.suf)) sure = a.sufOk; // a printed letter (e.g. 066a) settles it
+    else if (b.d - a.d >= 12) sure = true;                       // artwork clearly closer
+    else if (a.main && !b.main && b.d - a.d >= -4) sure = true;  // same art as a promo reprint: take the set version (switchable)
+  }
   return { sure, best: a || null, cands: cands.slice(0, 5), why, hash: h, codes };
 }
 
