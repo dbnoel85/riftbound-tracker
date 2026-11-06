@@ -322,13 +322,13 @@ async function drawChart(it) {
   const ser = (h.series[it.k] || []).map((v, i) => ({ v, d: h.dates[i] })).filter((p) => p.v != null);
   if (it.m != null && (!ser.length || ser[ser.length - 1].d !== S.cards.updated)) ser.push({ v: it.m, d: S.cards.updated });
   const svg = $('#chart'); if (!svg) return;
-  if (ser.length < 2) { svg.innerHTML = '<text x="150" y="64" fill="#9aa1bd" font-size="12" text-anchor="middle">History builds up week by week</text>'; return; }
+  if (ser.length < 2) { svg.innerHTML = '<text x="150" y="64" fill="#97a2c8" font-size="12" text-anchor="middle">History builds up week by week</text>'; return; }
   const vs = ser.map((p) => p.v), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
   const pts = ser.map((p, i) => [8 + (i / (ser.length - 1)) * 284, 108 - ((p.v - lo) / span) * 92]);
-  const col = vs[vs.length - 1] >= vs[0] ? '#3ccf8e' : '#ff6b6b';
+  const col = vs[vs.length - 1] >= vs[0] ? '#45e0d0' : '#ff6a57';
   svg.innerHTML = `<polyline fill="none" stroke="${col}" stroke-width="2.5" vector-effect="non-scaling-stroke" points="${pts.map((p) => p.join(',')).join(' ')}"/>
-    <text x="6" y="12" fill="#9aa1bd" font-size="10">${money(hi)}</text><text x="6" y="118" fill="#9aa1bd" font-size="10">${money(lo)}</text>
-    <text x="294" y="118" fill="#9aa1bd" font-size="10" text-anchor="end">${fmtDate(ser[0].d)} – now</text>`;
+    <text x="6" y="12" fill="#97a2c8" font-size="10">${money(hi)}</text><text x="6" y="118" fill="#97a2c8" font-size="10">${money(lo)}</text>
+    <text x="294" y="118" fill="#97a2c8" font-size="10" text-anchor="end">${fmtDate(ser[0].d)} – now</text>`;
 }
 /* Full-screen pages (card, deck) stack up; Back / the phone's back gesture steps out one level. */
 const SHEET = [];
