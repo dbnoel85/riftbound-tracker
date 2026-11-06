@@ -203,10 +203,23 @@ function renderAdd() {
     return;
   }
   res.sort((a, b) => (a[0].g - b[0].g) || String(a[0].num).localeCompare(String(b[0].num), undefined, { numeric: true }) || a[0].n.localeCompare(b[0].n));
-  const shown = res.slice(0, 120);
-  $('#add-list').innerHTML = shown.map((items) => productRow(items)).join('') +
-    (res.length > shown.length ? `<li class="empty">${res.length - shown.length} more — narrow your search</li>` : '') +
-    (!res.length ? '<li class="empty">No matches.</li>' : '');
+  // show everything: render in pages of 60 as you scroll, so big sets stay smooth
+  ADD.res = res; ADD.n = 0;
+  $('#add-list').innerHTML = res.length ? `<li class="sub" id="add-count">${res.length} card${res.length === 1 ? '' : 's'}</li>` : '<li class="empty">No matches.</li>';
+  addMore();
+}
+const ADD = { res: [], n: 0, obs: null };
+function addMore() {
+  const list = $('#add-list');
+  $('#add-sentinel')?.remove();
+  const next = ADD.res.slice(ADD.n, ADD.n + 60);
+  ADD.n += next.length;
+  list.insertAdjacentHTML('beforeend', next.map((items) => productRow(items)).join(''));
+  if (ADD.n < ADD.res.length) {
+    list.insertAdjacentHTML('beforeend', `<li id="add-sentinel" class="empty">Loading more… (${ADD.res.length - ADD.n} to go)</li>`);
+    if (!ADD.obs && 'IntersectionObserver' in window) ADD.obs = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) addMore(); }, { rootMargin: '600px' });
+    if (ADD.obs) ADD.obs.observe($('#add-sentinel')); else $('#add-sentinel').onclick = addMore;
+  }
 }
 
 /* ----- movers */
