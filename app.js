@@ -900,10 +900,38 @@ function analyzeDeck(a) {
   return { lines, side, subs, mainTotal, mainHave, cost, costMain, pct, legendTags };
 }
 
+/* ---- time windows and strength ranking */
+function winData() {
+  const ws = D.data.windows || {};
+  return ws[D.win] || ws['30d'] || D.data;
+}
+function ranked() {
+  const w = winData();
+  if (w._ranked) return w._ranked;
+  const by30 = new Map(((D.data.windows || {})['30d'] || D.data).archetypes.map((a) => [a.slug, a]));
+  const minN = Math.min(120, Math.max(40, Math.round((w.sample?.matches || 0) * 0.008)));
+  const f = w.field || {};
+  const list = w.archetypes.map((a0) => {
+    const a = { ...a0 };
+    if (!a.list && by30.get(a.slug)?.list) { a.list = by30.get(a.slug).list; a.best = by30.get(a.slug).best; a.listFrom30 = true; }
+    const n = a.winrateN || 0, k = 80;
+    a.wrAdj = a.winrate == null ? 0.5 : (a.winrate * n + 0.5 * k) / (n + k);           // win rate, pulled toward 50% when few matches
+    const tq = a.topq != null && f.topq ? a.topq - f.topq : 0;                           // top-25% finishes vs. the field
+    const t8 = a.top8 != null && f.top8 ? a.top8 - f.top8 : 0;                           // top-8 finishes vs. the field
+    a.strength = a.wrAdj + 0.35 * tq + 0.25 * t8;
+    a.enough = n >= minN;
+    return a;
+  });
+  list.sort((x, y) => (y.enough - x.enough) || (y.strength - x.strength));
+  list.forEach((a, i) => { a.pos = i + 1; });
+  w._ranked = list;
+  return list;
+}
+function findArch(slug) { return ranked().find((x) => x.slug === slug) || ((D.data.windows || {})['30d'] || D.data).archetypes.find((x) => x.slug === slug); }
 function deckCandidates() {
-  const all = D.data.archetypes;
-  if (D.tab === 'meta') return all.filter((a) => a.rank <= 10);
-  if (D.tab === 'other') return all.filter((a) => a.rank > 10).sort((x, y) => (tierRank(x.tier) - tierRank(y.tier)) || ((y.winrate || 0) - (x.winrate || 0)));
+  const all = ranked();
+  if (D.tab === 'meta') return all.slice(0, 10);
+  if (D.tab === 'other') return all.slice(10);
   return all.filter((a) => a.list).map((a) => ({ a, an: analyzeDeck(a) })).sort((x, y) => (y.an.pct - x.an.pct) || (x.an.costMain - y.an.costMain)).slice(0, 20).map((x) => x.a);
 }
 const tierRank = (t) => ({ S: 0, A: 1, B: 2, C: 3, D: 4 }[t] ?? 5);
@@ -913,13 +941,16 @@ const domTags = (cols) => (cols || []).map((c) => `<span class="dom ${esc(c)}">$
 async function renderDecks() {
   if (!S.cards) return;
   $$('#dk-tab button').forEach((b) => b.classList.toggle('on', b.dataset.v === D.tab));
+  $$('#dk-win button').forEach((b) => b.classList.toggle('on', b.dataset.w === D.win));
   try { await loadDecks(); } catch { $('#dk-list').innerHTML = '<li class="empty">Deck data isn\'t available yet — check back after the next daily update.</li>'; return; }
-  const d = D.data;
+  const d = winData();
+  const days = { '30d': '30', '14d': '14', '7d': '7' }[D.win] || '30';
   const upd = d.updated ? new Date(d.updated * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-  $('#dk-info').textContent = {
-    meta: `Most-played legends in the last ${d.window || '30 days'} (${(d.sample.decks || 0).toLocaleString()} decks, ${d.sample.events || 0} events). Updated ${upd}.`,
-    other: 'Every other legend, strongest first (tier, then win rate). Each shows its best recent tournament list.',
-    ready: 'Lists you\'re closest to building with the cards you own.',
+  const src = `last ${days} days · ${(d.sample?.decks || 0).toLocaleString()} decks from ${d.sample?.events || 0} events · updated ${upd}`;
+  $('#dk-info').innerHTML = {
+    meta: `The 10 strongest legends, ranked by win rate and how often they finish in the top 25% and top 8 of tournaments. <span class="flat">(${src})</span>`,
+    other: `Every other legend, strongest first. Ones with too few matches to judge are at the end. <span class="flat">(${src})</span>`,
+    ready: `Lists you're closest to building with the cards you own. <span class="flat">(${src})</span>`,
   }[D.tab];
   const rows = deckCandidates();
   $('#dk-list').innerHTML = rows.map((a) => {
@@ -929,7 +960,7 @@ async function renderDecks() {
       ${img(leg && leg.img)}
       <div class="info">
         <div class="nm">${a.tier ? `<span class="tier ${esc(a.tier)}">${esc(a.tier)}</span>` : ''}${esc(a.name)}</div>
-        <div class="meta">${domTags(a.colors)} #${a.rank} · ${a.share}% meta · ${pctTxt(a.winrate)} wins</div>
+        <div class="meta">${domTags(a.colors)} <b class="rk">#${a.pos ?? a.rank}</b> ${pctTxt(a.winrate)} wins · top 8 ${pctTxt(a.top8)} · ${a.share}% of decks${a.enough === false ? ' · <span class="part">small sample</span>' : ''}</div>
         ${an ? `<div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div><div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>`
         : '<div class="meta">No public decklist yet</div>'}
       </div>
@@ -939,19 +970,19 @@ async function renderDecks() {
 
 function openDeck(slug) { pushSheet(() => renderDeck(slug)); }
 function renderDeck(slug) {
-  const a = D.data.archetypes.find((x) => x.slug === slug); if (!a) return;
+  const a = findArch(slug); if (!a) return;
   const leg = cardRef(D.rb[a.leader]?.n || a.name);
   const b = a.best;
   const when = b && b.date ? new Date(b.date * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   let html = `<div class="detail">
     ${leg ? `<img class="detail-img" style="width:44%" src="${esc(bigImg(leg.img))}" onerror="this.onerror=null;this.src='${esc(leg.img)}'" alt="">` : ''}
     <h2>${a.tier ? `<span class="tier ${esc(a.tier)}">${esc(a.tier)}</span>` : ''}${esc(a.name)}</h2>
-    <div class="sub">${domTags(a.colors)} Meta rank #${a.rank}</div>
+    <div class="sub">${domTags(a.colors)} Strength rank #${a.pos ?? a.rank} · last ${{ '30d': 30, '14d': 14, '7d': 7 }[D.win] || 30} days</div>
     <div class="kv">
-      <div><span class="label">Meta share</span><b>${a.share}%</b></div>
       <div><span class="label">Win rate</span><b>${pctTxt(a.winrate)}</b><small class="sub">${a.winrateN ? a.winrateN.toLocaleString() + ' matches' : ''}</small></div>
-      <div><span class="label">Decks played</span><b>${(a.decks || 0).toLocaleString()}</b></div>
       <div><span class="label">Top-8 rate</span><b>${pctTxt(a.top8)}</b></div>
+      <div><span class="label">Top-25% rate</span><b>${pctTxt(a.topq)}</b></div>
+      <div><span class="label">Meta share</span><b>${a.share}%</b><small class="sub">${(a.decks || 0).toLocaleString()} decks</small></div>
     </div>`;
   if (!a.list) {
     html += `<p class="sub">No full decklist has been published for this legend yet.</p>
@@ -960,7 +991,7 @@ function renderDeck(slug) {
   }
   const an = analyzeDeck(a);
   const mode = D.deckMode || 'list';
-  html += `${b ? `<p class="sub">List: <b>${ordinal(b.place)} of ${b.players}</b> · ${esc(b.event)}${b.record ? ' · ' + esc(b.record) : ''}${when ? ' · ' + when : ''}</p>` : ''}
+  html += `${b ? `<p class="sub">${a.listFrom30 ? 'Best list from the last 30 days: ' : 'List: '}<b>${ordinal(b.place)} of ${b.players}</b> · ${esc(b.event)}${b.record ? ' · ' + esc(b.record) : ''}${when ? ' · ' + when : ''}</p>` : ''}
     <div class="card-box">
       <b>You own ${an.mainHave} of ${an.mainTotal} main-deck cards</b> (${Math.round(an.pct * 100)}% of the whole list)
       <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>
@@ -1013,7 +1044,9 @@ function lineHTML(l) {
 }
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 function wireDecks() {
+  D.win = S.prefs.deckWin || '30d';
   $('#dk-tab').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.tab = b.dataset.v; renderDecks(); };
+  $('#dk-win').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.win = b.dataset.w; S.prefs.deckWin = D.win; savePrefs(); renderDecks(); };
 }
 
 /* ---------------------------------------------------------------- score counter */

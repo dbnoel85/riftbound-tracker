@@ -214,3 +214,6 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 @keyframes pulse{50%{box-shadow:0 0 0 3px var(--abyss),0 0 0 4px var(--rift),0 0 34px rgba(69,224,208,.6)}}
 @media (prefers-reduced-motion:reduce){.round.live{animation:none}}
 .scan-hit{border-color:var(--rift);box-shadow:0 0 18px rgba(69,224,208,.18)}
+
+.chips.wins{justify-content:stretch}.chips.wins button{flex:1}
+.rk{color:var(--gold);margin-right:4px}

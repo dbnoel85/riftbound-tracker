@@ -117,7 +117,7 @@ def fill_missing_images(rb):
 
 def main():
     os.makedirs(DATA, exist_ok=True)
-    snap = get("getmetasnapshot?game=riftbound&window=auto")
+    snap = get("getmetasnapshot?game=riftbound&window=30d")
     if not snap or not snap.get("archetypes"):
         print("Meta snapshot unavailable; keeping previous deck data.")
         return 0
@@ -154,64 +154,75 @@ def main():
     save("rbcards.json", rb)
     print(f"{len(rb)} cards")
 
-    # ---- decklists (cached forever by slug)
+    # ---- decklists (cached forever by slug), one block per time window
     cache = load("deckcache.json", {})
-    out = []
     fetched = 0
-    for a in snap["archetypes"]:
-        cands = [b for b in (a.get("best_decks") or []) if b.get("slug")]
-        cands.sort(key=lambda b: (b.get("place") or 999, -(b.get("players") or 0)))
-        best = cands[0] if cands else None
-        lst = None
-        if best:
-            slug = best["slug"]
-            if slug not in cache:
-                d = get(f"getdeck?game=riftbound&slug={slug}")
-                fetched += 1
-                if d and isinstance(d.get("deck"), dict):
-                    boards = d.get("boards")
-                    if isinstance(boards, dict):
-                        boards = [boards.get("0") or boards.get(0) or {}, boards.get("1") or boards.get(1) or {}]
-                    side = d.get("sideboard") if isinstance(d.get("sideboard"), dict) else None
-                    if side is None:
-                        side = boards[1] if isinstance(boards, list) and len(boards) > 1 and isinstance(boards[1], dict) else {}
-                    cache[slug] = {
-                        "main": {k: int(v) for k, v in d["deck"].items()},
-                        "side": {k: int(v) for k, v in side.items()},
-                        "leader": d.get("leader"),
-                    }
-            lst = cache.get(slug)
-        out.append({
-            "rank": a.get("rank"),
-            "name": a.get("name"),
-            "slug": a.get("slug"),
-            "leader": a.get("leader"),
-            "colors": a.get("colors") or [],
-            "tier": a.get("tier"),
-            "share": a.get("share"),
-            "shareDelta": a.get("share_delta"),
-            "winrate": a.get("winrate"),
-            "winrateN": a.get("winrate_n"),
-            "decks": a.get("decks"),
-            "top8": a.get("top8_rate"),
-            "momentum": a.get("momentum"),
-            "key": [{"id": c.get("id"), "n": c.get("name"), "x": c.get("in_deck"), "w": c.get("weight")} for c in (a.get("cards") or [])],
-            "best": best and {
-                "event": best.get("event"), "place": best.get("place"), "players": best.get("players"),
-                "record": best.get("record"), "date": best.get("date"), "slug": best.get("slug"),
-            },
-            "list": lst,
-        })
+
+    def build(snap):
+        nonlocal fetched
+        out = []
+        for a in snap["archetypes"]:
+            cands = [b for b in (a.get("best_decks") or []) if b.get("slug")]
+            cands.sort(key=lambda b: (b.get("place") or 999, -(b.get("players") or 0)))
+            best = cands[0] if cands else None
+            lst = None
+            if best:
+                slug = best["slug"]
+                if slug not in cache:
+                    d = get(f"getdeck?game=riftbound&slug={slug}")
+                    fetched += 1
+                    if d and isinstance(d.get("deck"), dict):
+                        boards = d.get("boards")
+                        if isinstance(boards, dict):
+                            boards = [boards.get("0") or boards.get(0) or {}, boards.get("1") or boards.get(1) or {}]
+                        side = d.get("sideboard") if isinstance(d.get("sideboard"), dict) else None
+                        if side is None:
+                            side = boards[1] if isinstance(boards, list) and len(boards) > 1 and isinstance(boards[1], dict) else {}
+                        cache[slug] = {
+                            "main": {k: int(v) for k, v in d["deck"].items()},
+                            "side": {k: int(v) for k, v in side.items()},
+                            "leader": d.get("leader"),
+                        }
+                lst = cache.get(slug)
+            out.append({
+                "rank": a.get("rank"), "name": a.get("name"), "slug": a.get("slug"), "leader": a.get("leader"),
+                "colors": a.get("colors") or [], "tier": a.get("tier"),
+                "share": a.get("share"), "shareDelta": a.get("share_delta"),
+                "winrate": a.get("winrate"), "winrateN": a.get("winrate_n"), "decks": a.get("decks"),
+                "top8": a.get("top8_rate"), "topq": a.get("topq_rate"), "cutRate": a.get("cut_rate"),
+                "momentum": a.get("momentum"),
+                "key": [{"id": c.get("id"), "n": c.get("name"), "x": c.get("in_deck"), "w": c.get("weight")} for c in (a.get("cards") or [])],
+                "best": best and {
+                    "event": best.get("event"), "place": best.get("place"), "players": best.get("players"),
+                    "record": best.get("record"), "date": best.get("date"), "slug": best.get("slug"),
+                },
+                "list": lst,
+            })
+        sample = snap.get("sample") or {}
+        return {
+            "updated": snap.get("generated_at"), "window": snap.get("window"), "set": snap.get("set_code"),
+            "sample": {"decks": sample.get("decks"), "events": sample.get("events"), "matches": sample.get("matches")},
+            "field": {"top8": snap.get("field_top8_rate"), "topq": snap.get("field_topq_rate")},
+            "archetypes": out,
+        }
+
+    prev = load("decks.json", {}).get("windows", {})
+    windows = {"30d": build(snap)}
+    for w in ("14d", "7d"):
+        sw = get(f"getmetasnapshot?game=riftbound&window={w}")
+        if sw and sw.get("archetypes"):
+            windows[w] = build(sw)
+        elif w in prev:
+            windows[w] = prev[w]
+            print(f"  {w} snapshot unavailable; kept previous")
     save("deckcache.json", cache)
-    sample = snap.get("sample") or {}
+    main30 = windows["30d"]
     save("decks.json", {
-        "updated": snap.get("generated_at"),
-        "window": snap.get("window"),
-        "set": snap.get("set_code"),
-        "sample": {"decks": sample.get("decks"), "events": sample.get("events"), "matches": sample.get("matches")},
+        **main30,
         "source": "riftbound.gg meta (tournament results)",
-        "archetypes": out,
+        "windows": windows,
     })
+    out = main30["archetypes"]
     try:
         fill_missing_images(rb)
     except Exception as e:  # noqa: BLE001 - pictures are a nice-to-have
