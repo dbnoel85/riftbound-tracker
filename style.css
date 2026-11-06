@@ -210,3 +210,7 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 .swin{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:18px;text-align:center;z-index:3;width:min(86vw,340px);--cut:14px;
   background:radial-gradient(100% 100% at 50% 0%,rgba(241,212,142,.18),transparent 70%) padding-box,linear-gradient(var(--night),var(--night)) padding-box,linear-gradient(135deg,var(--gold),var(--line),var(--gold)) border-box}
 .swin h2{margin:0 0 8px;font-size:26px;color:#fff3cf}
+.round.live{background:radial-gradient(circle at 50% 30%,#d9fff9,var(--rift) 45%,#1f8c84);animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 3px var(--abyss),0 0 0 4px var(--rift),0 0 34px rgba(69,224,208,.6)}}
+@media (prefers-reduced-motion:reduce){.round.live{animation:none}}
+.scan-hit{border-color:var(--rift);box-shadow:0 0 18px rgba(69,224,208,.18)}

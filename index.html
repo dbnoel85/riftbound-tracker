@@ -78,10 +78,11 @@
     </div>
     <div class="scan-controls">
       <label class="toggle"><input type="checkbox" id="scan-foil"> Foil</label>
-      <button id="btn-capture" class="primary round" aria-label="Scan card">Scan</button>
+      <button id="btn-capture" class="primary round" aria-label="Scan or pause auto-scan">Scan</button>
       <label class="photo-btn">Photo<input id="scan-file" type="file" accept="image/*" capture="environment" hidden></label>
     </div>
-    <p class="hint">Fill the frame with one card, flat, good light. Pick the exact version below (alt art, signature, promo).</p>
+    <label class="toggle small" style="justify-content:center"><input type="checkbox" id="scan-autotoggle" checked> <span id="scan-mode">Auto-add</span></label>
+    <p class="hint">Fill the frame with one card, flat, with no glare on the bottom-left number. Set Foil before scanning foils.</p>
     <div id="scan-status" class="status"></div>
     <ul id="scan-results" class="list"></ul>
   </section>

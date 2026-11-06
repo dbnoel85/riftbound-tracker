@@ -110,7 +110,7 @@ function show(view) {
   $('#hdr-more').classList.toggle('hidden', view === 'more' || view === 'score');
   if (view === 'score') { renderScore(); keepAwake(true); } else keepAwake(false);
   if (view === 'decks') renderDecks();
-  if (view === 'scan') startCamera(); else stopCamera();
+  if (view === 'scan') startCamera(); else { stopCamera(); clearTimeout(SCAN.timer); }
   if (view === 'collection') renderCollection();
   if (view === 'add') renderAdd();
   if (view === 'movers') renderMovers();
@@ -368,7 +368,9 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
     const v = $('#video'); v.srcObject = stream; await v.play().catch(() => {});
     msg.textContent = 'Line the card up inside the frame';
-    getOCR(); loadHashes(); // warm up while aiming
+    try { const tr = stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : {}; if ((caps.focusMode || []).includes('continuous')) await tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch {}
+    await Promise.all([getOCR(), loadHashes()]).catch(() => {});
+    setAuto(SCAN.auto);
   } catch (e) {
     msg.textContent = 'Camera blocked — allow camera access in settings, or use Photo.';
   }
@@ -442,66 +444,199 @@ function dhash(canvas, size = 16) {
 const POP = [0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4];
 function hamming(a, b) { let d = 0; for (let i = 0; i < a.length; i++) d += POP[parseInt(a[i], 16) ^ parseInt(b[i], 16)]; return d; }
 
-function parseNum(s) {
-  // "OGN-066a/298", "OGN-001*/298", "OGN 66/298" -> {set, n, suf, tot}
-  const m = String(s || '').toUpperCase().match(/([A-Z]{2,4})?[\s\-•·.]*0*(\d{1,3})\s*([A-Z*]?)\s*\/\s*0*(\d{2,3})/);
-  return m ? { set: m[1] || '', n: +m[2], suf: (m[3] || '').toLowerCase(), tot: +m[4] } : null;
-}
-function ocrCodes(text) {
-  const out = []; const t = text.toUpperCase().replace(/[|]/g, '1').replace(/O(?=\d)/g, '0');
-  const re = /([A-Z]{2,4})?[\s\-•·.:]*0*(\d{1,3})\s*([A-Z*]?)\s*[\/\\]\s*0*(\d{2,3})/g; let m;
-  while ((m = re.exec(t))) out.push({ set: m[1] || '', n: +m[2], suf: (m[3] || '').toLowerCase(), tot: +m[4] });
-  return out;
-}
-const norm = (s) => s.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-
-async function scanCanvas(canvas) {
-  const status = $('#scan-status');
-  status.textContent = 'Reading card…';
-  $('#scan-results').innerHTML = '';
-  const hashes = await loadHashes();
-  const h = dhash(canvas);
-  let text = '';
-  try {
-    const w = await Promise.race([getOCR(), new Promise((_, r) => setTimeout(() => r(new Error('slow')), 20000))]);
-    const big = document.createElement('canvas'); big.width = 900; big.height = 1257;
-    const bx = big.getContext('2d'); bx.filter = 'grayscale(1) contrast(1.4)'; bx.drawImage(canvas, 0, 0, big.width, big.height);
-    const r = await w.recognize(big); text = r.data.text || '';
-  } catch (e) { console.warn('OCR', e); }
-  const codes = ocrCodes(text);
-  const words = new Set(norm(text).split(' ').filter((x) => x.length > 2));
-
-  const scored = [];
+/* ---- card identification: read the collector number (bottom-left), then the name, then confirm with the artwork */
+const CODE_BOX = [0.0, 0.915, 0.46, 0.085];   // x, y, w, h as fractions of the card
+const NAME_BOX = [0.07, 0.52, 0.86, 0.15];
+const SET_TOTALS = { 298: 'OGN', 24: 'OGS', 221: 'SFD', 219: 'UNL', 166: 'VEN', 167: 'RAD' };
+const MAIN_SETS = new Set(['OGN', 'OGS', 'SFD', 'UNL', 'VEN', 'RAD', 'LGC']);
+let NUMIDX = null;
+function numIndex() {
+  if (NUMIDX) return NUMIDX;
+  NUMIDX = new Map();
   for (const [pid, items] of S.byPid) {
     const it = items[0]; if (it.sealed) continue;
-    let s = 0; const why = [];
-    const pn = parseNum(it.num);
-    if (pn) for (const c of codes) {
-      if (c.n === pn.n && c.tot === pn.tot) {
-        let add = 45; if (c.set && pn.set && c.set === pn.set) add += 15; if (c.suf === pn.suf) add += 8; else add -= 6;
-        if (add > s) { s = add; } why.push('number');
-        break;
-      }
-    }
-    const nw = norm(it.n).split(' ').filter((x) => x.length > 2);
-    if (nw.length && words.size) {
-      const hit = nw.filter((x) => words.has(x)).length / nw.length;
-      if (hit > 0) { s += 30 * hit; why.push('name'); }
-    }
-    const ph = hashes[String(pid)];
-    if (ph) { const d = hamming(h, ph); const sim = Math.max(0, 1 - d / 110); s += 40 * sim * sim; if (d < 70) why.push('art'); }
-    scored.push({ items, s, why });
+    const m = String(it.num || '').match(/^(?:[A-Z]{1,3}\s*)?0*(\d{1,3})([a-z*]?)\/0*(\d{2,3})$/i);
+    if (!m) continue;
+    const key = `${+m[1]}/${+m[3]}`;
+    if (!NUMIDX.has(key)) NUMIDX.set(key, []);
+    NUMIDX.get(key).push({ pid, items, suf: (m[2] || '').toLowerCase() });
   }
-  scored.sort((a, b) => b.s - a.s);
-  const top = scored.slice(0, 6);
-  if (!top.length) { status.textContent = 'No price data loaded yet.'; return; }
-  status.innerHTML = codes.length || words.size ? 'Tap the exact version to add it:' : 'Couldn\'t read the text — best guesses by artwork. Or use <b>Add</b> to search.';
+  return NUMIDX;
+}
+function cropScaled(canvas, box, scale, invertLight) {
+  const [bx, by, bw, bh] = box;
+  const sw = canvas.width * bw, sh = canvas.height * bh;
+  const c = document.createElement('canvas'); c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(canvas, canvas.width * bx, canvas.height * by, sw, sh, 0, 0, c.width, c.height);
+  // grayscale + Otsu threshold -> dark text on white, which is what OCR reads best
+  const im = x.getImageData(0, 0, c.width, c.height), d = im.data, hist = new Array(256).fill(0), g = new Uint8Array(d.length / 4);
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const v = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0; g[j] = v; hist[v]++; }
+  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sB = 0, wB = 0, best = 0, thr = 128; const tot = g.length;
+  for (let t = 0; t < 256; t++) { wB += hist[t]; if (!wB) continue; const wF = tot - wB; if (!wF) break; sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF; const v = wB * wF * (mB - mF) ** 2; if (v > best) { best = v; thr = t; } }
+  for (let j = 0, i = 0; j < g.length; j++, i += 4) { const on = invertLight ? g[j] > thr : g[j] < thr; const v = on ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; }
+  x.putImageData(im, 0, 0);
+  return c;
+}
+async function ocr(canvas, mode) {
+  const w = await getOCR();
+  if (mode === 'code') await w.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZa*.-' });
+  else await w.setParameters({ tessedit_pageseg_mode: '6', tessedit_char_whitelist: '' });
+  const r = await w.recognize(canvas);
+  return r.data.text || '';
+}
+function parseCode(text) {
+  const t = text.toUpperCase().replace(/[|\]\[!I]/g, '1').replace(/[OQD](?=\d)/g, '0').replace(/(\d)[OQD]/g, (m, d) => d + '0').replace(/S(?=\d{2}\/)/g, '5');
+  const out = []; const re = /0*(\d{1,3})\s*([A*]?)\s*[\/\\7]\s*0*(\d{2,3})/g; let m;
+  while ((m = re.exec(t))) { const tot = +m[3]; out.push({ n: +m[1], suf: (m[2] || '').toLowerCase(), tot, known: !!SET_TOTALS[tot] }); }
+  return out.sort((a, b) => b.known - a.known);
+}
+const baseName = (s) => s.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Returns { sure, best, cands, why } */
+async function identify(canvas, { useName = true } = {}) {
+  const hashes = await loadHashes();
+  const h = dhash(canvas);
+  const scoreHash = (pid) => { const ph = hashes[String(pid)]; return ph ? hamming(h, ph) : 128; };
+  let cands = [], why = '';
+  // 1) collector number — the most reliable signal
+  let codes = [];
+  try { codes = parseCode(await ocr(cropScaled(canvas, CODE_BOX, 3, true), 'code')); } catch (e) { console.warn(e); }
+  const idx = numIndex();
+  for (const c of codes) {
+    const hits = idx.get(`${c.n}/${c.tot}`);
+    if (hits && hits.length) { cands = hits.map((x) => ({ ...x, code: true, sufOk: x.suf === c.suf })); why = 'number'; break; }
+  }
+  // 2) card name
+  if (!cands.length && useName) {
+    let txt = '';
+    try { txt = await ocr(cropScaled(canvas, NAME_BOX, 1.6, true), 'name'); } catch (e) { console.warn(e); }
+    const words = baseName(txt).split(' ').filter((w) => w.length > 2);
+    if (words.length) {
+      const ws = new Set(words);
+      for (const [pid, items] of S.byPid) {
+        const it = items[0]; if (it.sealed) continue;
+        const nw = baseName(it.n).split(' ').filter((w) => w.length > 2);
+        if (!nw.length) continue;
+        const hit = nw.filter((w) => ws.has(w)).length / nw.length;
+        if (hit >= 0.6) cands.push({ pid, items, name: hit });
+      }
+      if (cands.length) why = 'name';
+    }
+  }
+  // 3) score: text evidence first, artwork decides between versions
+  for (const c of cands) {
+    c.d = scoreHash(c.pid);
+    const grp = S.groups.get(c.items[0].g);
+    c.main = grp && MAIN_SETS.has(grp.abbr);
+    c.s = (c.code ? 60 : 0) + (c.sufOk ? 10 : 0) + (c.name ? 30 * c.name : 0) + Math.max(0, 80 - c.d) * 0.6 + (c.main ? 3 : 0);
+  }
+  cands.sort((a, b) => b.s - a.s);
+  const [a, b] = cands;
+  const sure = !!a && (a.code || (a.name >= 0.99 && a.d < 90)) && (!b || a.s - b.s >= 6 || (a.d < 60 && b.d - a.d >= 10));
+  return { sure, best: a || null, cands: cands.slice(0, 5), why, hash: h, codes };
+}
+
+/* ---- scanning UI: auto mode adds cards on its own */
+const SCAN = { auto: true, busy: false, timer: 0, last: null, holdHash: null, shownFor: null };
+function pickFinish(items) {
   const foil = $('#scan-foil').checked;
-  $('#scan-results').innerHTML = top.map((x, i) => {
-    const pref = x.items.find((v) => (foil ? v.s !== 'Normal' : v.s === 'Normal')) || x.items[0];
-    return productRow(x.items, `<div class="match">${i === 0 ? '<b>Best match</b> · ' : ''}${x.why.length ? 'matched ' + [...new Set(x.why)].join(', ') : 'possible'}</div>`)
-      .replace(`data-add="${esc(pref.k)}"`, `data-add="${esc(pref.k)}" style="border-color:var(--gold)"`);
-  }).join('');
+  return items.find((v) => (foil ? v.s !== 'Normal' : v.s === 'Normal')) || items[0];
+}
+function showAdded(it, product, cands) {
+  const others = cands.filter((c) => c.pid !== product.pid).slice(0, 3);
+  const finishes = product.items.filter((v) => v.k !== it.k);
+  $('#scan-status').innerHTML = '';
+  $('#scan-results').innerHTML = `<li class="item scan-hit">
+      ${img(it.img)}
+      <div class="info">
+        <div class="nm"><span class="ok">✓</span> ${esc(it.n)}${variantTags(it)}</div>
+        <div class="meta">${metaLine(it)}</div>
+        <div class="meta">${money(it.m)} · ${S.inv.items[it.k]?.qty || 1} owned</div>
+      </div>
+      <div class="addbtns">
+        <button data-scan="undo">Undo</button>
+        <button data-scan="more">+1 copy</button>
+        ${finishes.map((v) => `<button data-scan="swap" data-k="${esc(v.k)}">${esc(v.s)} instead</button>`).join('')}
+      </div></li>
+    ${others.length ? `<li class="sub" style="padding:6px 2px">Different version? Tap to switch:</li>` + others.map((c) => {
+      const v = pickFinish(c.items);
+      return `<li class="item" data-scan="swap" data-k="${esc(v.k)}">${img(v.img)}<div class="info"><div class="nm">${esc(v.n)}</div><div class="meta">${metaLine(v)}</div></div><div class="px"><b>${money(v.m)}</b></div></li>`;
+    }).join('') : ''}`;
+}
+function showMaybe(res) {
+  if (!res.cands.length) return;
+  $('#scan-status').textContent = 'Which one is it? Tap to add:';
+  $('#scan-results').innerHTML = res.cands.slice(0, 3).map((c) => productRow(c.items, `<div class="match">${c.code ? 'number match' : c.name ? 'name match' : ''}</div>`)).join('');
+}
+async function runScan(canvas, manual) {
+  if (SCAN.busy) return; SCAN.busy = true;
+  const msg = $('#cam-msg');
+  try {
+    if (!manual && SCAN.holdHash) {
+      // the card we just added is still in view: wait until it changes
+      if (hamming(dhash(canvas), SCAN.holdHash) < 46) { msg.textContent = 'Added ✓ — show the next card'; return; }
+      SCAN.holdHash = null;
+    }
+    msg.textContent = 'Reading…';
+    const res = await identify(canvas, { useName: true });
+    if (res.sure && res.best) {
+      const it = pickFinish(res.best.items);
+      addCard(it.k);
+      if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+      SCAN.last = { k: it.k, res };
+      SCAN.holdHash = res.hash;
+      showAdded(it, res.best, res.cands);
+      msg.textContent = `Added ✓ ${it.n}`;
+    } else if (res.cands.length) {
+      if (manual || SCAN.shownFor === null || hamming(res.hash, SCAN.shownFor) > 46) { showMaybe(res); SCAN.shownFor = res.hash; }
+      msg.textContent = 'Not sure which version — pick below, or hold steady';
+    } else {
+      msg.textContent = manual ? 'Couldn\'t read that card — try more light or fill the frame' : 'Looking for a card…';
+      if (manual) $('#scan-status').textContent = 'Couldn\'t read the number or name. Fill the frame with the card, avoid glare, or use ＋ to search.';
+    }
+  } finally { SCAN.busy = false; }
+}
+function scanLoop() {
+  clearTimeout(SCAN.timer);
+  if (!SCAN.auto || S.view !== 'scan' || !stream || document.hidden) return;
+  const c = grabFromVideo();
+  const next = () => { SCAN.timer = setTimeout(scanLoop, 350); };
+  if (!c) return next();
+  runScan(c, false).then(next, next);
+}
+function setAuto(on) {
+  SCAN.auto = on; S.prefs.autoScan = on; savePrefs();
+  $('#scan-autotoggle').checked = on;
+  const b = $('#btn-capture');
+  b.textContent = on ? 'Auto' : 'Scan'; b.classList.toggle('live', on);
+  $('#scan-mode').textContent = on ? 'Auto-add is on — cards are added as soon as they\'re recognized' : 'Tap Scan for each card';
+  if (on) scanLoop(); else clearTimeout(SCAN.timer);
+}
+function wireScan() {
+  SCAN.auto = S.prefs.autoScan !== false;
+  $('#btn-capture').onclick = async () => {
+    if (SCAN.auto) { setAuto(false); return; }
+    const c = grabFromVideo(); if (!c) { toast('Camera not ready — try Photo'); return; }
+    SCAN.holdHash = null; runScan(c, true);
+  };
+  $('#scan-autotoggle').onchange = (e) => setAuto(e.target.checked);
+  $('#scan-results').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-scan]'); if (!b) return;
+    e.stopPropagation();
+    const act = b.dataset.scan, last = SCAN.last;
+    if (!last) return;
+    if (act === 'undo') { const q = S.inv.items[last.k]?.qty || 0; setQty(last.k, q - 1); toast('Removed'); $('#scan-results').innerHTML = ''; SCAN.last = null; }
+    if (act === 'more') { addCard(last.k); showAdded(S.byKey.get(last.k), last.res.cands.find((c) => c.items.some((v) => v.k === last.k)) || last.res.best, last.res.cands); }
+    if (act === 'swap') {
+      const q = S.inv.items[last.k]?.qty || 0; setQty(last.k, q - 1);
+      const k = b.dataset.k; addCard(k); SCAN.last.k = k;
+      const prod = last.res.cands.find((c) => c.items.some((v) => v.k === k)) || { pid: S.byKey.get(k).p, items: S.byPid.get(S.byKey.get(k).p) };
+      showAdded(S.byKey.get(k), prod, last.res.cands);
+    }
+  }, true);
 }
 
 /* ---------------------------------------------------------------- backup */
@@ -563,18 +698,14 @@ function wire() {
     const dk = e.target.closest('[data-deck]');
     if (dk) { openDeck(dk.dataset.deck); return; }
   });
-  $('#btn-capture').onclick = async () => {
-    const c = grabFromVideo(); if (!c) { toast('Camera not ready — try Photo'); return; }
-    if (navigator.vibrate) navigator.vibrate(30);
-    scanCanvas(c);
-  };
-  $('#scan-file').onchange = async (e) => { const f = e.target.files[0]; if (f) scanCanvas(await grabFromFile(f)); e.target.value = ''; };
+  wireScan();
+  $('#scan-file').onchange = async (e) => { const f = e.target.files[0]; if (f) { SCAN.holdHash = null; runScan(await grabFromFile(f), true); } e.target.value = ''; };
   $('#btn-export').onclick = exportBackup;
   $('#btn-csv').onclick = exportCSV;
   $('#import-file').onchange = (e) => { const f = e.target.files[0]; if (f) importBackup(f); e.target.value = ''; };
   $('#btn-clear').onclick = async () => { if (await confirmBox('Delete every card from your collection? Make a backup first if unsure.')) { S.inv = { items: {} }; saveInv(); toast('Collection cleared'); } };
   $('#btn-refresh').onclick = async () => { try { await loadData(true); S.history = null; renderMore(); checkStale(); toast('Prices are up to date (' + fmtDate(S.cards.updated) + ')'); } catch { toast('Could not reach the price data'); } };
-  document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(); else if (S.view === 'scan') startCamera(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { stopCamera(); clearTimeout(SCAN.timer); } else if (S.view === 'scan') startCamera(); });
 }
 
 /* ---------------------------------------------------------------- meta decks */
