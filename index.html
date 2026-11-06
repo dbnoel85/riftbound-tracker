@@ -18,6 +18,8 @@
 <header class="top">
   <h1 id="title">Collection</h1>
   <span id="stale" class="pill warn hidden"></span>
+  <button class="hbtn" id="hdr-add" aria-label="Add cards">＋</button>
+  <button class="hbtn" id="hdr-more" aria-label="Settings">⚙</button>
 </header>
 
 <main>
@@ -50,7 +52,7 @@
     <ul id="col-list" class="list"></ul>
     <div id="col-empty" class="empty hidden">
       <p>No cards yet.</p>
-      <p>Tap <b>Scan</b> to use the camera, or <b>Add</b> to search by name or card number.</p>
+      <p>Tap <b>Scan</b> to use the camera, or <b>＋</b> at the top to search by name or card number.</p>
     </div>
   </section>
 
@@ -101,6 +103,57 @@
     <ul id="mv-down" class="list"></ul>
   </section>
 
+  <!-- DECKS -->
+  <section id="v-decks" class="view hidden">
+    <div class="seg" id="dk-tab">
+      <button data-v="meta" class="on">Top 10 meta</button>
+      <button data-v="other">Other legends</button>
+      <button data-v="ready">Closest for me</button>
+    </div>
+    <p class="sub" id="dk-info"></p>
+    <ul id="dk-list" class="list"></ul>
+    <p class="sub center">Meta stats and decklists from <a href="https://riftbound.gg/meta/" target="_blank" rel="noopener">riftbound.gg</a>, based on tournament results.</p>
+  </section>
+
+  <!-- SCORE -->
+  <section id="v-score" class="view hidden">
+    <div class="score-wrap">
+      <div class="pl opp" id="pl-opp">
+        <input class="pname" id="sc-oppname" value="Opponent" aria-label="Opponent name" maxlength="20">
+        <div class="srow">
+          <button class="sbtn" data-p="opp" data-d="-1" aria-label="Opponent minus one">−</button>
+          <div class="snum" id="sc-opp">0</div>
+          <button class="sbtn plus" data-p="opp" data-d="1" aria-label="Opponent plus one">+</button>
+        </div>
+      </div>
+      <div class="smid">
+        <button class="ghost sm" id="sc-undo">↶ Undo</button>
+        <div class="stgt">First to
+          <button class="ghost sm" id="sc-tminus">−</button><b id="sc-target">8</b><button class="ghost sm" id="sc-tplus">+</button>
+        </div>
+        <div class="sgames" id="sc-games">Games 0–0</div>
+        <button class="ghost sm" id="sc-new">New game</button>
+      </div>
+      <div class="pl me" id="pl-me">
+        <div class="srow">
+          <button class="sbtn" data-p="me" data-d="-1" aria-label="My score minus one">−</button>
+          <div class="snum" id="sc-me">0</div>
+          <button class="sbtn plus" data-p="me" data-d="1" aria-label="My score plus one">+</button>
+        </div>
+        <div class="pname mine">Me</div>
+      </div>
+      <div id="sc-win" class="swin hidden"></div>
+    </div>
+    <div class="card-box">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <label class="toggle small"><input type="checkbox" id="sc-flip" checked> Flip opponent's side to face them</label>
+      </div>
+      <h3>Record <span id="sc-record" class="sub"></span></h3>
+      <ul id="sc-hist" class="sets"></ul>
+      <button class="ghost sm" id="sc-clearhist">Clear history</button>
+    </div>
+  </section>
+
   <!-- SETTINGS -->
   <section id="v-more" class="view hidden">
     <div class="card-box">
@@ -136,9 +189,9 @@
 <nav class="tabs">
   <button data-view="collection" class="on"><span>▦</span>Collection</button>
   <button data-view="scan"><span>◉</span>Scan</button>
-  <button data-view="add"><span>＋</span>Add</button>
   <button data-view="movers"><span>⇅</span>Movers</button>
-  <button data-view="more"><span>⚙</span>More</button>
+  <button data-view="decks"><span>♛</span>Decks</button>
+  <button data-view="score"><span>⚔</span>Score</button>
 </nav>
 
 <!-- Card detail sheet -->

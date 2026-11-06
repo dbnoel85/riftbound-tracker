@@ -105,7 +105,11 @@ function show(view) {
   $$('.view').forEach((v) => v.classList.add('hidden'));
   $('#v-' + view).classList.remove('hidden');
   $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
-  $('#title').textContent = { collection: 'Collection', scan: 'Scan cards', add: 'Add cards', movers: 'Top movers', more: 'More' }[view];
+  $('#title').textContent = { collection: 'Collection', scan: 'Scan cards', add: 'Add cards', movers: 'Top movers', decks: 'Meta decks', score: 'Score', more: 'Settings' }[view];
+  $('#hdr-add').classList.toggle('hidden', view === 'add' || view === 'score');
+  $('#hdr-more').classList.toggle('hidden', view === 'more' || view === 'score');
+  if (view === 'score') { renderScore(); keepAwake(true); } else keepAwake(false);
+  if (view === 'decks') renderDecks();
   if (view === 'scan') startCamera(); else stopCamera();
   if (view === 'collection') renderCollection();
   if (view === 'add') renderAdd();
@@ -179,7 +183,7 @@ function productRow(items, extra = '') {
 }
 function renderAdd() {
   if (!S.cards) return;
-  const chips = [['all', 'All sets'], ...S.cards.groups.slice().reverse().map((g) => [String(g.id), g.abbr || g.name])];
+  const chips = [['all', 'All sets'], ...S.cards.groups.map((g) => [String(g.id), g.abbr || g.name])];
   $('#add-sets').innerHTML = chips.map(([v, l]) => `<button data-set="${v}" class="${S.prefs.addSet === v ? 'on' : ''}">${esc(l)}</button>`).join('');
   const q = $('#add-q').value.trim().toLowerCase();
   const sealed = $('#add-sealed').checked;
@@ -236,9 +240,9 @@ function renderMore() {
   if (!S.cards) return;
   const cardsCount = new Set(S.cards.items.filter((i) => !i.sealed).map((i) => i.p)).size;
   $('#data-info').innerHTML = `Last updated <b>${fmtDate(S.cards.updated)}</b> · ${cardsCount.toLocaleString()} cards & variants across ${S.cards.groups.length} sets/promo groups.`;
-  $('#set-list').innerHTML = S.cards.groups.slice().reverse().map((g) => {
+  $('#set-list').innerHTML = S.cards.groups.map((g) => {
     const n = new Set(S.cards.items.filter((i) => i.g === g.id && !i.sealed).map((i) => i.p)).size;
-    return `<li><span>${esc(g.name)} ${g.abbr ? `<span class="sub">${esc(g.abbr)}</span>` : ''}</span><span class="sub">${n} cards</span></li>`;
+    return `<li><span>${esc(g.name)} ${g.abbr ? `<span class="sub">${esc(g.abbr)}</span>` : ''}</span><span class="sub">${g.published ? fmtDate(g.published) + ' · ' : ''}${n} cards</span></li>`;
   }).join('');
 }
 function checkStale() {
@@ -250,7 +254,8 @@ function checkStale() {
 }
 
 /* ----- detail sheet */
-async function openDetail(k) {
+function openDetail(k) { if (S.byKey.get(k)) pushSheet(() => renderDetail(k)); }
+function renderDetail(k) {
   const it = S.byKey.get(k); if (!it) return;
   const owned = S.inv.items[k];
   const siblings = (S.byPid.get(it.p) || []).filter((v) => v.k !== k);
@@ -279,11 +284,6 @@ async function openDetail(k) {
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
   $('#sheet-content').innerHTML = html;
-  const wasOpen = !$('#sheet').classList.contains('hidden');
-  $('#sheet').classList.remove('hidden');
-  $('#sheet .sheet-body').scrollTop = 0;
-  // let the phone's Back gesture/button close the card instead of leaving the app
-  if (!wasOpen) { try { history.pushState({ sheet: 1 }, '', '#card'); } catch {} }
   const upd = () => {
     const e = S.inv.items[k];
     $('#qty').textContent = e ? e.qty : 0;
@@ -317,15 +317,33 @@ async function drawChart(it) {
     <text x="6" y="12" fill="#9aa1bd" font-size="10">${money(hi)}</text><text x="6" y="118" fill="#9aa1bd" font-size="10">${money(lo)}</text>
     <text x="294" y="118" fill="#9aa1bd" font-size="10" text-anchor="end">${fmtDate(ser[0].d)} – now</text>`;
 }
-function hideSheet() { $('#sheet').classList.add('hidden'); refreshCurrent(); }
-function closeSheet() {
-  if ($('#sheet').classList.contains('hidden')) return;
-  if (history.state && history.state.sheet) history.back(); // popstate below hides it
+/* Full-screen pages (card, deck) stack up; Back / the phone's back gesture steps out one level. */
+const SHEET = [];
+function pushSheet(render) {
+  SHEET.push(render);
+  render();
+  $('#sheet').classList.remove('hidden');
+  $('#sheet .sheet-body').scrollTop = 0;
+  try { history.pushState({ sheet: SHEET.length }, '', '#card'); } catch { /* still works via buttons */ }
+}
+function popSheetUI() {
+  SHEET.pop();
+  if (SHEET.length) { SHEET[SHEET.length - 1](); $('#sheet .sheet-body').scrollTop = 0; }
   else hideSheet();
 }
-window.addEventListener('popstate', () => { if (!$('#sheet').classList.contains('hidden')) hideSheet(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
-function refreshCurrent() { if (S.view === 'collection') renderCollection(); if (S.view === 'movers') renderMovers(); }
+function hideSheet() { SHEET.length = 0; $('#sheet').classList.add('hidden'); refreshCurrent(); }
+function sheetBack() {
+  if (!SHEET.length) return;
+  if (history.state && history.state.sheet) history.back(); else popSheetUI();
+}
+function closeSheet() { // Done: leave every level
+  if (!SHEET.length) return;
+  const n = SHEET.length;
+  if (history.state && history.state.sheet) { SHEET.length = 1; history.go(-n); } else hideSheet();
+}
+window.addEventListener('popstate', () => { if (SHEET.length) popSheetUI(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') sheetBack(); });
+function refreshCurrent() { if (S.view === 'collection') renderCollection(); if (S.view === 'movers') renderMovers(); if (S.view === 'decks') renderDecks(); }
 
 /* ---------------------------------------------------------------- scanner */
 let stream = null, ocrWorker = null, ocrLoading = null;
@@ -507,6 +525,9 @@ async function importBackup(file) {
 /* ---------------------------------------------------------------- wiring */
 function wire() {
   $$('.tabs button').forEach((b) => b.onclick = () => show(b.dataset.view));
+  $('#hdr-add').onclick = () => show('add');
+  $('#hdr-more').onclick = () => show('more');
+  wireDecks(); wireScore();
   $('#col-filter').oninput = renderCollection;
   $('#col-sort').value = S.prefs.sort;
   $('#col-sort').onchange = (e) => { S.prefs.sort = e.target.value; savePrefs(); renderCollection(); };
@@ -522,7 +543,12 @@ function wire() {
     if (add) { e.stopPropagation(); addCard(add.dataset.add); return; }
     const row = e.target.closest('.list .item[data-k]');
     if (row) openDetail(row.dataset.k);
-    if (e.target.closest('[data-close]')) { e.preventDefault(); closeSheet(); }
+    const cl = e.target.closest('[data-close]');
+    if (cl) { e.preventDefault(); if (cl.classList.contains('back')) sheetBack(); else closeSheet(); return; }
+    const cd = e.target.closest('[data-card]');
+    if (cd) { openDetail(cd.dataset.card); return; }
+    const dk = e.target.closest('[data-deck]');
+    if (dk) { openDeck(dk.dataset.deck); return; }
   });
   $('#btn-capture').onclick = async () => {
     const c = grabFromVideo(); if (!c) { toast('Camera not ready — try Photo'); return; }
@@ -538,6 +564,334 @@ function wire() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(); else if (S.view === 'scan') startCamera(); });
 }
 
+/* ---------------------------------------------------------------- meta decks */
+const D = { data: null, rb: null, loading: null, tab: 'meta', byName: null, pop: null };
+const normName = (s) => String(s || '').toLowerCase().replace(/\(.*?\)/g, '').replace(/\s-\s(starter)$/, '').replace(/[^a-z0-9]/g, '');
+const SECTION_ORDER = [['Legend', 'Legend'], ['Champion', 'Chosen champion'], ['Unit', 'Units'], ['Spell', 'Spells'], ['Gear', 'Gear'], ['Battlefield', 'Battlefields'], ['Rune', 'Runes']];
+
+function loadDecks() {
+  if (D.data) return Promise.resolve();
+  if (!D.loading) D.loading = Promise.all([fetch('data/decks.json').then((r) => r.json()), fetch('data/rbcards.json').then((r) => r.json())])
+    .then(([d, rb]) => { D.data = d; D.rb = rb; buildDeckIndexes(); })
+    .catch((e) => { D.loading = null; throw e; });
+  return D.loading;
+}
+function buildDeckIndexes() {
+  // TCGplayer printings by card name (any printing counts as owning the card)
+  D.byName = new Map();
+  for (const it of S.cards.items) {
+    if (it.sealed) continue;
+    const n = normName(it.n);
+    if (!D.byName.has(n)) D.byName.set(n, []);
+    D.byName.get(n).push(it);
+  }
+  // card popularity across all tournament lists, overall and by domain
+  const lists = D.data.archetypes.filter((a) => a.list);
+  D.pop = {}; D.popDom = {};
+  for (const a of lists) for (const id of new Set([...Object.keys(a.list.main), ...Object.keys(a.list.side)])) {
+    D.pop[id] = (D.pop[id] || 0) + 1;
+    for (const c of a.colors) { const k = id + '|' + c; D.popDom[k] = (D.popDom[k] || 0) + 1; }
+  }
+  D.nLists = lists.length || 1;
+  D.domLists = {};
+  for (const a of lists) for (const c of a.colors) D.domLists[c] = (D.domLists[c] || 0) + 1;
+}
+function ownedCountByName() {
+  const m = new Map();
+  for (const [k, e] of Object.entries(S.inv.items)) {
+    const it = S.byKey.get(k); const n = normName(it ? it.n : e.name);
+    m.set(n, (m.get(n) || 0) + e.qty);
+  }
+  return m;
+}
+function cardPrice(name) {
+  const list = D.byName.get(normName(name)) || [];
+  let best = null;
+  for (const it of list) if (it.m != null && (best == null || it.m < best.m)) best = it;
+  return best; // cheapest printing
+}
+function cardRef(name) { // a TCGplayer printing to open (prefer normal, then cheapest)
+  const list = D.byName.get(normName(name)) || [];
+  return list.find((i) => i.s === 'Normal') || list[0] || null;
+}
+function sectionOf(id, legendTags) {
+  const c = D.rb[id]; if (!c) return 'Unit';
+  if (c.t === 'Legend' || c.t === 'Rune' || c.t === 'Battlefield') return c.t;
+  if (c.st === 'Champion' && (c.tg || []).some((t) => legendTags.includes(t))) return 'Champion';
+  return c.t || 'Unit';
+}
+
+/** Ownership of a list + suggested substitutes from cards you own (or cheap picks to buy). */
+function analyzeDeck(a) {
+  const owned = ownedCountByName();
+  const used = new Map();
+  const legend = D.rb[a.list.leader || a.leader] || D.rb[a.leader] || { d: a.colors, tg: [] };
+  const colors = new Set([...(legend.d || a.colors), 'Colorless']);
+  const legendTags = legend.tg || [];
+  const lines = [];
+  let champTaken = false;
+  for (const [id, cnt] of Object.entries(a.list.main)) {
+    const c = D.rb[id] || { n: id, t: '' };
+    let sec = sectionOf(id, legendTags);
+    if (sec === 'Champion') { if (champTaken) sec = 'Unit'; else champTaken = true; } // one chosen champion copy; extras are units
+    const n = normName(c.n);
+    const have = Math.max(0, Math.min(cnt, (owned.get(n) || 0) - (used.get(n) || 0)));
+    used.set(n, (used.get(n) || 0) + have);
+    lines.push({ id, c, cnt, have, miss: cnt - have, sec });
+  }
+  // a chosen champion line counts 1; any remaining copies of that card are listed as units
+  for (const l of lines) if (l.sec === 'Champion' && l.cnt > 1) {
+    const extra = { ...l, cnt: l.cnt - 1, sec: 'Unit' };
+    extra.have = Math.max(0, l.have - 1); extra.miss = extra.cnt - extra.have;
+    l.cnt = 1; l.have = Math.min(1, l.have); l.miss = 1 - l.have;
+    lines.push(extra);
+  }
+  const side = Object.entries(a.list.side || {}).map(([id, cnt]) => {
+    const c = D.rb[id] || { n: id }; const n = normName(c.n);
+    const have = Math.max(0, Math.min(cnt, (owned.get(n) || 0) - (used.get(n) || 0)));
+    return { id, c, cnt, have, miss: cnt - have, sec: 'Side' };
+  });
+
+  // substitutes for missing main-deck cards
+  const inDeck = new Map(); for (const l of lines) inDeck.set(normName(l.c.n), (inDeck.get(normName(l.c.n)) || 0) + l.cnt);
+  const spare = (n) => (owned.get(n) || 0) - (used.get(n) || 0);
+  const keyW = Object.fromEntries((a.key || []).map((k) => [k.id, k.w || 0]));
+  const scoreCand = (id, cand, miss) => {
+    let s = 0;
+    s += 3 * (keyW[id] || 0);
+    let dom = 0; for (const col of cand.d) if (D.domLists[col]) dom = Math.max(dom, (D.popDom[id + '|' + col] || 0) / D.domLists[col]);
+    s += 2 * dom + 0.6 * ((D.pop[id] || 0) / D.nLists);
+    if (miss.c.c != null && cand.c != null) s += 0.8 * Math.max(0, 1 - Math.abs(cand.c - miss.c.c) / 3);
+    if (cand.st === miss.c.st) s += 0.2;
+    return s;
+  };
+  const okCand = (id, cand, miss) => {
+    if (!cand || cand.b || !cand.n || id === miss.id) return false;
+    if (miss.sec === 'Battlefield') return cand.t === 'Battlefield';
+    if (miss.sec === 'Rune') return cand.t === 'Rune' && cand.d.some((d) => miss.c.d.includes(d));
+    if (miss.sec === 'Champion') return cand.st === 'Champion' && (cand.tg || []).some((t) => legendTags.includes(t));
+    if (!['Unit', 'Spell', 'Gear'].includes(cand.t) || cand.st === 'Token') return false;
+    if (cand.t !== miss.c.t) return false;
+    if (cand.st === 'Signature' && !(cand.tg || []).some((t) => legendTags.includes(t))) return false;
+    return cand.d.every((d) => colors.has(d));
+  };
+  const allIds = Object.keys(D.rb);
+  const subs = [];
+  for (const miss of lines.filter((l) => l.miss > 0).sort((x, y) => y.miss - x.miss)) {
+    let need = miss.miss; const picks = [];
+    const cands = allIds.filter((id) => okCand(id, D.rb[id], miss))
+      .map((id) => ({ id, c: D.rb[id], s: scoreCand(id, D.rb[id], miss) }))
+      .sort((x, y) => y.s - x.s);
+    for (const cd of cands) {
+      if (need <= 0) break;
+      const n = normName(cd.c.n);
+      const room = (miss.sec === 'Rune' ? 99 : 3) - (inDeck.get(n) || 0);
+      const take = Math.min(need, spare(n), room);
+      if (take > 0) {
+        picks.push({ ...cd, take }); need -= take;
+        used.set(n, (used.get(n) || 0) + take); inDeck.set(n, (inDeck.get(n) || 0) + take);
+      }
+    }
+    // nothing owned left: suggest the best cheap card to buy instead
+    let buy = null;
+    if (need > 0) {
+      const affordable = cands.slice(0, 12).map((cd) => ({ ...cd, p: cardPrice(cd.c.n) })).filter((x) => x.p && x.p.m != null);
+      affordable.sort((x, y) => (y.s - x.s) - (y.p.m - x.p.m) * 0.02);
+      buy = affordable[0] || null;
+    }
+    subs.push({ miss, picks, still: need, buy });
+  }
+  const mainTotal = lines.filter((l) => !['Legend', 'Rune', 'Battlefield'].includes(l.sec)).reduce((t, l) => t + l.cnt, 0);
+  const mainHave = lines.filter((l) => !['Legend', 'Rune', 'Battlefield'].includes(l.sec)).reduce((t, l) => t + l.have, 0);
+  const allLines = lines.concat(side);
+  let cost = 0, costMain = 0;
+  for (const l of allLines) if (l.miss > 0) { const p = cardPrice(l.c.n); if (p) { cost += p.m * l.miss; if (l.sec !== 'Side') costMain += p.m * l.miss; } }
+  const pct = lines.reduce((t, l) => t + l.have, 0) / Math.max(1, lines.reduce((t, l) => t + l.cnt, 0));
+  return { lines, side, subs, mainTotal, mainHave, cost, costMain, pct, legendTags };
+}
+
+function deckCandidates() {
+  const all = D.data.archetypes;
+  if (D.tab === 'meta') return all.filter((a) => a.rank <= 10);
+  if (D.tab === 'other') return all.filter((a) => a.rank > 10).sort((x, y) => (tierRank(x.tier) - tierRank(y.tier)) || ((y.winrate || 0) - (x.winrate || 0)));
+  return all.filter((a) => a.list).map((a) => ({ a, an: analyzeDeck(a) })).sort((x, y) => (y.an.pct - x.an.pct) || (x.an.costMain - y.an.costMain)).slice(0, 20).map((x) => x.a);
+}
+const tierRank = (t) => ({ S: 0, A: 1, B: 2, C: 3, D: 4 }[t] ?? 5);
+const pctTxt = (v) => v == null ? '—' : Math.round(v * 100) + '%';
+const domTags = (cols) => (cols || []).map((c) => `<span class="dom ${esc(c)}">${esc(c)}</span>`).join('');
+
+async function renderDecks() {
+  if (!S.cards) return;
+  $$('#dk-tab button').forEach((b) => b.classList.toggle('on', b.dataset.v === D.tab));
+  try { await loadDecks(); } catch { $('#dk-list').innerHTML = '<li class="empty">Deck data isn\'t available yet — check back after the next daily update.</li>'; return; }
+  const d = D.data;
+  const upd = d.updated ? new Date(d.updated * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  $('#dk-info').textContent = {
+    meta: `Most-played legends in the last ${d.window || '30 days'} (${(d.sample.decks || 0).toLocaleString()} decks, ${d.sample.events || 0} events). Updated ${upd}.`,
+    other: 'Every other legend, strongest first (tier, then win rate). Each shows its best recent tournament list.',
+    ready: 'Lists you\'re closest to building with the cards you own.',
+  }[D.tab];
+  const rows = deckCandidates();
+  $('#dk-list').innerHTML = rows.map((a) => {
+    const an = a.list ? analyzeDeck(a) : null;
+    const leg = cardRef(D.rb[a.leader]?.n || a.name);
+    return `<li class="item" data-deck="${esc(a.slug)}">
+      ${img(leg && leg.img)}
+      <div class="info">
+        <div class="nm">${a.tier ? `<span class="tier ${esc(a.tier)}">${esc(a.tier)}</span>` : ''}${esc(a.name)}</div>
+        <div class="meta">${domTags(a.colors)} #${a.rank} · ${a.share}% meta · ${pctTxt(a.winrate)} wins</div>
+        ${an ? `<div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div><div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>`
+        : '<div class="meta">No public decklist yet</div>'}
+      </div>
+    </li>`;
+  }).join('') || '<li class="empty">Nothing here yet.</li>';
+}
+
+function openDeck(slug) { pushSheet(() => renderDeck(slug)); }
+function renderDeck(slug) {
+  const a = D.data.archetypes.find((x) => x.slug === slug); if (!a) return;
+  const leg = cardRef(D.rb[a.leader]?.n || a.name);
+  const b = a.best;
+  const when = b && b.date ? new Date(b.date * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  let html = `<div class="detail">
+    ${leg ? `<img class="detail-img" style="width:44%" src="${esc(bigImg(leg.img))}" onerror="this.onerror=null;this.src='${esc(leg.img)}'" alt="">` : ''}
+    <h2>${a.tier ? `<span class="tier ${esc(a.tier)}">${esc(a.tier)}</span>` : ''}${esc(a.name)}</h2>
+    <div class="sub">${domTags(a.colors)} Meta rank #${a.rank}</div>
+    <div class="kv">
+      <div><span class="label">Meta share</span><b>${a.share}%</b></div>
+      <div><span class="label">Win rate</span><b>${pctTxt(a.winrate)}</b><small class="sub">${a.winrateN ? a.winrateN.toLocaleString() + ' matches' : ''}</small></div>
+      <div><span class="label">Decks played</span><b>${(a.decks || 0).toLocaleString()}</b></div>
+      <div><span class="label">Top-8 rate</span><b>${pctTxt(a.top8)}</b></div>
+    </div>`;
+  if (!a.list) {
+    html += `<p class="sub">No full decklist has been published for this legend yet.</p>
+      ${a.key && a.key.length ? `<div class="dsec">Key cards</div><ul class="dl">${a.key.map((k) => `<li><span class="cnt">${k.x || ''}×</span><span class="nm">${esc(k.n)}</span><span class="st">${Math.round((k.w || 0) * 100)}% of lists</span></li>`).join('')}</ul>` : ''}</div>`;
+    $('#sheet-content').innerHTML = html; return;
+  }
+  const an = analyzeDeck(a);
+  const mode = D.deckMode || 'list';
+  html += `${b ? `<p class="sub">List: <b>${ordinal(b.place)} of ${b.players}</b> · ${esc(b.event)}${b.record ? ' · ' + esc(b.record) : ''}${when ? ' · ' + when : ''}</p>` : ''}
+    <div class="card-box">
+      <b>You own ${an.mainHave} of ${an.mainTotal} main-deck cards</b> (${Math.round(an.pct * 100)}% of the whole list)
+      <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>
+      <div class="sub" style="margin-top:6px">${an.costMain > 0 ? `Missing cards cost about <b>${money(an.costMain)}</b> (cheapest printings)${an.cost > an.costMain ? `, ${money(an.cost)} with sideboard` : ''}.` : 'You have everything for the main deck. 🎉'}</div>
+    </div>
+    <div class="seg" id="dk-mode"><button data-m="list" class="${mode === 'list' ? 'on' : ''}">Tournament list</button><button data-m="mine" class="${mode === 'mine' ? 'on' : ''}">My version</button><button data-m="buy" class="${mode === 'buy' ? 'on' : ''}">Buy list</button></div>`;
+
+  if (mode === 'list') {
+    for (const [sec, title] of SECTION_ORDER) {
+      const ls = an.lines.filter((l) => l.sec === sec); if (!ls.length) continue;
+      html += `<div class="dsec">${title} (${ls.reduce((t, l) => t + l.cnt, 0)})</div><ul class="dl">` + ls.map(lineHTML).join('') + '</ul>';
+    }
+    if (an.side.length) html += `<div class="dsec">Sideboard (${an.side.reduce((t, l) => t + l.cnt, 0)})</div><ul class="dl">` + an.side.map(lineHTML).join('') + '</ul>';
+  } else if (mode === 'mine') {
+    if (!an.subs.length) html += '<p class="sub">Nothing to swap — you own every card in this list.</p>';
+    else {
+      html += '<p class="sub">Swaps from your own cards for what you\'re missing, chosen by how often they appear in winning lists of the same domains, then closest cost.</p><ul class="dl">';
+      for (const sb of an.subs) {
+        const m = sb.miss;
+        html += `<li><span class="cnt no">−${m.miss}</span><span class="nm">${esc(m.c.n)}<small>${esc(m.sec)}${m.c.c != null ? ' · ' + m.c.c + ' energy' : ''}</small></span><span class="st">${money(cardPrice(m.c.n)?.m)}</span></li>`;
+        for (const p of sb.picks) html += `<li class="sub-line">↳ play <b>${p.take}× ${esc(p.c.n)}</b> (you own it${p.c.c != null ? ' · ' + p.c.c + ' energy' : ''}${D.pop[p.id] ? ' · in ' + Math.round(D.pop[p.id] / D.nLists * 100) + '% of top lists' : ''})</li>`;
+        if (sb.still > 0) html += sb.buy
+          ? `<li class="sub-line">↳ still short ${sb.still} — budget pick: <b>${esc(sb.buy.c.n)}</b> ${money(sb.buy.p.m)}</li>`
+          : `<li class="sub-line">↳ still short ${sb.still} — no owned substitute; get the original</li>`;
+      }
+      html += '</ul>';
+    }
+  } else {
+    const buy = an.lines.concat(an.side).filter((l) => l.miss > 0);
+    if (!buy.length) html += '<p class="sub">Nothing to buy.</p>';
+    else {
+      html += '<ul class="dl">' + buy.map((l) => { const p = cardPrice(l.c.n), r = cardRef(l.c.n); return `<li data-card="${esc(r ? r.k : '')}"><span class="cnt">${l.miss}×</span><span class="nm">${esc(l.c.n)}<small>${l.sec === 'Side' ? 'Sideboard' : esc(l.sec)}</small></span><span class="st">${p ? money(p.m * l.miss) : '—'}</span></li>`; }).join('') + '</ul>';
+      html += `<div class="row"><button class="ghost" id="dk-copy">Copy list</button><span class="sub" style="align-self:center">Paste into TCGplayer Mass Entry</span></div>`;
+    }
+  }
+  html += `<p><a href="https://riftbound.gg/decks/${esc(b.slug)}/" target="_blank" rel="noopener">View this list on riftbound.gg ↗</a></p></div>`;
+  $('#sheet-content').innerHTML = html;
+  $$('#dk-mode button').forEach((x) => x.onclick = () => { D.deckMode = x.dataset.m; renderDeck(slug); });
+  const cp = $('#dk-copy');
+  if (cp) cp.onclick = async () => {
+    const txt = an.lines.concat(an.side).filter((l) => l.miss > 0).map((l) => `${l.miss} ${l.c.n}`).join('\n');
+    try { await navigator.clipboard.writeText(txt); toast('Copied — paste into TCGplayer Mass Entry'); } catch { toast('Couldn\'t copy on this device'); }
+  };
+}
+function lineHTML(l) {
+  const p = cardPrice(l.c.n);
+  const st = l.miss === 0 ? '<span class="ok">✓ own</span>' : l.have > 0 ? `<span class="part">own ${l.have}/${l.cnt}</span>` : '<span class="no">need</span>';
+  const r = cardRef(l.c.n);
+  return `<li data-card="${esc(r ? r.k : '')}"><span class="cnt">${l.cnt}×</span><span class="nm">${esc(l.c.n)}<small>${[l.c.t, l.c.c != null ? l.c.c + ' energy' : '', (l.c.d || []).join('/')].filter(Boolean).map(esc).join(' · ')}</small></span><span class="st">${st}<br><small class="sub">${money(p && p.m)}</small></span></li>`;
+}
+const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+function wireDecks() {
+  $('#dk-tab').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.tab = b.dataset.v; renderDecks(); };
+}
+
+/* ---------------------------------------------------------------- score counter */
+const SC_KEY = 'rbt.score.v1';
+const SC = Object.assign({ me: 0, opp: 0, target: 8, gamesMe: 0, gamesOpp: 0, undo: [], hist: [], oppName: 'Opponent', flip: true, done: false }, loadJSON(SC_KEY, {}));
+function saveScore() { try { localStorage.setItem(SC_KEY, JSON.stringify({ ...SC, undo: SC.undo.slice(-50) })); } catch {} }
+function renderScore() {
+  $('#sc-me').textContent = SC.me; $('#sc-opp').textContent = SC.opp;
+  $('#sc-target').textContent = SC.target;
+  $('#sc-games').textContent = `Games ${SC.gamesMe}–${SC.gamesOpp}`;
+  $('#sc-oppname').value = SC.oppName;
+  $('#sc-flip').checked = SC.flip;
+  $('#pl-opp').classList.toggle('flipped', SC.flip);
+  $('#pl-me').classList.toggle('won', SC.me >= SC.target);
+  $('#pl-opp').classList.toggle('won', SC.opp >= SC.target);
+  const w = $('#sc-win');
+  const winner = SC.me >= SC.target ? 'me' : SC.opp >= SC.target ? 'opp' : null;
+  if (winner && !SC.done) {
+    w.innerHTML = `<h2>${winner === 'me' ? '🏆 You win!' : esc(SC.oppName) + ' wins'}</h2><p class="sub">${SC.me} – ${SC.opp}</p>
+      <div class="row" style="justify-content:center"><button class="ghost" id="sc-oops">Oops, undo</button><button class="primary ghost" id="sc-next">Record &amp; next game</button></div>`;
+    w.classList.remove('hidden');
+    $('#sc-oops').onclick = () => scoreUndo();
+    $('#sc-next').onclick = () => finishGame(winner);
+  } else w.classList.add('hidden');
+  const wins = SC.hist.filter((h) => h.win).length, losses = SC.hist.length - wins;
+  $('#sc-record').textContent = SC.hist.length ? `${wins}W – ${losses}L` : '';
+  $('#sc-hist').innerHTML = SC.hist.slice(0, 15).map((h) => `<li><span>${h.win ? '<span class="ok">W</span>' : '<span class="no">L</span>'} vs ${esc(h.opp)}</span><span class="sub">${h.me}–${h.os} · ${new Date(h.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></li>`).join('') || '<li class="sub">Finished games show up here.</li>';
+}
+function scoreBump(p, d) {
+  const v = Math.max(0, SC[p] + d);
+  if (v === SC[p]) return;
+  SC.undo.push({ p, from: SC[p] }); SC[p] = v;
+  if (navigator.vibrate) navigator.vibrate(15);
+  saveScore(); renderScore();
+}
+function scoreUndo() { const u = SC.undo.pop(); if (!u) return; SC[u.p] = u.from; SC.done = false; saveScore(); renderScore(); }
+function finishGame(winner) {
+  SC.hist.unshift({ t: Date.now(), win: winner === 'me', me: SC.me, os: SC.opp, opp: SC.oppName });
+  SC.hist = SC.hist.slice(0, 200);
+  if (winner === 'me') SC.gamesMe++; else SC.gamesOpp++;
+  let msg = '';
+  if (SC.gamesMe === 2 || SC.gamesOpp === 2) { msg = SC.gamesMe === 2 ? `Match won ${SC.gamesMe}–${SC.gamesOpp}!` : `Match lost ${SC.gamesMe}–${SC.gamesOpp}`; SC.gamesMe = SC.gamesOpp = 0; }
+  SC.me = SC.opp = 0; SC.undo = []; SC.done = false;
+  saveScore(); renderScore(); if (msg) toast(msg, 3500);
+}
+async function newGame() {
+  if ((SC.me || SC.opp) && !(await confirmBox('Reset the score to 0–0? (Use this to abandon a game without recording it.)'))) return;
+  SC.me = SC.opp = 0; SC.undo = []; SC.done = false; saveScore(); renderScore();
+}
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch { /* not supported */ }
+}
+function wireScore() {
+  $$('#v-score [data-p]').forEach((b) => b.onclick = () => scoreBump(b.dataset.p, +b.dataset.d));
+  $('#sc-undo').onclick = scoreUndo;
+  $('#sc-new').onclick = newGame;
+  $('#sc-tminus').onclick = () => { SC.target = Math.max(1, SC.target - 1); saveScore(); renderScore(); };
+  $('#sc-tplus').onclick = () => { SC.target = Math.min(30, SC.target + 1); saveScore(); renderScore(); };
+  $('#sc-oppname').onchange = (e) => { SC.oppName = e.target.value.trim() || 'Opponent'; saveScore(); };
+  $('#sc-flip').onchange = (e) => { SC.flip = e.target.checked; saveScore(); renderScore(); };
+  $('#sc-clearhist').onclick = async () => { if (await confirmBox('Clear your game history?')) { SC.hist = []; SC.gamesMe = SC.gamesOpp = 0; saveScore(); renderScore(); } };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.view === 'score') keepAwake(true); });
+}
+
 async function init() {
   if (location.hash === '#card') { try { history.replaceState(null, '', location.pathname); } catch {} }
   wire();
@@ -546,6 +900,6 @@ async function init() {
   try { await loadData(); }
   catch { $('#col-empty').classList.remove('hidden'); $('#col-empty').innerHTML = '<p>Price data is still being prepared. Check back in a few minutes.</p>'; return; }
   checkStale();
-  show(location.hash === '#scan' ? 'scan' : 'collection');
+  show(location.hash === '#scan' ? 'scan' : location.hash === '#score' ? 'score' : 'collection');
 }
 init();
