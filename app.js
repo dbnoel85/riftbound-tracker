@@ -408,7 +408,7 @@ function grabFromVideo() {
   const offX = (v.videoWidth * scale - wrap.width) / 2, offY = (v.videoHeight * scale - wrap.height) / 2;
   const sx = (box.left - wrap.left + offX) / scale, sy = (box.top - wrap.top + offY) / scale;
   const sw = box.width / scale, sh = box.height / scale;
-  const c = document.createElement('canvas'); c.width = 630; c.height = 880;
+  const c = document.createElement('canvas'); c.width = 945; c.height = 1320;
   c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
   return c;
 }
@@ -418,8 +418,8 @@ async function grabFromFile(file) {
   const r = 63 / 88; let w = bmp.width, h = bmp.height;
   let cw = w, ch = cw / r; if (ch > h) { ch = h; cw = ch * r; }
   cw *= 0.94; ch *= 0.94;
-  const c = document.createElement('canvas'); c.width = 630; c.height = 880;
-  c.getContext('2d').drawImage(bmp, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, 630, 880);
+  const c = document.createElement('canvas'); c.width = 945; c.height = 1320;
+  c.getContext('2d').drawImage(bmp, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, 945, 1320);
   return c;
 }
 
@@ -445,7 +445,7 @@ const POP = [0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4];
 function hamming(a, b) { let d = 0; for (let i = 0; i < a.length; i++) d += POP[parseInt(a[i], 16) ^ parseInt(b[i], 16)]; return d; }
 
 /* ---- card identification: read the collector number (bottom-left), then the name, then confirm with the artwork */
-const CODE_BOX = [0.0, 0.915, 0.46, 0.085];   // x, y, w, h as fractions of the card
+const CODE_BOX = [0.01, 0.928, 0.5, 0.072];   // x, y, w, h as fractions of the card
 const NAME_BOX = [0.07, 0.52, 0.86, 0.15];
 const SET_TOTALS = { 298: 'OGN', 24: 'OGS', 221: 'SFD', 219: 'UNL', 166: 'VEN', 167: 'RAD' };
 const MAIN_SETS = new Set(['OGN', 'OGS', 'SFD', 'UNL', 'VEN', 'RAD', 'LGC']);
@@ -472,7 +472,8 @@ function cropScaled(canvas, box, scale, invertLight) {
   x.drawImage(canvas, canvas.width * bx, canvas.height * by, sw, sh, 0, 0, c.width, c.height);
   // grayscale + Otsu threshold -> dark text on white, which is what OCR reads best
   const im = x.getImageData(0, 0, c.width, c.height), d = im.data, hist = new Array(256).fill(0), g = new Uint8Array(d.length / 4);
-  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const v = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0; g[j] = v; hist[v]++; }
+  // 'whiteness' (darkest channel): card text is white/grey; gold trim and coloured art drop out
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) { const v = invertLight ? Math.min(d[i], d[i + 1], d[i + 2]) : (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0; g[j] = v; hist[v]++; }
   let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
   let sB = 0, wB = 0, best = 0, thr = 128; const tot = g.length;
   for (let t = 0; t < 256; t++) { wB += hist[t]; if (!wB) continue; const wF = tot - wB; if (!wF) break; sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF; const v = wB * wF * (mB - mF) ** 2; if (v > best) { best = v; thr = t; } }
@@ -503,7 +504,8 @@ async function identify(canvas, { useName = true } = {}) {
   let cands = [], why = '';
   // 1) collector number — the most reliable signal
   let codes = [];
-  try { codes = parseCode(await ocr(cropScaled(canvas, CODE_BOX, 3, true), 'code')); } catch (e) { console.warn(e); }
+  const cs = Math.max(1.5, 1900 / canvas.width);
+  try { codes = parseCode(await ocr(cropScaled(canvas, CODE_BOX, cs, true), 'code')); } catch (e) { console.warn(e); }
   const idx = numIndex();
   for (const c of codes) {
     const hits = idx.get(`${c.n}/${c.tot}`);
@@ -512,7 +514,7 @@ async function identify(canvas, { useName = true } = {}) {
   // 2) card name
   if (!cands.length && useName) {
     let txt = '';
-    try { txt = await ocr(cropScaled(canvas, NAME_BOX, 1.6, true), 'name'); } catch (e) { console.warn(e); }
+    try { txt = await ocr(cropScaled(canvas, NAME_BOX, Math.max(1, 1000 / canvas.width), true), 'name'); } catch (e) { console.warn(e); }
     const words = baseName(txt).split(' ').filter((w) => w.length > 2);
     if (words.length) {
       const ws = new Set(words);
