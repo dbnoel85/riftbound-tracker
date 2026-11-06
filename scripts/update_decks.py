@@ -51,6 +51,70 @@ def save(name, obj):
         json.dump(obj, f, separators=(",", ":"))
 
 
+MAIN_SETS = {"OGN", "OGS", "SFD", "UNL", "VEN", "RAD", "LGC", "SGN"}
+SET_TOTALS = {"298": "OGN", "024": "OGS", "221": "SFD", "219": "UNL", "166": "VEN", "167": "RAD"}
+IMG = "https://static.dotgg.gg/riftbound/cards/{}.webp"
+
+
+def base_name(n):
+    import re
+    n = re.sub(r"\(.*?\)", "", (n or "").lower()).replace(" - ", ", ")
+    return re.sub(r"[^a-z0-9]", "", n)
+
+
+def fill_missing_images(rb):
+    """Some printings (new signatures, runes, promos) have no TCGplayer photo yet.
+    Use the card gallery image instead, and fingerprint it for the scanner."""
+    import re
+    sys.path.insert(0, os.path.dirname(__file__))
+    from update_prices import dhash_hex
+    cards = load("cards.json", None)
+    if not cards:
+        return
+    hashes = load("hashes.json", {})
+    fix = load("imgfix.json", {})
+    groups = {g["id"]: g["abbr"] for g in cards["groups"]}
+    seen, added = set(), 0
+    for it in cards["items"]:
+        pid = str(it["p"])
+        if it.get("sealed") or pid in seen or (pid in hashes and pid not in fix):
+            continue
+        seen.add(pid)
+        if pid in fix and pid in hashes:
+            continue
+        m = re.match(r"^([A-Z]{0,3})0*(\d{1,3})([a-zA-Z*]?)(?:/(\d{2,3}))?$", (it.get("num") or "").strip())
+        if not m:
+            continue
+        pre, n, suf, tot = m.groups()
+        st = groups.get(it["g"])
+        if st not in MAIN_SETS:
+            st = SET_TOTALS.get((tot or "").zfill(3))
+        if not st:
+            continue
+        num = f"{pre}{int(n):02d}" if pre else f"{int(n):03d}"
+        ids = [f"{st}-{num}-STAR"] if suf == "*" else ([f"{st}-{num}{suf}", f"{st}-{num}{suf.upper()}"] if suf else [f"{st}-{num}"])
+        for cid in ids:
+            c = rb.get(cid)
+            if c and base_name(c["n"]) != base_name(it["n"]):
+                continue  # number points at a different card: don't guess
+            try:
+                r = s.get(IMG.format(cid), timeout=30)
+            except requests.RequestException:
+                continue
+            time.sleep(0.2)
+            if r.status_code == 200 and r.content:
+                try:
+                    hashes[pid] = dhash_hex(r.content)
+                except Exception:  # noqa: BLE001
+                    continue
+                fix[pid] = IMG.format(cid)
+                added += 1
+                break
+    save("imgfix.json", fix)
+    save("hashes.json", hashes)
+    print(f"Pictures filled in for {added} printings without a TCGplayer photo ({len(fix)} total)")
+
+
 def main():
     os.makedirs(DATA, exist_ok=True)
     snap = get("getmetasnapshot?game=riftbound&window=auto")
@@ -148,6 +212,10 @@ def main():
         "source": "riftbound.gg meta (tournament results)",
         "archetypes": out,
     })
+    try:
+        fill_missing_images(rb)
+    except Exception as e:  # noqa: BLE001 - pictures are a nice-to-have
+        print(f"  ! image fill: {e}")
     with_list = sum(1 for a in out if a["list"])
     print(f"{len(out)} archetypes, {with_list} with full lists ({fetched} new lists fetched)")
     return 0

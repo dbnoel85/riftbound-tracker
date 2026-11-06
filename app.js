@@ -59,6 +59,8 @@ async function loadData(force) {
   const r = await fetch(url, { cache: force ? 'reload' : 'default' });
   if (!r.ok) throw new Error('No price data yet');
   const cards = await r.json();
+  // pictures for printings TCGplayer has no photo of yet
+  try { const fix = await (await fetch('data/imgfix.json', { cache: force ? 'reload' : 'default' })).json(); for (const it of cards.items) if (fix[it.p]) it.img = fix[it.p]; } catch { /* optional */ }
   S.cards = cards; S.byKey.clear(); S.byPid.clear(); S.groups.clear();
   for (const g of cards.groups) S.groups.set(g.id, g);
   for (const it of cards.items) {
