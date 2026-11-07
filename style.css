@@ -226,3 +226,18 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 
 .snip{font-size:12.5px;color:var(--sub);margin-top:3px;white-space:normal;line-height:1.4}
 .snip mark{background:rgba(241,212,142,.22);color:var(--gold);border-radius:2px;padding:0 1px}
+
+.evrow .date{flex:none;width:48px;text-align:center;line-height:1.05;padding:6px 0;border:1px solid var(--line2);border-radius:3px;background:var(--deep)}
+.evrow .date b{display:block;font:400 22px var(--display);color:var(--gold)}
+.evrow .date small{font-size:11px;font-weight:700;color:var(--sub);letter-spacing:.04em}
+.evtype{display:inline-block;font-size:11px;font-weight:700;padding:0 6px;border-radius:2px;border:1px solid var(--line2);color:var(--sub);margin-right:4px}
+.evtype.big{color:var(--gold);border-color:var(--brass)}
+.res{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:2px;font-weight:800;font-size:13px}
+.res.W{background:rgba(69,224,208,.18);color:var(--rift)}.res.L{background:rgba(255,106,87,.18);color:var(--ember)}.res.D{background:rgba(151,162,200,.18);color:var(--sub)}
+.form label{display:block;font-size:12.5px;font-weight:600;color:var(--sub);margin:10px 0 4px}
+.form input,.form select,.form textarea{width:100%;background:var(--deep);border:1px solid var(--line);border-radius:3px;padding:10px 11px;color:var(--text);font:500 15px var(--ui)}
+.form .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rbtn{display:flex;gap:6px}.rbtn button{flex:1;padding:9px 0;border:1px solid var(--line2);background:var(--deep);border-radius:2px;font-weight:700;color:var(--sub)}
+.rbtn button.on.W{background:rgba(69,224,208,.2);color:var(--rift);border-color:var(--rift)}.rbtn button.on.L{background:rgba(255,106,87,.2);color:var(--ember);border-color:var(--ember)}.rbtn button.on.D{color:var(--text);border-color:var(--sub)}
+.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.statgrid b{display:block;font:400 24px var(--display);color:#fff6dc}.statgrid span{font-size:12px;color:var(--sub);font-weight:600}

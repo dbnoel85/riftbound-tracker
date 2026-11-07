@@ -1,0 +1,30 @@
+{
+  "updated": "2026-11-06",
+  "source": "https://playriftbound.com/en-us/news/announcements/august-2026-roadmap/",
+  "events": [
+    {"name": "European Regional Championship", "type": "Regional Championship", "start": "2026-11-06", "end": "2026-11-08", "loc": "Stuttgart, Germany"},
+    {"name": "Radiance Summoner Skirmish window 1 opens", "type": "Summoner Skirmish", "start": "2026-11-09", "loc": "Local game stores"},
+    {"name": "TwitchCon", "type": "Convention", "start": "2026-11-13", "end": "2026-11-15", "loc": "San Diego, CA, USA"},
+    {"name": "Gen.G Riftbound Showdown Series", "type": "Showdown Series", "start": "2026-11-21", "end": "2026-11-22", "loc": "Los Angeles, CA, USA", "url": "https://www.eventbrite.com/e/geng-la-showdown-series-tickets-2003172970278"},
+    {"name": "DreamHack Stockholm", "type": "Convention", "start": "2026-11-27", "end": "2026-11-29", "loc": "Stockholm, Sweden"},
+    {"name": "Toulouse Game Show", "type": "Convention", "start": "2026-11-28", "end": "2026-11-29", "loc": "Toulouse, France"},
+    {"name": "PAX Unplugged", "type": "Convention", "start": "2026-12-04", "end": "2026-12-06", "loc": "Philadelphia, PA, USA"},
+    {"name": "Convergence Fest & North American Regional Championship", "type": "Regional Championship", "start": "2026-12-11", "end": "2026-12-13", "loc": "Las Vegas, NV, USA", "url": "https://convergencefest.riotgames.com/"},
+    {"name": "Radiance Summoner Skirmish window 2 opens", "type": "Summoner Skirmish", "start": "2026-12-14", "loc": "Local game stores"},
+    {"name": "Legacy Pre-Rift events", "type": "Pre-Rift", "start": "2027-01-22", "end": "2027-01-28", "loc": "Local game stores"},
+    {"name": "Legacy set launch", "type": "Set release", "start": "2027-01-29", "loc": "Worldwide"},
+    {"name": "Legacy Regional #1", "type": "Regional", "start": "2027-02-05", "end": "2027-02-07", "loc": "IFEMA Madrid, Spain"},
+    {"name": "Legacy Regional #2", "type": "Regional", "start": "2027-02-12", "end": "2027-02-14", "loc": "Pennsylvania Convention Center, Philadelphia, USA"},
+    {"name": "Proving Grounds 2nd Edition launch", "type": "Set release", "start": "2027-02-19", "loc": "Worldwide"},
+    {"name": "Legacy Regional #3", "type": "Regional", "start": "2027-03-05", "end": "2027-03-07", "loc": "Auckland Showgrounds, New Zealand"},
+    {"name": "Legacy Continental", "type": "Continental", "start": "2027-03-26", "end": "2027-03-28", "loc": "Kay Bailey Hutchison Convention Center, Dallas, USA"},
+    {"name": "The Reckoning Regional #1", "type": "Regional", "start": "2027-05-14", "end": "2027-05-16", "loc": "Kentucky Exposition Center, Louisville, USA"},
+    {"name": "The Reckoning Regional #2", "type": "Regional", "start": "2027-05-21", "end": "2027-05-23", "loc": "Düsseldorf Congress, Germany"},
+    {"name": "The Reckoning Continental", "type": "Continental", "start": "2027-06-11", "end": "2027-06-13", "loc": "Melbourne Showgrounds, Australia"},
+    {"name": "The Reckoning Pre-Rift events", "type": "Pre-Rift", "start": "2027-06-23", "end": "2027-06-29", "loc": "Local game stores"},
+    {"name": "The Reckoning Regional #3", "type": "Regional", "start": "2027-06-25", "end": "2027-06-27", "loc": "Eurexpo Lyon, France"},
+    {"name": "The Reckoning set launch", "type": "Set release", "start": "2027-06-30", "loc": "Worldwide"},
+    {"name": "Set 8 Continental", "type": "Continental", "start": "2027-08-13", "end": "2027-08-15", "loc": "ExCeL London, England"},
+    {"name": "Set 9 Continental", "type": "Continental", "start": "2027-12-10", "end": "2027-12-12", "loc": "Enercare Centre, Toronto, Canada"}
+  ]
+}

@@ -107,11 +107,12 @@ function show(view) {
   $$('.view').forEach((v) => v.classList.add('hidden'));
   $('#v-' + view).classList.remove('hidden');
   $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
-  $('#title').textContent = { collection: 'Collection', scan: 'Scan cards', add: 'Add cards', movers: 'Top movers', decks: 'Meta decks', score: 'Score', more: 'Settings' }[view];
+  $('#title').textContent = { collection: 'Collection', scan: 'Scan cards', add: 'Add cards', movers: 'Top movers', decks: 'Meta decks', events: 'Events', score: 'Score', more: 'Settings' }[view];
   $('#hdr-add').classList.toggle('hidden', view === 'add' || view === 'score');
   $('#hdr-more').classList.toggle('hidden', view === 'more' || view === 'score');
   if (view === 'score') { renderScore(); keepAwake(true); } else keepAwake(false);
   if (view === 'decks') renderDecks();
+  if (view === 'events') renderEvents();
   if (view === 'scan') startCamera(); else { stopCamera(); clearTimeout(SCAN.timer); }
   if (view === 'collection') renderCollection();
   if (view === 'add') renderAdd();
@@ -395,7 +396,7 @@ function closeSheet() { // Done: leave every level
 }
 window.addEventListener('popstate', () => { if (SHEET.length) popSheetUI(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') sheetBack(); });
-function refreshCurrent() { if (S.view === 'collection') renderCollection(); if (S.view === 'movers') renderMovers(); if (S.view === 'decks') renderDecks(); }
+function refreshCurrent() { if (S.view === 'collection') renderCollection(); if (S.view === 'movers') renderMovers(); if (S.view === 'decks') renderDecks(); if (S.view === 'events') renderEvents(); }
 
 /* ---------------------------------------------------------------- scanner */
 let stream = null, ocrWorker = null, ocrLoading = null;
@@ -727,7 +728,7 @@ function download(name, text, type) {
 function exportBackup() {
   const items = {};
   for (const [k, e] of Object.entries(S.inv.items)) { const it = S.byKey.get(k); items[k] = { ...e, name: it ? it.n : e.name, number: it ? it.num : '' }; }
-  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 2, items, decks: MD.decks }, null, 1), 'application/json');
+  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 3, items, decks: MD.decks, events: EV.events }, null, 1), 'application/json');
 }
 function exportCSV() {
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
@@ -744,6 +745,7 @@ async function importBackup(file) {
     S.inv = { items: {} };
     for (const [k, e] of Object.entries(data.items)) S.inv.items[k] = { qty: +e.qty || 1, added: e.added || Date.now(), cost: e.cost ?? null, name: e.name };
     if (Array.isArray(data.decks)) { MD.decks = data.decks; saveMD(); }
+    if (Array.isArray(data.events)) { EV.events = data.events; saveEV(); }
     saveInv(); toast('Backup restored'); show('collection');
   } catch { toast('That file isn\'t a Riftbound Tracker backup'); }
 }
@@ -753,7 +755,7 @@ function wire() {
   $$('.tabs button').forEach((b) => b.onclick = () => show(b.dataset.view));
   $('#hdr-add').onclick = () => show('add');
   $('#hdr-more').onclick = () => show('more');
-  wireDecks(); wireScore();
+  wireDecks(); wireScore(); wireEvents();
   $('#col-filter').oninput = renderCollection;
   $('#col-sort').value = S.prefs.sort;
   $('#col-sort').onchange = (e) => { S.prefs.sort = e.target.value; savePrefs(); renderCollection(); };
@@ -1285,6 +1287,155 @@ function saveMetaToMine(a) {
   pushSheet(() => renderMyDeck(dk.id));
 }
 
+/* ---------------------------------------------------------------- events */
+const EV_KEY = 'rbt.events.v1';
+const EV = Object.assign({ events: [] }, loadJSON(EV_KEY, {}));
+const EVS = { tab: 'mine', up: null };
+const EV_TYPES = ['Nexus Night', 'Summoner Skirmish', 'Pre-Rift', 'Showdown Series', 'Regional Qualifier', 'Regional', 'Regional Championship', 'Continental', 'Store tournament', 'Casual / other'];
+const BIG = new Set(['Showdown Series', 'Regional Qualifier', 'Regional', 'Regional Championship', 'Continental']);
+function saveEV() { try { localStorage.setItem(EV_KEY, JSON.stringify(EV)); } catch { toast('Could not save on this device'); } }
+const evGet = (id) => EV.events.find((e) => e.id === id);
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function evRecord(e) { const r = { W: 0, L: 0, D: 0 }; for (const x of e.rounds || []) if (r[x.res] != null) r[x.res]++; return r; }
+const recTxt = (r) => `${r.W}-${r.L}${r.D ? '-' + r.D : ''}`;
+function dateBox(iso) {
+  if (!iso) return '<div class="date"><b>?</b><small>TBD</small></div>';
+  const [y, m, d] = iso.split('-').map(Number); const dt = new Date(y, m - 1, d);
+  return `<div class="date"><b>${d}</b><small>${dt.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</small></div>`;
+}
+const deckLabel = (e) => e.deckId ? (MD.decks.find((d) => d.id === e.deckId)?.name || e.deckName || '') : (e.deckName || '');
+
+async function renderEvents() {
+  $$('#ev-tab button').forEach((b) => b.classList.toggle('on', b.dataset.v === EVS.tab));
+  if (EVS.tab === 'upcoming') return renderUpcoming();
+  const body = $('#ev-body'); const today = todayISO();
+  const up = EV.events.filter((e) => (e.date || '9999') >= today).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+  const past = EV.events.filter((e) => e.date && e.date < today).sort((a, b) => b.date.localeCompare(a.date));
+  // overall stats
+  const tot = { W: 0, L: 0, D: 0 }; const byLeg = new Map(); const byDeck = new Map(); let best = null;
+  for (const e of EV.events) {
+    const r = evRecord(e); tot.W += r.W; tot.L += r.L; tot.D += r.D;
+    const dl = deckLabel(e); if (dl && (r.W + r.L + r.D)) { const x = byDeck.get(dl) || { W: 0, L: 0, D: 0 }; x.W += r.W; x.L += r.L; x.D += r.D; byDeck.set(dl, x); }
+    for (const rd of e.rounds || []) if (rd.leg) { const x = byLeg.get(rd.leg) || { W: 0, L: 0, D: 0 }; x[rd.res]++; byLeg.set(rd.leg, x); }
+    if (e.place && e.players && (!best || e.place / e.players < best.place / best.players)) best = e;
+  }
+  const games = tot.W + tot.L + tot.D;
+  const pctW = (r) => { const n = r.W + r.L + r.D; return n ? Math.round(r.W / n * 100) + '%' : '—'; };
+  const row = (e) => { const r = evRecord(e); const n = r.W + r.L + r.D;
+    return `<li class="item evrow" data-ev="${esc(e.id)}">${dateBox(e.date)}<div class="info">
+      <div class="nm">${esc(e.name || 'Event')}</div>
+      <div class="meta wrap">${e.type ? `<span class="evtype ${BIG.has(e.type) ? 'big' : ''}">${esc(e.type)}</span>` : ''}${esc(e.loc || '')}</div>
+      <div class="meta">${[deckLabel(e) && '🃏 ' + deckLabel(e), n ? 'Record ' + recTxt(r) : '', e.place ? `${ordinal(+e.place)}${e.players ? ' of ' + e.players : ''}` : ''].filter(Boolean).map(esc).join(' · ') || '<span class="flat">No results yet</span>'}</div>
+    </div></li>`; };
+  body.innerHTML = `
+    <button class="primary ghost" id="ev-new" style="width:100%;padding:13px;margin-bottom:12px">＋ Add event</button>
+    ${EV.events.length ? `<div class="card-box"><div class="statgrid">
+      <div><b>${EV.events.filter((e) => (e.rounds || []).length || e.place).length}</b><span>events played</span></div>
+      <div><b>${recTxt(tot)}</b><span>match record</span></div>
+      <div><b>${games ? Math.round(tot.W / games * 100) + '%' : '—'}</b><span>match wins</span></div></div>
+      ${best ? `<p class="sub" style="margin:10px 0 0">Best finish: <b>${ordinal(+best.place)} of ${best.players}</b> at ${esc(best.name)}</p>` : ''}
+      ${byDeck.size ? `<p class="sub" style="margin:6px 0 0">By deck: ${[...byDeck].sort((a, b) => (b[1].W + b[1].L) - (a[1].W + a[1].L)).slice(0, 3).map(([k, r]) => `${esc(k)} <b>${recTxt(r)}</b> (${pctW(r)})`).join(' · ')}</p>` : ''}
+      ${byLeg.size ? `<p class="sub" style="margin:6px 0 0">Vs. legends: ${[...byLeg].sort((a, b) => (b[1].W + b[1].L + b[1].D) - (a[1].W + a[1].L + a[1].D)).slice(0, 4).map(([k, r]) => `${esc(k.split(' - ')[0])} <b>${recTxt(r)}</b>`).join(' · ')}</p>` : ''}
+    </div>` : ''}
+    <h2>Coming up</h2>
+    <ul class="list">${up.map(row).join('') || '<li class="empty">Nothing scheduled. Add an event, or pick one from <b>Upcoming</b>.</li>'}</ul>
+    <h2>Results</h2>
+    <ul class="list">${past.map(row).join('') || '<li class="empty">Past events and your results will show here.</li>'}</ul>`;
+  $('#ev-new').onclick = () => { const e = newEvent({}); pushSheet(() => renderEvent(e.id)); };
+}
+function newEvent(f) {
+  const e = { id: Date.now().toString(36), name: f.name || '', date: f.date || todayISO(), end: f.end || '', time: f.time || '', loc: f.loc || '', type: f.type || 'Nexus Night', format: 'Constructed', deckId: '', deckName: '', fee: '', prize: '', notes: '', place: '', players: '', url: f.url || '', rounds: [], created: Date.now(), mod: Date.now() };
+  EV.events.push(e); saveEV(); return e;
+}
+async function renderUpcoming() {
+  const body = $('#ev-body');
+  if (!EVS.up) { body.innerHTML = '<p class="sub">Loading…</p>'; try { EVS.up = await (await fetch('data/upcoming.json')).json(); } catch { EVS.up = { events: [] }; } }
+  const today = todayISO();
+  const list = EVS.up.events.filter((e) => (e.end || e.start) >= today);
+  let month = '', html = `<div class="card-box"><h3>Local events near you</h3>
+    <p class="sub">Nexus Nights, Summoner Skirmishes and store tournaments are listed on the official Riftbound Event Locator. Find one, then tap <b>＋ Add event</b> under My events to track it.</p>
+    <a class="ghost" style="display:inline-block;text-decoration:none" href="https://locator.riftbound.uvsgames.com/events" target="_blank" rel="noopener">Open the Event Locator ↗</a></div>
+    <p class="sub">Major events from Riot's official schedule (updated ${fmtDate(EVS.up.updated)}).</p><ul class="list">`;
+  for (const e of list) {
+    const [y, m] = e.start.split('-').map(Number); const mo = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (mo !== month) { html += `<li class="dsec" style="list-style:none">${mo}</li>`; month = mo; }
+    const added = EV.events.some((x) => x.name === e.name && x.date === e.start);
+    html += `<li class="item evrow">${dateBox(e.start)}<div class="info">
+      <div class="nm" style="white-space:normal">${esc(e.name)}</div>
+      <div class="meta wrap"><span class="evtype ${BIG.has(e.type) ? 'big' : ''}">${esc(e.type)}</span>${esc(e.loc || '')}${e.end ? ` · until ${fmtDate(e.end)}` : ''}</div>
+      <div class="row" style="margin:6px 0 0">${added ? '<span class="ok sub">✓ In my events</span>' : `<button class="ghost sm" data-upadd="${esc(e.name)}|${esc(e.start)}">＋ Add to my events</button>`}${e.url ? `<a class="sub" style="align-self:center" href="${esc(e.url)}" target="_blank" rel="noopener">More info ↗</a>` : ''}</div>
+    </div></li>`;
+  }
+  html += `</ul><p class="sub center">Source: <a href="${esc(EVS.up.source)}" target="_blank" rel="noopener">playriftbound.com</a></p>`;
+  body.innerHTML = html;
+  $$('#ev-body [data-upadd]').forEach((b) => b.onclick = () => {
+    const [name, start] = b.dataset.upadd.split('|'); const u = EVS.up.events.find((x) => x.name === name && x.start === start);
+    newEvent({ name: u.name, date: u.start, end: u.end, loc: u.loc, type: EV_TYPES.includes(u.type) ? u.type : 'Casual / other', url: u.url });
+    toast('Added to My events'); renderUpcoming();
+  });
+}
+function legendNames() { return D.rb ? [...new Set(Object.entries(D.rb).filter(([id, c]) => c.t === 'Legend' && isBaseId(id)).map(([, c]) => c.n))].sort() : []; }
+function renderEvent(id) {
+  const e = evGet(id); if (!e) { closeSheet(); return; }
+  const r = evRecord(e);
+  const decks = MD.decks.slice().sort((a, b) => a.name.localeCompare(b.name));
+  $('#sheet-content').innerHTML = `<div class="detail form">
+    <h2 style="margin:6px 0 4px">${esc(e.name || 'New event')}</h2>
+    <label>Event name</label><input data-f="name" value="${esc(e.name)}" placeholder="e.g. Friday Nexus Night">
+    <div class="two"><div><label>Date</label><input type="date" data-f="date" value="${esc(e.date)}"></div><div><label>Start time</label><input type="time" data-f="time" value="${esc(e.time)}"></div></div>
+    <label>Store / location</label><input data-f="loc" value="${esc(e.loc)}" placeholder="Store name, city">
+    <div class="two"><div><label>Type</label><select data-f="type">${EV_TYPES.map((t) => `<option ${t === e.type ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div><label>Format</label><select data-f="format">${['Constructed', 'Sealed', '2v2', 'Other'].map((t) => `<option ${t === e.format ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
+    <label>Deck I played</label><select data-f="deckId"><option value="">${decks.length ? '— pick one of My decks —' : '— no saved decks —'}</option>${decks.map((d) => `<option value="${esc(d.id)}" ${d.id === e.deckId ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
+    <input data-f="deckName" value="${esc(e.deckName)}" placeholder="…or type a deck / legend" style="margin-top:6px">
+    <div class="two"><div><label>Entry fee</label><input data-f="fee" value="${esc(e.fee)}" placeholder="$"></div><div><label>Prizes won</label><input data-f="prize" value="${esc(e.prize)}" placeholder="packs, promo, credit…"></div></div>
+    <div class="two"><div><label>Final place</label><input type="number" min="1" inputmode="numeric" data-f="place" value="${esc(e.place)}"></div><div><label>Players</label><input type="number" min="1" inputmode="numeric" data-f="players" value="${esc(e.players)}"></div></div>
+
+    <div class="dsec">Rounds · record ${recTxt(r)}</div>
+    <datalist id="leg-list">${legendNames().map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+    <ul class="dl">${(e.rounds || []).map((rd, i) => `<li style="display:block;padding:10px 0">
+      <div class="row" style="align-items:center;margin:0 0 6px"><b style="min-width:70px">Round ${i + 1}</b>
+        <div class="rbtn" style="flex:1">${['W', 'L', 'D'].map((x) => `<button class="${rd.res === x ? 'on ' + x : ''}" data-rres="${i}|${x}">${{ W: 'Win', L: 'Loss', D: 'Draw' }[x]}</button>`).join('')}</div>
+        <button class="ghost sm" data-rdel="${i}" aria-label="Delete round">✕</button></div>
+      <div class="two"><input data-r="${i}|opp" value="${esc(rd.opp || '')}" placeholder="Opponent"><input data-r="${i}|leg" list="leg-list" value="${esc(rd.leg || '')}" placeholder="Their legend"></div>
+      <div class="two" style="margin-top:6px"><input data-r="${i}|g" value="${esc(rd.g || '')}" placeholder="Games, e.g. 2-1"><input data-r="${i}|notes" value="${esc(rd.notes || '')}" placeholder="Notes"></div>
+    </li>`).join('') || '<li class="sub">No rounds yet.</li>'}</ul>
+    <button class="ghost" id="ev-addround" style="width:100%;margin-top:8px">＋ Add round</button>
+    <label>Notes</label><textarea data-f="notes" rows="3" placeholder="What worked, what to change…">${esc(e.notes)}</textarea>
+    ${e.url ? `<p><a href="${esc(e.url)}" target="_blank" rel="noopener">Event info ↗</a></p>` : ''}
+    <div class="row" style="margin-top:14px"><button class="ghost" id="ev-ics">Add to calendar</button><button class="danger" id="ev-del">Delete event</button></div>
+  </div>`;
+  const save = () => { e.mod = Date.now(); saveEV(); };
+  $$('#sheet-content [data-f]').forEach((inp) => inp.onchange = () => { e[inp.dataset.f] = inp.value.trim(); if (inp.dataset.f === 'deckId' && inp.value) e.deckName = ''; save(); if (inp.dataset.f === 'name') $('#sheet-content h2').textContent = e.name || 'New event'; });
+  $$('#sheet-content [data-r]').forEach((inp) => inp.onchange = () => { const [i, k] = inp.dataset.r.split('|'); e.rounds[+i][k] = inp.value.trim(); save(); });
+  const keep = (fn) => { const b = $('#sheet .sheet-body'), y = b.scrollTop; fn(); renderEvent(id); b.scrollTop = y; };
+  $$('#sheet-content [data-rres]').forEach((b) => b.onclick = () => keep(() => { const [i, x] = b.dataset.rres.split('|'); e.rounds[+i].res = x; save(); }));
+  $$('#sheet-content [data-rdel]').forEach((b) => b.onclick = () => keep(() => { e.rounds.splice(+b.dataset.rdel, 1); save(); }));
+  $('#ev-addround').onclick = () => keep(() => { e.rounds.push({ res: '', opp: '', leg: '', g: '', notes: '' }); save(); });
+  $('#ev-del').onclick = async () => { if (await confirmBox(`Delete "${e.name || 'this event'}"?`)) { EV.events = EV.events.filter((x) => x.id !== id); saveEV(); closeSheet(); } };
+  $('#ev-ics').onclick = () => {
+    const d = (e.date || todayISO()).replace(/-/g, ''); const t = (e.time || '').replace(':', '');
+    const end = (e.end || e.date || todayISO()).replace(/-/g, '');
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Riftbound Tracker//EN', 'BEGIN:VEVENT', `UID:${e.id}@riftbound-tracker`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+      t ? `DTSTART:${d}T${t}00` : `DTSTART;VALUE=DATE:${d}`, t ? `DTEND:${d}T${String(+t.slice(0, 2) + 4).padStart(2, '0')}${t.slice(2)}00` : `DTEND;VALUE=DATE:${String(+end + 1)}`,
+      `SUMMARY:${(e.name || 'Riftbound event').replace(/[,;]/g, ' ')}`, `LOCATION:${(e.loc || '').replace(/[,;]/g, ' ')}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    download(`${(e.name || 'event').replace(/[^\w]+/g, '-')}.ics`, ics, 'text/calendar');
+  };
+  if (!D.rb) loadDecks().then(() => { const dl = $('#leg-list'); if (dl) dl.innerHTML = legendNames().map((n) => `<option value="${esc(n)}">`).join(''); }, () => {});
+}
+/** after a best-of-3 ends on the Score screen, offer to log it to today's event */
+async function offerRoundLog(win, me, opp, oppName) {
+  const t = todayISO();
+  const e = EV.events.filter((x) => x.date && x.date <= t && (x.end || x.date) >= t).sort((a, b) => (b.mod || b.created) - (a.mod || a.created))[0];
+  if (!e) return;
+  if (!(await confirmBox(`Add this match (${win ? 'win' : 'loss'} ${me}–${opp} vs ${oppName}) to "${e.name || 'today\'s event'}" as round ${(e.rounds || []).length + 1}?`))) return;
+  e.rounds = e.rounds || []; e.rounds.push({ res: win ? 'W' : 'L', opp: oppName === 'Opponent' ? '' : oppName, leg: '', g: `${me}-${opp}`, notes: '' });
+  saveEV(); toast('Round saved to ' + (e.name || 'event'));
+}
+function wireEvents() {
+  $('#ev-tab').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; EVS.tab = b.dataset.v; renderEvents(); };
+}
+
 /* ---------------------------------------------------------------- score counter */
 const SC_KEY = 'rbt.score.v1';
 const SC = Object.assign({ me: 0, opp: 0, target: 8, gamesMe: 0, gamesOpp: 0, undo: [], hist: [], oppName: 'Opponent', flip: true, done: false }, loadJSON(SC_KEY, {}));
@@ -1324,9 +1475,11 @@ function finishGame(winner) {
   SC.hist = SC.hist.slice(0, 200);
   if (winner === 'me') SC.gamesMe++; else SC.gamesOpp++;
   let msg = '';
-  if (SC.gamesMe === 2 || SC.gamesOpp === 2) { msg = SC.gamesMe === 2 ? `Match won ${SC.gamesMe}–${SC.gamesOpp}!` : `Match lost ${SC.gamesMe}–${SC.gamesOpp}`; SC.gamesMe = SC.gamesOpp = 0; }
+  let matchEnd = null;
+  if (SC.gamesMe === 2 || SC.gamesOpp === 2) { msg = SC.gamesMe === 2 ? `Match won ${SC.gamesMe}–${SC.gamesOpp}!` : `Match lost ${SC.gamesMe}–${SC.gamesOpp}`; matchEnd = [SC.gamesMe === 2, SC.gamesMe, SC.gamesOpp, SC.oppName]; SC.gamesMe = SC.gamesOpp = 0; }
   SC.me = SC.opp = 0; SC.undo = []; SC.done = false;
   saveScore(); renderScore(); if (msg) toast(msg, 3500);
+  if (matchEnd) setTimeout(() => offerRoundLog(...matchEnd), 600);
 }
 async function newGame() {
   if ((SC.me || SC.opp) && !(await confirmBox('Reset the score to 0–0? (Use this to abandon a game without recording it.)'))) return;
@@ -1360,6 +1513,6 @@ async function init() {
   try { await loadData(); }
   catch { $('#col-empty').classList.remove('hidden'); $('#col-empty').innerHTML = '<p>Price data is still being prepared. Check back in a few minutes.</p>'; return; }
   checkStale();
-  show(location.hash === '#scan' ? 'scan' : location.hash === '#score' ? 'score' : 'collection');
+  show(location.hash === '#scan' ? 'scan' : location.hash === '#score' ? 'score' : location.hash === '#events' ? 'events' : 'collection');
 }
 init();
