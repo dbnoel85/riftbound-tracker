@@ -121,6 +121,21 @@ function show(view) {
   window.scrollTo(0, 0);
 }
 
+/* ---- card attributes for sorting (domain, energy, type) */
+const NEEDS_INFO = new Set(['color', 'cost', 'type']);
+let CI = null;
+function cardInfo(name) {
+  if (!D.rb) return null;
+  if (!CI) { CI = new Map(); for (const [id, c] of Object.entries(D.rb)) { const n = normName(c.n); if (n && (!CI.has(n) || /^[A-Z]+-\d+$/.test(id))) CI.set(n, c); } }
+  return CI.get(normName(name)) || null;
+}
+const DOMAINS = ['Fury', 'Calm', 'Mind', 'Body', 'Chaos', 'Order'];
+function domainRank(c) { const d = (c?.d || []).filter((x) => x !== 'Colorless'); if (!c) return 99; if (!d.length) return 50; if (d.length === 1) return DOMAINS.indexOf(d[0]); return 10 + DOMAINS.indexOf(d[0]); }
+function domainLabel(c) { if (!c) return 'Unknown'; const d = (c.d || []).filter((x) => x !== 'Colorless'); return d.length ? d.join(' / ') : 'Colorless'; }
+const RARITY = { Common: 1, Uncommon: 2, Rare: 3, Epic: 4, Showcase: 5, Promo: 6 };
+const rarityRank = (r) => RARITY[r] || 0;
+function typeLabel(c) { if (!c) return 'Other'; if (c.st === 'Champion') return 'Champion units'; return ({ Unit: 'Units', Spell: 'Spells', Gear: 'Gear', Legend: 'Legends', Rune: 'Runes', Battlefield: 'Battlefields', Token: 'Tokens' })[c.t] || c.t || 'Other'; }
+
 /* ---- sets: picture, completion, filter */
 function setImage(gid) {
   const sealed = [], cards = [];
@@ -183,7 +198,16 @@ function renderCollection() {
   let list = rows.filter((r) => !q || `${r.it.n} ${r.it.num} ${setName(r.it.g)}`.toLowerCase().includes(q));
   const sort = $('#col-sort').value;
   const nz = (v, d) => (v == null ? d : v);
+  if (NEEDS_INFO.has(sort) && !D.rb) { loadDecks().then(renderCollection, () => {}); }
+  const info = (r) => cardInfo(r.it.n);
   const cmp = {
+    priceHi: (a, b) => nz(b.it.m, -1) - nz(a.it.m, -1),
+    priceLo: (a, b) => nz(a.it.m, 1e9) - nz(b.it.m, 1e9),
+    color: (a, b) => (domainRank(info(a)) - domainRank(info(b))) || domainLabel(info(a)).localeCompare(domainLabel(info(b))) || b.value - a.value,
+    cost: (a, b) => (nz(info(a)?.c, 99) - nz(info(b)?.c, 99)) || a.it.n.localeCompare(b.it.n),
+    rarity: (a, b) => (rarityRank(b.it.r) - rarityRank(a.it.r)) || b.value - a.value,
+    type: (a, b) => typeLabel(info(a)).localeCompare(typeLabel(info(b))) || a.it.n.localeCompare(b.it.n),
+    qty: (a, b) => (b.e.qty - a.e.qty) || a.it.n.localeCompare(b.it.n),
     value: (a, b) => b.value - a.value,
     'gain$': (a, b) => nz(b.dval, -1e9) - nz(a.dval, -1e9),
     'gain%': (a, b) => nz(b.it.pc, -1e9) - nz(a.it.pc, -1e9),
@@ -193,9 +217,17 @@ function renderCollection() {
     added: (a, b) => b.e.added - a.e.added,
   }[sort];
   list.sort(cmp);
+  const groupOf = {
+    color: (r) => domainLabel(info(r)), cost: (r) => info(r)?.c != null ? `${info(r).c} energy` : 'No energy cost',
+    rarity: (r) => r.it.r || 'Other', type: (r) => typeLabel(info(r)), set: (r) => setName(r.it.g),
+  }[sort];
   $('#col-empty').classList.toggle('hidden', rows.length > 0 || cur !== 'all');
   if (!rows.length && cur !== 'all') { $('#col-list').innerHTML = '<li class="empty">You don\'t have any cards from this set yet. Tap <b>Missing</b> to see them all.</li>'; return; }
-  $('#col-list').innerHTML = list.map((r) => `
+  let lastG = null;
+  $('#col-list').innerHTML = list.map((r) => {
+    let head = '';
+    if (groupOf) { const g = groupOf(r); if (g !== lastG) { lastG = g; const n = list.filter((x) => groupOf(x) === g); head = `<li class="dsec grp">${esc(g)} <span class="flat">· ${n.reduce((t, x) => t + x.e.qty, 0)} cards · ${money(n.reduce((t, x) => t + x.value, 0))}</span></li>`; } }
+    return head + `
     <li class="item" data-k="${esc(r.it.k)}">
       ${img(r.it.img)}
       <div class="info">
@@ -204,7 +236,7 @@ function renderCollection() {
         <div class="meta">${money(r.it.m)} each</div>
       </div>
       <div class="px"><b>${money(r.value)}</b><small>${chg(r.dval, r.it.pc)}</small></div>
-    </li>`).join('');
+    </li>`; }).join('');
 
   // new-set banner
   const fresh = (S.cards.newGroups || []).filter((g) => !S.prefs.seenNew.includes(g.id));
@@ -221,7 +253,11 @@ function renderMissing(gid) {
   const miss = [];
   const q = $('#col-filter').value.trim().toLowerCase();
   for (const [pid, items] of S.byPid) { const it = items[0]; if (it.g === gid && !it.sealed && !owned.has(pid) && (!q || `${it.n} ${it.num} ${it.r}`.toLowerCase().includes(q))) miss.push(items); }
-  miss.sort((a, b) => String(a[0].num).localeCompare(String(b[0].num), undefined, { numeric: true }) || a[0].n.localeCompare(b[0].n));
+  const lo = (items) => Math.min(...items.map((v) => v.m ?? Infinity));
+  const srt = $('#col-sort').value;
+  if (srt === 'priceHi' || srt === 'value') miss.sort((a, b) => lo(b) - lo(a)); else if (srt === 'priceLo') miss.sort((a, b) => lo(a) - lo(b));
+  else if (srt === 'rarity') miss.sort((a, b) => rarityRank(b[0].r) - rarityRank(a[0].r) || lo(b) - lo(a));
+  else miss.sort((a, b) => String(a[0].num).localeCompare(String(b[0].num), undefined, { numeric: true }) || a[0].n.localeCompare(b[0].n));
   let cost = 0; for (const items of miss) { const m = Math.min(...items.map((v) => v.m ?? Infinity)); if (isFinite(m)) cost += m; }
   const rows = ownedRows().filter((r) => r.it.g === gid);
   let total = 0; for (const r of rows) total += r.value;
