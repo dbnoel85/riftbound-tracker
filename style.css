@@ -218,3 +218,8 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 .chips.wins{justify-content:stretch}.chips.wins button{flex:1}
 .rk{color:var(--gold);margin-right:4px}
 .item .meta.wrap{white-space:normal;line-height:1.55}
+
+.mstep{display:flex;align-items:center;gap:6px;flex:none}
+.mstep button{width:32px;height:32px;border-radius:2px;border:1px solid var(--line2);background:var(--deep);color:var(--gold);font-size:18px;line-height:1}
+.mstep b{min-width:18px;text-align:center}
+#dk-tab button{font-size:13.5px;padding:9px 4px}

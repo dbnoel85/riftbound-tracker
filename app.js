@@ -690,7 +690,7 @@ function download(name, text, type) {
 function exportBackup() {
   const items = {};
   for (const [k, e] of Object.entries(S.inv.items)) { const it = S.byKey.get(k); items[k] = { ...e, name: it ? it.n : e.name, number: it ? it.num : '' }; }
-  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 1, items }, null, 1), 'application/json');
+  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 2, items, decks: MD.decks }, null, 1), 'application/json');
 }
 function exportCSV() {
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
@@ -706,6 +706,7 @@ async function importBackup(file) {
     if (!(await confirmBox(`Replace your current collection with the ${n} entries in this backup?`))) return;
     S.inv = { items: {} };
     for (const [k, e] of Object.entries(data.items)) S.inv.items[k] = { qty: +e.qty || 1, added: e.added || Date.now(), cost: e.cost ?? null, name: e.name };
+    if (Array.isArray(data.decks)) { MD.decks = data.decks; saveMD(); }
     saveInv(); toast('Backup restored'); show('collection');
   } catch { toast('That file isn\'t a Riftbound Tracker backup'); }
 }
@@ -737,6 +738,8 @@ function wire() {
     if (cd) { openDetail(cd.dataset.card); return; }
     const dk = e.target.closest('[data-deck]');
     if (dk) { openDeck(dk.dataset.deck); return; }
+    const md = e.target.closest('[data-mydeck]');
+    if (md) { pushSheet(() => renderMyDeck(md.dataset.mydeck)); return; }
   });
   wireScan();
   $('#scan-file').onchange = async (e) => { const f = e.target.files[0]; if (f) { SCAN.holdHash = null; runScan(await grabFromFile(f), true); } e.target.value = ''; };
@@ -943,6 +946,8 @@ async function renderDecks() {
   $$('#dk-tab button').forEach((b) => b.classList.toggle('on', b.dataset.v === D.tab));
   $$('#dk-win button').forEach((b) => b.classList.toggle('on', b.dataset.w === D.win));
   try { await loadDecks(); } catch { $('#dk-list').innerHTML = '<li class="empty">Deck data isn\'t available yet — check back after the next daily update.</li>'; return; }
+  $('#dk-win').classList.toggle('hidden', D.tab === 'mine');
+  if (D.tab === 'mine') { renderMyDecksList(); return; }
   const d = winData();
   const days = { '30d': '30', '14d': '14', '7d': '7' }[D.win] || '30';
   const upd = d.updated ? new Date(d.updated * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
@@ -1027,9 +1032,11 @@ function renderDeck(slug) {
       html += `<div class="row"><button class="ghost" id="dk-copy">Copy list</button><span class="sub" style="align-self:center">Paste into TCGplayer Mass Entry</span></div>`;
     }
   }
-  html += `<p><a href="https://riftbound.gg/decks/${esc(b.slug)}/" target="_blank" rel="noopener">View this list on riftbound.gg ↗</a></p></div>`;
+  html += `<button class="primary ghost" id="dk-save" style="width:100%;padding:13px;margin-top:14px">Save to My decks</button>
+    <p><a href="https://riftbound.gg/decks/${esc(b.slug)}/" target="_blank" rel="noopener">View this list on riftbound.gg ↗</a></p></div>`;
   $('#sheet-content').innerHTML = html;
   $$('#dk-mode button').forEach((x) => x.onclick = () => { D.deckMode = x.dataset.m; renderDeck(slug); });
+  const sv = $('#dk-save'); if (sv) sv.onclick = () => saveMetaToMine(a);
   const cp = $('#dk-copy');
   if (cp) cp.onclick = async () => {
     const txt = an.lines.concat(an.side).filter((l) => l.miss > 0).map((l) => `${l.miss} ${l.c.n}`).join('\n');
@@ -1047,6 +1054,192 @@ function wireDecks() {
   D.win = S.prefs.deckWin || '30d';
   $('#dk-tab').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.tab = b.dataset.v; renderDecks(); };
   $('#dk-win').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.win = b.dataset.w; S.prefs.deckWin = D.win; savePrefs(); renderDecks(); };
+}
+
+/* ---------------------------------------------------------------- my decks (personal builds) */
+const MD_KEY = 'rbt.mydecks.v1';
+const MD = Object.assign({ decks: [] }, loadJSON(MD_KEY, {}));
+const MDS = { q: '', type: 'all', zone: 'main' };
+function saveMD() { try { localStorage.setItem(MD_KEY, JSON.stringify(MD)); } catch { toast('Could not save on this device'); } }
+const mdGet = (id) => MD.decks.find((d) => d.id === id);
+const isBaseId = (id) => /^[A-Z]+-\d+$/.test(id);
+function mdArch(dk) {
+  const leg = D.rb[dk.leader] || {};
+  return { slug: 'my:' + dk.id, name: dk.name, leader: dk.leader, colors: leg.d || [], key: [], list: { main: dk.main, side: dk.side, leader: dk.leader } };
+}
+function mdCounts(dk) {
+  const c = { main: 0, runes: 0, bf: 0, legend: 0, side: 0 };
+  for (const [id, n] of Object.entries(dk.main)) {
+    const t = D.rb[id]?.t;
+    if (t === 'Rune') c.runes += n; else if (t === 'Battlefield') c.bf += n; else if (t === 'Legend') c.legend += n; else c.main += n;
+  }
+  for (const n of Object.values(dk.side)) c.side += n;
+  return c;
+}
+function mdProblems(dk) {
+  const c = mdCounts(dk), out = [];
+  const leg = D.rb[dk.leader]; const colors = new Set([...(leg?.d || []), 'Colorless']); const tags = leg?.tg || [];
+  if (c.main !== 40) out.push(`Main deck has ${c.main} of 40 cards`);
+  if (c.runes !== 12) out.push(`${c.runes} of 12 runes`);
+  if (c.bf !== 3) out.push(`${c.bf} of 3 battlefields`);
+  const byName = new Map();
+  for (const z of [dk.main, dk.side]) for (const [id, n] of Object.entries(z)) {
+    const r = D.rb[id]; if (!r || r.t === 'Rune' || r.t === 'Legend') continue;
+    byName.set(r.n, (byName.get(r.n) || 0) + n);
+    if (!r.d.every((d) => colors.has(d))) out.push(`${r.n} is outside your legend's domains`);
+  }
+  for (const [n, k] of byName) if (k > 3) out.push(`${k} copies of ${n} (max 3)`);
+  const champ = Object.keys(dk.main).some((id) => D.rb[id]?.st === 'Champion' && (D.rb[id].tg || []).some((t) => tags.includes(t)));
+  if (!champ) out.push('No chosen champion yet (a champion unit of your legend)');
+  return [...new Set(out)];
+}
+
+function renderMyDecksList() {
+  $('#dk-info').innerHTML = 'Decks you build. Start from scratch, or open any meta deck and tap <b>Save to My decks</b> to copy it and tweak.';
+  const rows = MD.decks.slice().sort((a, b) => b.updated - a.updated).map((dk) => {
+    const a = mdArch(dk); const an = analyzeDeck(a); const c = mdCounts(dk); const leg = cardRef(D.rb[dk.leader]?.n || '');
+    const ok = !mdProblems(dk).length;
+    return `<li class="item" data-mydeck="${esc(dk.id)}">${img(leg && leg.img)}
+      <div class="info"><div class="nm">${esc(dk.name)}</div>
+      <div class="meta wrap">${domTags(a.colors)} ${c.main}/40 · ${c.runes}/12 runes · ${c.bf}/3 battlefields ${ok ? '<span class="ok">✓ legal</span>' : '<span class="part">in progress</span>'}</div>
+      <div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div>
+      <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div></div></li>`;
+  }).join('');
+  $('#dk-list').innerHTML = `<li><button class="primary ghost" id="md-new" style="width:100%;padding:13px;margin-bottom:10px">＋ New deck</button></li>` +
+    (rows || '<li class="empty">No decks yet. Tap <b>New deck</b> and pick a legend to start.</li>');
+  $('#md-new').onclick = () => pushSheet(renderLegendPicker);
+}
+
+function renderLegendPicker() {
+  const q = (MDS.lq || '').toLowerCase();
+  const strength = new Map(ranked().map((a) => [a.leader, a]));
+  const legends = Object.entries(D.rb).filter(([id, c]) => c.t === 'Legend' && isBaseId(id) && (!q || c.n.toLowerCase().includes(q)))
+    .sort((x, y) => (strength.get(x[0])?.pos ?? 999) - (strength.get(y[0])?.pos ?? 999) || x[1].n.localeCompare(y[1].n));
+  $('#sheet-content').innerHTML = `<h2 style="margin:6px 0 10px">Pick a legend</h2>
+    <div class="toolbar"><input id="lg-q" type="search" placeholder="Search legends" value="${esc(MDS.lq || '')}" autocomplete="off"></div>
+    <ul class="list">${legends.map(([id, c]) => { const r = cardRef(c.n); const a = strength.get(id);
+      return `<li class="item" data-pickleg="${esc(id)}">${img(r && r.img)}<div class="info"><div class="nm">${esc(c.n)}</div><div class="meta wrap">${domTags(c.d)}${a ? ` #${a.pos} · ${pctTxt(a.winrate)} wins` : ''}</div></div></li>`; }).join('')}</ul>`;
+  const inp = $('#lg-q'); inp.oninput = () => { MDS.lq = inp.value; const pos = inp.selectionStart; renderLegendPicker(); const n = $('#lg-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  $$('#sheet [data-pickleg]').forEach((li) => li.onclick = () => {
+    const id = li.dataset.pickleg, c = D.rb[id];
+    const main = { [id]: 1 };
+    // start with 12 runes split across the legend's two domains
+    const runes = Object.entries(D.rb).filter(([rid, r]) => r.t === 'Rune' && isBaseId(rid) && r.d.length === 1 && c.d.includes(r.d[0]));
+    const per = runes.length ? Math.floor(12 / Math.min(runes.length, c.d.length || 1)) : 0;
+    const used = new Set();
+    for (const [rid, r] of runes) if (!used.has(r.d[0]) && used.size < 2) { main[rid] = per; used.add(r.d[0]); }
+    const dk = { id: Date.now().toString(36), name: c.n.split(' - ')[0] + ' deck', leader: id, main, side: {}, created: Date.now(), updated: Date.now() };
+    MD.decks.push(dk); saveMD();
+    SHEET[SHEET.length - 1] = () => renderMyDeck(dk.id); renderMyDeck(dk.id);
+    $('#sheet .sheet-body').scrollTop = 0;
+  });
+}
+
+function mdLine(dk, id, n, zone, an) {
+  const c = D.rb[id] || { n: id }; const p = cardPrice(c.n); const r = cardRef(c.n);
+  const l = an && an.all.find((x) => x.id === id && (zone === 'side' ? x.sec === 'Side' : x.sec !== 'Side'));
+  const st = !l ? '' : l.miss === 0 ? '<span class="ok">✓ own</span>' : l.have > 0 ? `<span class="part">own ${l.have}/${l.cnt}</span>` : '<span class="no">need</span>';
+  return `<li><span class="nm" data-card="${esc(r ? r.k : '')}">${esc(c.n)}<small>${[c.t, c.c != null ? c.c + ' energy' : '', (c.d || []).join('/')].filter(Boolean).map(esc).join(' · ')} · ${money(p && p.m)}</small></span>
+    <span class="st">${st}</span>
+    <span class="mstep"><button data-md="dec" data-id="${esc(id)}" data-zone="${zone}" aria-label="Remove one">−</button><b>${n}</b><button data-md="inc" data-id="${esc(id)}" data-zone="${zone}" aria-label="Add one">+</button></span></li>`;
+}
+function renderMyDeck(id) {
+  const dk = mdGet(id); if (!dk) { closeSheet(); return; }
+  const a = mdArch(dk); const an = analyzeDeck(a); an.all = an.lines.concat(an.side);
+  const c = mdCounts(dk); const probs = mdProblems(dk);
+  const leg = cardRef(D.rb[dk.leader]?.n || '');
+  const groups = {};
+  for (const l of an.lines) { (groups[l.sec] = groups[l.sec] || new Map()).set(l.id, (groups[l.sec].get(l.id) || 0) + l.cnt); }
+  let html = `<div class="detail">
+    <div class="row" style="align-items:center;gap:12px">
+      ${leg ? `<img src="${esc(leg.img)}" style="width:64px;border-radius:4px;box-shadow:0 0 0 1px var(--brass)" alt="">` : ''}
+      <div style="flex:1;min-width:0"><input id="md-name" type="text" value="${esc(dk.name)}" aria-label="Deck name" style="width:100%;font:400 20px var(--display);color:#fff6dc">
+      <div class="sub" style="margin-top:4px">${domTags(a.colors)} ${esc(D.rb[dk.leader]?.n || '')}</div></div>
+    </div>
+    <div class="card-box" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between"><b>${c.main}/40 main</b><b>${c.runes}/12 runes</b><b>${c.bf}/3 battlefields</b><b>${c.side} side</b></div>
+      ${probs.length ? `<div class="sub" style="margin-top:6px">${probs.slice(0, 5).map((p) => '• ' + esc(p)).join('<br>')}</div>` : '<div class="ok" style="margin-top:6px">✓ Deck is complete and legal</div>'}
+      <div class="sub" style="margin-top:8px">You own ${Math.round(an.pct * 100)}% of it${an.cost > 0 ? ` · missing cards about <b>${money(an.cost)}</b>` : ''}</div>
+      <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>
+    </div>
+    <div class="row"><button class="primary ghost" id="md-add" style="flex:1">＋ Add cards</button><button class="ghost" id="md-copy">Copy list</button></div>`;
+  for (const [sec, title] of SECTION_ORDER) {
+    const g = groups[sec]; if (!g || !g.size) continue;
+    if (sec === 'Legend') { html += `<div class="dsec">Legend</div><ul class="dl"><li><span class="nm">${esc(D.rb[dk.leader]?.n || '')}</span><span class="st"><button class="ghost sm" id="md-chleg">Change</button></span></li></ul>`; continue; }
+    html += `<div class="dsec">${title} (${[...g.values()].reduce((t, n) => t + n, 0)})</div><ul class="dl">` + [...g].map(([cid, n]) => mdLine(dk, cid, n, 'main', an)).join('') + '</ul>';
+  }
+  const sideIds = Object.entries(dk.side);
+  html += `<div class="dsec">Sideboard (${c.side})</div><ul class="dl">${sideIds.length ? sideIds.map(([cid, n]) => mdLine(dk, cid, n, 'side', an)).join('') : '<li class="sub">Empty — use Add cards and choose Sideboard.</li>'}</ul>`;
+  const subs = an.subs.filter((s) => s.picks.length);
+  if (subs.length) html += `<div class="dsec">Swaps from your collection</div><ul class="dl">` + subs.map((sb) => `<li class="sub-line">for ${sb.miss.miss}× <b style="color:var(--text)">${esc(sb.miss.c.n)}</b>, you could play ${sb.picks.map((p) => `<b>${p.take}× ${esc(p.c.n)}</b>`).join(', ')}</li>`).join('') + '</ul>';
+  html += `<div class="row" style="margin-top:16px"><button class="ghost" id="md-dup">Duplicate</button><button class="danger" id="md-del">Delete deck</button></div></div>`;
+  $('#sheet-content').innerHTML = html;
+  $$('#sheet-content .detail [data-md]').forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();
+    const body = $('#sheet .sheet-body'), y = body.scrollTop;
+    mdBump(id, b.dataset.id, b.dataset.zone, b.dataset.md === 'inc' ? 1 : -1);
+    renderMyDeck(id); body.scrollTop = y;
+  });
+  $('#md-name').onchange = (e) => { dk.name = e.target.value.trim() || dk.name; dk.updated = Date.now(); saveMD(); };
+  $('#md-add').onclick = () => pushSheet(() => renderMdAdd(id));
+  const ch = $('#md-chleg'); if (ch) ch.onclick = () => pushSheet(() => renderLegendSwap(id));
+  $('#md-copy').onclick = async () => {
+    const lines = []; for (const [cid, n] of Object.entries(dk.main)) lines.push(`${n} ${D.rb[cid]?.n || cid}`);
+    if (sideIds.length) { lines.push('', 'Sideboard'); for (const [cid, n] of sideIds) lines.push(`${n} ${D.rb[cid]?.n || cid}`); }
+    try { await navigator.clipboard.writeText(`${dk.name}\n` + lines.join('\n')); toast('Deck list copied'); } catch { toast('Couldn\'t copy on this device'); }
+  };
+  $('#md-dup').onclick = () => { const cp = { ...structuredClone(dk), id: Date.now().toString(36), name: dk.name + ' (copy)', created: Date.now(), updated: Date.now() }; MD.decks.push(cp); saveMD(); toast('Duplicated'); SHEET[SHEET.length - 1] = () => renderMyDeck(cp.id); renderMyDeck(cp.id); };
+  $('#md-del').onclick = async () => { if (await confirmBox(`Delete "${dk.name}"?`)) { MD.decks = MD.decks.filter((d) => d.id !== id); saveMD(); closeSheet(); } };
+}
+function renderLegendSwap(id) {
+  const dk = mdGet(id);
+  MDS.lq = '';
+  renderLegendPicker();
+  $$('#sheet [data-pickleg]').forEach((li) => li.onclick = () => {
+    delete dk.main[dk.leader]; dk.leader = li.dataset.pickleg; dk.main[dk.leader] = 1; dk.updated = Date.now(); saveMD(); sheetBack();
+  });
+  $('#sheet-content h2').textContent = 'Change legend';
+}
+function mdBump(id, cid, zone, d) {
+  const dk = mdGet(id); const z = zone === 'side' ? dk.side : dk.main;
+  z[cid] = (z[cid] || 0) + d; if (z[cid] <= 0) delete z[cid];
+  dk.updated = Date.now(); saveMD();
+}
+function renderMdAdd(id) {
+  const dk = mdGet(id); if (!dk) return;
+  const leg = D.rb[dk.leader]; const colors = new Set([...(leg?.d || []), 'Colorless']);
+  const types = [['all', 'Deck cards'], ['Unit', 'Units'], ['Spell', 'Spells'], ['Gear', 'Gear'], ['Battlefield', 'Battlefields'], ['Rune', 'Runes']];
+  $('#sheet-content').innerHTML = `<h2 style="margin:6px 0 10px">Add to ${esc(dk.name)}</h2>
+    <div class="toolbar"><input id="mda-q" type="search" placeholder="Card name" value="${esc(MDS.q)}" autocomplete="off"></div>
+    <div class="chips" id="mda-type">${types.map(([v, l]) => `<button data-t="${v}" class="${MDS.type === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="seg" id="mda-zone"><button data-z="main" class="${MDS.zone === 'main' ? 'on' : ''}">Main deck</button><button data-z="side" class="${MDS.zone === 'side' ? 'on' : ''}">Sideboard</button></div>
+    <label class="toggle small"><input type="checkbox" id="mda-owned" ${MDS.owned ? 'checked' : ''}> Only cards I own</label>
+    <p class="sub" id="mda-sum"></p>
+    <ul class="dl" id="mda-list"></ul>`;
+  const draw = () => {
+    const q = MDS.q.toLowerCase().trim(); const owned = ownedCountByName();
+    const res = Object.entries(D.rb).filter(([cid, c]) => isBaseId(cid) && c.n && !c.b && c.t !== 'Legend' && c.st !== 'Token' && (c.t === 'Rune' ? c.d.some((x) => colors.has(x)) : c.d.every((x) => colors.has(x)))
+      && (MDS.type === 'all' ? ['Unit', 'Spell', 'Gear'].includes(c.t) : c.t === MDS.type) && ['Unit', 'Spell', 'Gear', 'Battlefield', 'Rune'].includes(c.t)
+      && (!q || c.n.toLowerCase().includes(q)) && (!MDS.owned || owned.get(normName(c.n))))
+      .map(([cid, c]) => ({ cid, c, pop: D.pop[cid] || 0 }))
+      .sort((x, y) => (y.pop - x.pop) || ((x.c.c ?? 99) - (y.c.c ?? 99)) || x.c.n.localeCompare(y.c.n)).slice(0, 150);
+    const z = MDS.zone === 'side' ? dk.side : dk.main; const cnt = mdCounts(dk);
+    $('#mda-sum').innerHTML = `${cnt.main}/40 main · ${cnt.runes}/12 runes · ${cnt.bf}/3 battlefields · ${cnt.side} side — most-played cards first`;
+    $('#mda-list').innerHTML = res.map(({ cid, c }) => { const own = owned.get(normName(c.n)) || 0; const p = cardPrice(c.n);
+      return `<li><span class="nm">${esc(c.n)}<small>${[c.t, c.c != null ? c.c + ' energy' : '', c.d.join('/')].filter(Boolean).map(esc).join(' · ')} · ${money(p && p.m)}${own ? ` · <span class="ok">own ${own}</span>` : ''}</small></span>
+        <span class="mstep"><button data-md="dec" data-id="${esc(cid)}" aria-label="Remove one">−</button><b>${z[cid] || 0}</b><button data-md="inc" data-id="${esc(cid)}" aria-label="Add one">+</button></span></li>`; }).join('') || '<li class="sub">No matching cards for this legend.</li>';
+  };
+  draw();
+  const inp = $('#mda-q'); let t; inp.oninput = () => { MDS.q = inp.value; clearTimeout(t); t = setTimeout(draw, 120); };
+  $('#mda-type').onclick = (e) => { const b = e.target.closest('[data-t]'); if (!b) return; MDS.type = b.dataset.t; $$('#mda-type button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+  $('#mda-zone').onclick = (e) => { const b = e.target.closest('[data-z]'); if (!b) return; MDS.zone = b.dataset.z; $$('#mda-zone button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+  $('#mda-owned').onchange = (e) => { MDS.owned = e.target.checked; draw(); };
+  $('#mda-list').onclick = (e) => { const b = e.target.closest('[data-md]'); if (!b) return; mdBump(id, b.dataset.id, MDS.zone, b.dataset.md === 'inc' ? 1 : -1); draw(); };
+}
+function saveMetaToMine(a) {
+  const dk = { id: Date.now().toString(36), name: a.name.split(' - ')[0] + ' (from meta)', leader: a.list.leader || a.leader, main: { ...a.list.main }, side: { ...(a.list.side || {}) }, created: Date.now(), updated: Date.now() };
+  MD.decks.push(dk); saveMD(); toast('Saved to My decks — tweak away');
+  pushSheet(() => renderMyDeck(dk.id));
 }
 
 /* ---------------------------------------------------------------- score counter */
