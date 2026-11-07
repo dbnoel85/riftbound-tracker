@@ -146,6 +146,7 @@ function setImage(gid) {
   const r = cards.find((c) => /Legend|Showcase|Epic/.test(c.r)) || cards[0];
   return r ? { src: r.img, pack: false } : null;
 }
+const shortSet = (n) => n.replace(/^Riftbound:?\s*/i, '').replace(/ Promotional Cards$/, ' Promos').replace(/^Organized Play/, 'Org. Play').replace(/ 2025 Worlds Champion Bundles$/, ' Worlds Champion');
 function setStats() {
   const owned = new Set(); for (const [k, e] of Object.entries(S.inv.items)) if (e.qty > 0) owned.add(+k.split('|')[0]);
   const st = new Map();
@@ -159,13 +160,14 @@ function renderSetStrip() {
   const { st } = setStats();
   let all = { total: 0, have: 0 }; for (const x of st.values()) { all.total += x.total; all.have += x.have; }
   const cur = S.prefs.colSet || 'all';
-  const tile = (key, name, x, im) => { const pc = x.total ? Math.floor(x.have / x.total * 100) : 0;
-    return `<button class="settile ${cur === key ? 'on' : ''}" data-colset="${key}" aria-label="${esc(name)}: ${x.have} of ${x.total}">
-      <span class="setimg ${im && !im.pack ? 'card' : ''}">${im ? `<img loading="lazy" src="${esc(im.src)}" alt="">` : '<span class="allicon">✦</span>'}</span>
-      <span class="setname">${esc(name)}</span><span class="setnum"><b>${x.have}</b> / ${x.total}</span>
-      <span class="bar"><i style="width:${pc}%"></i></span><span class="setpc">${pc}%</span></button>`; };
+  const tile = (key, name, x, abbr) => { const pc = x.total ? Math.floor(x.have / x.total * 100) : 0;
+    const art = abbr ? `<img loading="lazy" src="assets/sets/${esc(abbr)}.jpg" alt="" onerror="this.remove()">` : '<span class="allicon">✦</span>';
+    return `<button class="settile ${cur === key ? 'on' : ''} ${pc === 100 ? 'done' : ''}" data-colset="${key}" aria-label="${esc(name)}: ${x.have} of ${x.total}">
+      <span class="setart">${art}<span class="setcode">${esc(abbr || 'ALL')}</span><span class="setname">${esc(name)}</span></span>
+      <span class="setfoot"><span class="setnum"><b>${x.have}</b> / ${x.total}</span><span class="setpc">${pc === 100 ? '✓ ' : ''}${pc}%</span></span>
+      <span class="bar"><i style="width:${pc}%"></i></span></button>`; };
   $('#col-sets').innerHTML = tile('all', 'All sets', all, null) +
-    S.cards.groups.filter((g) => st.get(g.id)?.total).map((g) => tile(String(g.id), g.name, st.get(g.id), setImage(g.id))).join('');
+    S.cards.groups.filter((g) => st.get(g.id)?.total).map((g) => tile(String(g.id), shortSet(g.name), st.get(g.id), g.abbr)).join('');
   const on = $('#col-sets .settile.on'); if (on && !renderSetStrip.scrolled) { on.scrollIntoView({ inline: 'center', block: 'nearest' }); renderSetStrip.scrolled = true; }
 }
 function renderCollection() {

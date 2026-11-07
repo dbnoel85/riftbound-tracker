@@ -242,17 +242,35 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
 .statgrid b{display:block;font:400 24px var(--display);color:#fff6dc}.statgrid span{font-size:12px;color:var(--sub);font-weight:600}
 
-.setstrip{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 12px;margin:0 -12px;padding-left:12px;padding-right:12px;scrollbar-width:none;scroll-snap-type:x proximity}
+.setstrip{display:flex;gap:10px;overflow-x:auto;padding:2px 12px 14px;margin:0 -12px;scrollbar-width:none;scroll-snap-type:x proximity}
 .setstrip::-webkit-scrollbar{display:none}
-.settile{flex:none;width:112px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:8px 8px 7px;text-align:left;
-  background:linear-gradient(180deg,rgba(27,35,68,.95),rgba(16,22,45,.95));border:1px solid var(--line);border-radius:3px;color:var(--text)}
-.settile.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 18px rgba(241,212,142,.18)}
-.setimg{height:84px;display:grid;place-items:center;margin-bottom:3px}
-.setimg img{max-height:84px;max-width:100%;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
-.setimg.card img{height:84px;border-radius:4px;box-shadow:0 0 0 1px var(--brass)}
-.allicon{font:400 40px var(--display);color:var(--gold);text-shadow:0 0 18px rgba(241,212,142,.5)}
-.setname{font-size:12.5px;font-weight:700;line-height:1.15;height:2.3em;overflow:hidden}
-.setnum{font-size:12px;color:var(--sub)}.setnum b{color:var(--text);font-size:13px}
-.settile .bar{margin-top:2px}.setpc{font-size:11px;color:var(--gold);font-weight:700;text-align:right;margin-top:-1px}
+.settile{flex:none;width:168px;scroll-snap-align:start;display:flex;flex-direction:column;gap:6px;padding:0 0 9px;text-align:left;overflow:hidden;
+  background:linear-gradient(180deg,#1b2346,#121834);border:1px solid var(--line);border-radius:4px;color:var(--text)}
+.settile.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 6px 22px rgba(241,212,142,.2)}
+.setart{position:relative;display:block;aspect-ratio:16/9;background:radial-gradient(120% 100% at 50% 0%,#3a2d6e,#121834);overflow:hidden}
+.setart img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .3s}
+.settile.on .setart img{transform:scale(1.05)}
+.setart::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(12,17,36,0) 35%,rgba(12,17,36,.92) 100%)}
+.setcode{position:absolute;top:6px;left:6px;z-index:1;font:700 10px var(--ui);letter-spacing:.06em;padding:1px 6px;border-radius:2px;color:#1b1404;background:linear-gradient(180deg,#fbe6a9,var(--gold),var(--brass))}
+.setname{position:absolute;left:8px;right:8px;bottom:6px;z-index:1;font:400 15px/1.1 var(--display);color:#fff6dc;text-shadow:0 1px 6px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.allicon{position:absolute;inset:0;display:grid;place-items:center;font:400 44px var(--display);color:var(--gold);text-shadow:0 0 22px rgba(241,212,142,.6)}
+.setfoot{display:flex;justify-content:space-between;align-items:baseline;padding:0 9px}
+.setnum{font-size:12.5px;color:var(--sub)}.setnum b{color:var(--text);font-size:14px}
+.setpc{font-size:12px;color:var(--gold);font-weight:700}
+.settile .bar{margin:0 9px}.settile.done .bar i{background:linear-gradient(90deg,var(--gold),#fff1c4)}
 .dsec.grp{list-style:none;margin:14px 2px 6px}.dsec.grp:first-child{margin-top:4px}
 #col-sort{max-width:46%}
+
+/* tab bar emblems */
+.tabs button{gap:4px;padding:8px 0 7px}
+.tabs svg.ti{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;overflow:visible;transition:transform .18s ease}
+.tabs svg.ti .f{fill:rgba(151,162,200,.10)}
+.tabs svg.ti .a{fill:rgba(151,162,200,.55);stroke:none}
+.tabs button.on svg.ti{stroke:url(#tg-gold);transform:translateY(-1px) scale(1.06);filter:drop-shadow(0 0 7px rgba(241,212,142,.45))}
+.tabs button.on svg.ti .f{fill:url(#tg-gold);fill-opacity:.22}
+.tabs button.on svg.ti .a{fill:url(#tg-rift);filter:drop-shadow(0 0 3px rgba(69,224,208,.9))}
+.tabs button.on{color:var(--gold)}
+.tabs button.on::after{content:"";position:absolute;top:2px;left:50%;width:46px;height:38px;transform:translateX(-50%);border-radius:50%;
+  background:radial-gradient(closest-side,rgba(241,212,142,.16),transparent);pointer-events:none}
+.tabs button:active svg.ti{transform:scale(.92)}
+@media (prefers-reduced-motion:reduce){.tabs svg.ti{transition:none}}
