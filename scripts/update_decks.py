@@ -152,6 +152,9 @@ def main():
             "b": col(row, "banned") in ("1", 1, True),
         }
     save("rbcards.json", rb)
+    sets_raw = get("getsets?game=riftbound")
+    if sets_raw:
+        save("dotgg_sets.json", sets_raw)
 
     # card text for "search card text" (loaded by the app only when used)
     import html as _html
