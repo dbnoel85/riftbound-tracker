@@ -152,6 +152,23 @@ def main():
             "b": col(row, "banned") in ("1", 1, True),
         }
     save("rbcards.json", rb)
+
+    # card text for "search card text" (loaded by the app only when used)
+    import html as _html
+    import re as _re
+    texts = {}
+    for row in cards["data"]:
+        cid = col(row, "id")
+        eff = col(row, "effect") or ""
+        if not cid or not eff:
+            continue
+        t = _html.unescape(eff)
+        t = _re.sub(r"<br\s*/?>", " ", t)
+        t = _re.sub(r"<[^>]+>", "", t)
+        t = _re.sub(r":rb_energy_(\d+):", r"\1 energy", t)
+        t = _re.sub(r":rb_([a-z_]+):", lambda m: m.group(1).replace("_", " "), t)
+        texts[cid] = _re.sub(r"\s+", " ", t).strip()
+    save("cardtext.json", texts)
     print(f"{len(rb)} cards")
 
     # ---- decklists (cached forever by slug), one block per time window
