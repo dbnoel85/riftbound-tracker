@@ -183,21 +183,58 @@ function productRow(items, extra = '') {
       <div class="addbtns">${btns}</div>
     </li>`;
 }
-function renderAdd() {
+/* ---- card text search */
+const TXT = { byName: null, loading: null };
+function loadCardText() {
+  if (TXT.byName) return Promise.resolve();
+  if (!TXT.loading) TXT.loading = Promise.all([loadDecks(), fetch('data/cardtext.json').then((r) => r.json())]).then(([, t]) => {
+    TXT.byName = new Map();
+    for (const [id, c] of Object.entries(D.rb)) {
+      const n = normName(c.n); if (!n || TXT.byName.has(n) && !t[id]) continue;
+      const extra = [c.t, c.st, ...(c.tg || []), ...(c.d || [])].filter(Boolean).join(' ');
+      TXT.byName.set(n, { text: t[id] || '', extra });
+    }
+  }).catch((e) => { TXT.loading = null; throw e; });
+  return TXT.loading;
+}
+/** "word word" or "exact phrase" (in quotes) -> terms that must all appear */
+function searchTerms(q) {
+  const out = []; q.replace(/"([^"]+)"|(\S+)/g, (_, ph, w) => { out.push((ph || w).toLowerCase()); });
+  return out;
+}
+function textOf(name) { const e = TXT.byName && TXT.byName.get(normName(name)); return e ? e : null; }
+function snippet(text, terms) {
+  const low = text.toLowerCase(); let i = -1, term = '';
+  for (const t of terms) { const j = low.indexOf(t); if (j >= 0 && (i < 0 || j < i)) { i = j; term = t; } }
+  if (i < 0) return '';
+  const a = Math.max(0, i - 45), b = Math.min(text.length, i + term.length + 60);
+  let out = esc(text.slice(a, b));
+  for (const t of terms) out = out.replace(new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), (m) => `<mark>${m}</mark>`);
+  return `<div class="snip">${a ? '…' : ''}${out}${b < text.length ? '…' : ''}</div>`;
+}
+async function renderAdd() {
   if (!S.cards) return;
+  const byText = $('#add-text').checked;
+  if (byText && !TXT.byName) { $('#add-list').innerHTML = '<li class="empty">Loading card text…</li>'; try { await loadCardText(); } catch { toast('Card text isn\'t available yet'); $('#add-text').checked = false; } }
   const chips = [['all', 'All sets'], ...S.cards.groups.map((g) => [String(g.id), g.abbr || g.name])];
   $('#add-sets').innerHTML = chips.map(([v, l]) => `<button data-set="${v}" class="${S.prefs.addSet === v ? 'on' : ''}">${esc(l)}</button>`).join('');
   const q = $('#add-q').value.trim().toLowerCase();
   const sealed = $('#add-sealed').checked;
   const toks = q.split(/\s+/).filter(Boolean);
-  const res = [];
+  const terms = searchTerms(q);
+  const res = []; ADD.snip = new Map();
   for (const [pid, items] of S.byPid) {
     const it = items[0];
     if (!sealed && it.sealed) continue;
     if (S.prefs.addSet !== 'all' && String(it.g) !== S.prefs.addSet) continue;
     const hay = `${it.n} ${it.num} ${setName(it.g)} ${setAbbr(it.g)} ${it.r}`.toLowerCase().replace(/[^\w/*\- ]/g, '');
     const hay2 = hay.replace(/-/g, ' ');
-    if (toks.length && !toks.every((t) => hay.includes(t.replace(/[^\w/*\-]/g, '')) || hay2.includes(t))) continue;
+    if (byText && terms.length) {
+      const tx = textOf(it.n);
+      const full = `${it.n} ${it.num} ${setAbbr(it.g)} ${it.r} ${tx ? tx.text + ' ' + tx.extra : ''}`.toLowerCase();
+      if (!terms.every((t) => full.includes(t))) continue;
+      if (tx && tx.text) ADD.snip.set(it.p, snippet(tx.text, terms));
+    } else if (toks.length && !toks.every((t) => hay.includes(t.replace(/[^\w/*\-]/g, '')) || hay2.includes(t))) continue;
     res.push(items);
   }
   if (!q && S.prefs.addSet === 'all') {
@@ -210,13 +247,13 @@ function renderAdd() {
   $('#add-list').innerHTML = res.length ? `<li class="sub" id="add-count">${res.length} card${res.length === 1 ? '' : 's'}</li>` : '<li class="empty">No matches.</li>';
   addMore();
 }
-const ADD = { res: [], n: 0, obs: null };
+const ADD = { res: [], n: 0, obs: null, snip: null };
 function addMore() {
   const list = $('#add-list');
   $('#add-sentinel')?.remove();
   const next = ADD.res.slice(ADD.n, ADD.n + 60);
   ADD.n += next.length;
-  list.insertAdjacentHTML('beforeend', next.map((items) => productRow(items)).join(''));
+  list.insertAdjacentHTML('beforeend', next.map((items) => productRow(items, (ADD.snip && ADD.snip.get(items[0].p)) || '')).join(''));
   if (ADD.n < ADD.res.length) {
     list.insertAdjacentHTML('beforeend', `<li id="add-sentinel" class="empty">Loading more… (${ADD.res.length - ADD.n} to go)</li>`);
     if (!ADD.obs && 'IntersectionObserver' in window) ADD.obs = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) addMore(); }, { rootMargin: '600px' });
@@ -722,6 +759,7 @@ function wire() {
   $('#col-sort').onchange = (e) => { S.prefs.sort = e.target.value; savePrefs(); renderCollection(); };
   let t; $('#add-q').oninput = () => { clearTimeout(t); t = setTimeout(renderAdd, 150); };
   $('#add-sealed').onchange = renderAdd;
+  $('#add-text').onchange = () => { $('#add-q').placeholder = $('#add-text').checked ? 'Card text, e.g. "draw 1" or deflect' : 'Name or number, e.g. Jinx or OGN-066'; renderAdd(); };
   $('#add-sets').onclick = (e) => { const b = e.target.closest('[data-set]'); if (!b) return; S.prefs.addSet = b.dataset.set; savePrefs(); renderAdd(); };
   $('#mv-scope').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mvScope = b.dataset.v; savePrefs(); renderMovers(); };
   $('#mv-metric').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mvMetric = b.dataset.v; savePrefs(); renderMovers(); };
@@ -1213,20 +1251,23 @@ function renderMdAdd(id) {
     <div class="toolbar"><input id="mda-q" type="search" placeholder="Card name" value="${esc(MDS.q)}" autocomplete="off"></div>
     <div class="chips" id="mda-type">${types.map(([v, l]) => `<button data-t="${v}" class="${MDS.type === v ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="seg" id="mda-zone"><button data-z="main" class="${MDS.zone === 'main' ? 'on' : ''}">Main deck</button><button data-z="side" class="${MDS.zone === 'side' ? 'on' : ''}">Sideboard</button></div>
-    <label class="toggle small"><input type="checkbox" id="mda-owned" ${MDS.owned ? 'checked' : ''}> Only cards I own</label>
+    <div class="row"><label class="toggle small"><input type="checkbox" id="mda-owned" ${MDS.owned ? 'checked' : ''}> Only cards I own</label>
+    <label class="toggle small"><input type="checkbox" id="mda-text" ${MDS.text ? 'checked' : ''}> Search card text</label></div>
     <p class="sub" id="mda-sum"></p>
     <ul class="dl" id="mda-list"></ul>`;
   const draw = () => {
-    const q = MDS.q.toLowerCase().trim(); const owned = ownedCountByName();
+    const q = MDS.q.toLowerCase().trim(); const owned = ownedCountByName(); const terms = searchTerms(q);
+    const hit = (c) => { if (!q) return true; if (!MDS.text) return c.n.toLowerCase().includes(q); const tx = textOf(c.n); const full = `${c.n} ${tx ? tx.text + ' ' + tx.extra : ''}`.toLowerCase(); return terms.every((t) => full.includes(t)); };
     const res = Object.entries(D.rb).filter(([cid, c]) => isBaseId(cid) && c.n && !c.b && c.t !== 'Legend' && c.st !== 'Token' && (c.t === 'Rune' ? c.d.some((x) => colors.has(x)) : c.d.every((x) => colors.has(x)))
       && (MDS.type === 'all' ? ['Unit', 'Spell', 'Gear'].includes(c.t) : c.t === MDS.type) && ['Unit', 'Spell', 'Gear', 'Battlefield', 'Rune'].includes(c.t)
-      && (!q || c.n.toLowerCase().includes(q)) && (!MDS.owned || owned.get(normName(c.n))))
+      && hit(c) && (!MDS.owned || owned.get(normName(c.n))))
       .map(([cid, c]) => ({ cid, c, pop: D.pop[cid] || 0 }))
       .sort((x, y) => (y.pop - x.pop) || ((x.c.c ?? 99) - (y.c.c ?? 99)) || x.c.n.localeCompare(y.c.n)).slice(0, 150);
     const z = MDS.zone === 'side' ? dk.side : dk.main; const cnt = mdCounts(dk);
     $('#mda-sum').innerHTML = `${cnt.main}/40 main · ${cnt.runes}/12 runes · ${cnt.bf}/3 battlefields · ${cnt.side} side — most-played cards first`;
     $('#mda-list').innerHTML = res.map(({ cid, c }) => { const own = owned.get(normName(c.n)) || 0; const p = cardPrice(c.n);
-      return `<li><span class="nm">${esc(c.n)}<small>${[c.t, c.c != null ? c.c + ' energy' : '', c.d.join('/')].filter(Boolean).map(esc).join(' · ')} · ${money(p && p.m)}${own ? ` · <span class="ok">own ${own}</span>` : ''}</small></span>
+      const sn = MDS.text && q ? snippet(textOf(c.n)?.text || '', terms) : '';
+      return `<li><span class="nm">${esc(c.n)}<small>${[c.t, c.c != null ? c.c + ' energy' : '', c.d.join('/')].filter(Boolean).map(esc).join(' · ')} · ${money(p && p.m)}${own ? ` · <span class="ok">own ${own}</span>` : ''}</small>${sn}</span>
         <span class="mstep"><button data-md="dec" data-id="${esc(cid)}" aria-label="Remove one">−</button><b>${z[cid] || 0}</b><button data-md="inc" data-id="${esc(cid)}" aria-label="Add one">+</button></span></li>`; }).join('') || '<li class="sub">No matching cards for this legend.</li>';
   };
   draw();
@@ -1234,6 +1275,8 @@ function renderMdAdd(id) {
   $('#mda-type').onclick = (e) => { const b = e.target.closest('[data-t]'); if (!b) return; MDS.type = b.dataset.t; $$('#mda-type button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
   $('#mda-zone').onclick = (e) => { const b = e.target.closest('[data-z]'); if (!b) return; MDS.zone = b.dataset.z; $$('#mda-zone button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
   $('#mda-owned').onchange = (e) => { MDS.owned = e.target.checked; draw(); };
+  $('#mda-text').onchange = async (e) => { MDS.text = e.target.checked; if (MDS.text) { try { await loadCardText(); } catch { toast('Card text isn\'t available yet'); } } draw(); };
+  if (MDS.text && !TXT.byName) loadCardText().then(draw, () => {});
   $('#mda-list').onclick = (e) => { const b = e.target.closest('[data-md]'); if (!b) return; mdBump(id, b.dataset.id, MDS.zone, b.dataset.md === 'inc' ? 1 : -1); draw(); };
 }
 function saveMetaToMine(a) {
