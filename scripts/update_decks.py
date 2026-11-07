@@ -9,6 +9,7 @@ Writes:
   data/deckcache.json  decklists already downloaded (tournament lists never change)
 Light on the source: 2 bulk requests + only decklists we haven't seen before.
 """
+import io
 import json
 import os
 import sys
@@ -113,6 +114,33 @@ def fill_missing_images(rb):
     save("imgfix.json", fix)
     save("hashes.json", hashes)
     print(f"Pictures filled in for {added} printings without a TCGplayer photo ({len(fix)} total)")
+
+
+def fetch_set_art():
+    """Download each set's official key art once, cropped to one consistent 16:9 size."""
+    from PIL import Image
+    root = os.path.join(os.path.dirname(__file__), "..")
+    art = load("setart.json", {})
+    out_dir = os.path.join(root, "assets", "sets")
+    os.makedirs(out_dir, exist_ok=True)
+    n = 0
+    for abbr, path in art.items():
+        if abbr.startswith("_"):
+            continue
+        dest = os.path.join(out_dir, f"{abbr}.jpg")
+        if os.path.exists(dest):
+            continue
+        r = s.get(f"https://cmsassets.rgpub.io/sanity/images/dsfx7636/{path}?w=960", timeout=60)
+        if r.status_code != 200:
+            print(f"  ! set art {abbr}: HTTP {r.status_code}")
+            continue
+        im = Image.open(io.BytesIO(r.content)).convert("RGB")
+        w, h = im.size
+        tw, th = (w, int(w * 9 / 16)) if w * 9 / 16 <= h else (int(h * 16 / 9), h)
+        im = im.crop(((w - tw) // 2, (h - th) // 2, (w - tw) // 2 + tw, (h - th) // 2 + th)).resize((480, 270), Image.LANCZOS)
+        im.save(dest, "JPEG", quality=84, optimize=True, progressive=True)
+        n += 1
+    print(f"Set art: {n} downloaded")
 
 
 def main():
@@ -243,6 +271,10 @@ def main():
         "windows": windows,
     })
     out = main30["archetypes"]
+    try:
+        fetch_set_art()
+    except Exception as e:  # noqa: BLE001
+        print(f"  ! set art: {e}")
     try:
         fill_missing_images(rb)
     except Exception as e:  # noqa: BLE001 - pictures are a nice-to-have
