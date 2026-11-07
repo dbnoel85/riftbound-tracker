@@ -41,7 +41,7 @@
     <div id="newset" class="banner hidden"></div>
     <div class="summary">
       <div>
-        <div class="label">Collection value</div>
+        <div class="label" id="sum-label">Collection value</div>
         <div id="sum-value" class="big">$0.00</div>
         <div id="sum-change" class="chg"></div>
       </div>
@@ -50,6 +50,8 @@
         <div id="sum-count" class="mid">0</div>
       </div>
     </div>
+    <div class="setstrip" id="col-sets"></div>
+    <div class="seg hidden" id="col-setmode"><button data-m="owned" class="on">Owned</button><button data-m="missing">Missing</button></div>
     <div class="toolbar">
       <input id="col-filter" type="search" placeholder="Filter my cards" autocomplete="off">
       <select id="col-sort" aria-label="Sort">

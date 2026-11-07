@@ -121,9 +121,54 @@ function show(view) {
   window.scrollTo(0, 0);
 }
 
+/* ---- sets: picture, completion, filter */
+function setImage(gid) {
+  const sealed = [], cards = [];
+  for (const items of S.byPid.values()) { const it = items[0]; if (it.g !== gid || !it.img) continue; (it.sealed ? sealed : cards).push(it); }
+  const rank = (n) => /- Booster Pack$/.test(n) ? 0 : /Booster Pack/.test(n) ? 1 : /Box Set|Bundle|Box/.test(n) ? 2 : /Booster Display$/.test(n) ? 3 : 9;
+  sealed.sort((a, b) => rank(a.n) - rank(b.n));
+  if (sealed.length && rank(sealed[0].n) < 9) return { src: sealed[0].img, pack: true };
+  const r = cards.find((c) => /Legend|Showcase|Epic/.test(c.r)) || cards[0];
+  return r ? { src: r.img, pack: false } : null;
+}
+function setStats() {
+  const owned = new Set(); for (const [k, e] of Object.entries(S.inv.items)) if (e.qty > 0) owned.add(+k.split('|')[0]);
+  const st = new Map();
+  for (const [pid, items] of S.byPid) {
+    const it = items[0]; if (it.sealed) continue;
+    const x = st.get(it.g) || { total: 0, have: 0 }; x.total++; if (owned.has(pid)) x.have++; st.set(it.g, x);
+  }
+  return { st, owned };
+}
+function renderSetStrip() {
+  const { st } = setStats();
+  let all = { total: 0, have: 0 }; for (const x of st.values()) { all.total += x.total; all.have += x.have; }
+  const cur = S.prefs.colSet || 'all';
+  const tile = (key, name, x, im) => { const pc = x.total ? Math.floor(x.have / x.total * 100) : 0;
+    return `<button class="settile ${cur === key ? 'on' : ''}" data-colset="${key}" aria-label="${esc(name)}: ${x.have} of ${x.total}">
+      <span class="setimg ${im && !im.pack ? 'card' : ''}">${im ? `<img loading="lazy" src="${esc(im.src)}" alt="">` : '<span class="allicon">✦</span>'}</span>
+      <span class="setname">${esc(name)}</span><span class="setnum"><b>${x.have}</b> / ${x.total}</span>
+      <span class="bar"><i style="width:${pc}%"></i></span><span class="setpc">${pc}%</span></button>`; };
+  $('#col-sets').innerHTML = tile('all', 'All sets', all, null) +
+    S.cards.groups.filter((g) => st.get(g.id)?.total).map((g) => tile(String(g.id), g.name, st.get(g.id), setImage(g.id))).join('');
+  const on = $('#col-sets .settile.on'); if (on && !renderSetStrip.scrolled) { on.scrollIntoView({ inline: 'center', block: 'nearest' }); renderSetStrip.scrolled = true; }
+}
 function renderCollection() {
   if (!S.cards) return;
-  const rows = ownedRows();
+  renderSetStrip();
+  const cur = S.prefs.colSet || 'all';
+  const inSet = (it) => cur === 'all' || String(it.g) === cur;
+  $('#col-setmode').classList.toggle('hidden', cur === 'all');
+  if (cur !== 'all') {
+    const g = S.groups.get(+cur); const x = setStats().st.get(+cur) || { total: 0, have: 0 };
+    $$('#col-setmode button').forEach((b) => b.classList.toggle('on', b.dataset.m === (S.prefs.colMode || 'owned')));
+    $('#col-setmode [data-m=owned]').textContent = `Owned (${x.have})`;
+    $('#col-setmode [data-m=missing]').textContent = `Missing (${x.total - x.have})`;
+    $('#sum-label').textContent = `${g ? g.name : 'Set'} value`;
+  } else $('#sum-label').textContent = 'Collection value';
+  if (cur !== 'all' && S.prefs.colMode === 'missing') { renderMissing(+cur); return; }
+  $('#col-list').classList.remove('missing');
+  const rows = ownedRows().filter((r) => inSet(r.it));
   let total = 0, totalPrev = 0, count = 0;
   for (const r of rows) {
     total += r.value; count += r.e.qty;
@@ -148,7 +193,8 @@ function renderCollection() {
     added: (a, b) => b.e.added - a.e.added,
   }[sort];
   list.sort(cmp);
-  $('#col-empty').classList.toggle('hidden', rows.length > 0);
+  $('#col-empty').classList.toggle('hidden', rows.length > 0 || cur !== 'all');
+  if (!rows.length && cur !== 'all') { $('#col-list').innerHTML = '<li class="empty">You don\'t have any cards from this set yet. Tap <b>Missing</b> to see them all.</li>'; return; }
   $('#col-list').innerHTML = list.map((r) => `
     <li class="item" data-k="${esc(r.it.k)}">
       ${img(r.it.img)}
@@ -170,6 +216,22 @@ function renderCollection() {
   } else nb.classList.add('hidden');
 }
 
+function renderMissing(gid) {
+  const { owned } = setStats();
+  const miss = [];
+  const q = $('#col-filter').value.trim().toLowerCase();
+  for (const [pid, items] of S.byPid) { const it = items[0]; if (it.g === gid && !it.sealed && !owned.has(pid) && (!q || `${it.n} ${it.num} ${it.r}`.toLowerCase().includes(q))) miss.push(items); }
+  miss.sort((a, b) => String(a[0].num).localeCompare(String(b[0].num), undefined, { numeric: true }) || a[0].n.localeCompare(b[0].n));
+  let cost = 0; for (const items of miss) { const m = Math.min(...items.map((v) => v.m ?? Infinity)); if (isFinite(m)) cost += m; }
+  const rows = ownedRows().filter((r) => r.it.g === gid);
+  let total = 0; for (const r of rows) total += r.value;
+  $('#sum-value').textContent = money(total); $('#sum-count').textContent = rows.reduce((t, r) => t + r.e.qty, 0); $('#sum-change').innerHTML = '';
+  $('#col-empty').classList.add('hidden');
+  $('#col-list').classList.add('missing');
+  $('#col-list').innerHTML = miss.length
+    ? `<li class="sub" style="padding:2px 4px 8px">${miss.length} printings to go · about <b>${money(cost)}</b> to complete at the cheapest finish</li>` + miss.map((items) => productRow(items)).join('')
+    : '<li class="empty">🎉 Set complete — you have every printing.</li>';
+}
 /* ----- manual add */
 function productRow(items, extra = '') {
   const it = items[0];
@@ -757,6 +819,8 @@ function wire() {
   $('#hdr-more').onclick = () => show('more');
   wireDecks(); wireScore(); wireEvents();
   $('#col-filter').oninput = renderCollection;
+  $('#col-sets').onclick = (e) => { const b = e.target.closest('[data-colset]'); if (!b) return; S.prefs.colSet = b.dataset.colset; savePrefs(); renderCollection(); };
+  $('#col-setmode').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; S.prefs.colMode = b.dataset.m; savePrefs(); renderCollection(); };
   $('#col-sort').value = S.prefs.sort;
   $('#col-sort').onchange = (e) => { S.prefs.sort = e.target.value; savePrefs(); renderCollection(); };
   let t; $('#add-q').oninput = () => { clearTimeout(t); t = setTimeout(renderAdd, 150); };
