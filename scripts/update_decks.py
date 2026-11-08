@@ -116,6 +116,144 @@ def fill_missing_images(rb):
     print(f"Pictures filled in for {added} printings without a TCGplayer photo ({len(fix)} total)")
 
 
+import re as _re
+
+MAJOR_WORDS = _re.compile(r"regional|showdown|national|qualifier|championship|\bopen\b|major|invitational|\bRQ\b|continental|worlds", _re.I)
+
+
+def prize_of(name):
+    """Prize pool written in the event name, e.g. '$25,000', '$25k', '25k'."""
+    best = 0
+    for m in _re.finditer(r"\$?\s?(\d{1,3}(?:[,.]\d{3})+|\d+(?:\.\d+)?)\s?(k|K)?\b", name or ""):
+        num, k = m.group(1), m.group(2)
+        if not (k or "$" in m.group(0) or "," in num):
+            continue
+        v = float(num.replace(",", ""))
+        if k:
+            v *= 1000
+        best = max(best, v)
+    return int(best)
+
+
+def event_kind(name):
+    n = (name or "").lower()
+    for k, label in (("regional championship", "Regional Championship"), ("regional qualifier", "Regional Qualifier"), ("rq ", "Regional Qualifier"),
+                     ("showdown", "Showdown Series"), ("national", "National"), ("continental", "Continental"), ("worlds", "Worlds"),
+                     ("invitational", "Invitational Qualifier"), ("open", "Open"), ("major", "Major")):
+        if k in n:
+            return label
+    return "Tournament"
+
+
+def build_news(snaps):
+    """Recent big-event results (5k+ prize or major events) from the meta snapshots, plus official news headlines."""
+    ev = {}
+
+    def slot(name, slug=None, date=None, players=None):
+        key = (slug or _re.sub(r"[^a-z0-9]", "", (name or "").lower()))
+        if not key:
+            return None
+        e = ev.setdefault(key, {"name": name, "slug": slug or "", "date": date, "players": players or 0, "results": {}})
+        e["date"] = e["date"] or date
+        e["players"] = max(e["players"] or 0, players or 0)
+        if slug and not e["slug"]:
+            e["slug"] = slug
+        return e
+
+    names_to_slug = {}
+    for sn in snaps:
+        for a in sn.get("archetypes") or []:
+            for f in (a.get("form") or []) + (a.get("best_decks") or []):
+                if f.get("event_slug") and f.get("event"):
+                    names_to_slug[f["event"]] = f["event_slug"]
+    for sn in snaps:
+        for e0 in sn.get("events") or []:
+            slot(e0.get("name"), names_to_slug.get(e0.get("name")), e0.get("date"), e0.get("players"))
+        for a in sn.get("archetypes") or []:
+            arche = {"archetype": a.get("name"), "arch": a.get("slug"), "leader": a.get("leader")}
+            for f in a.get("best_decks") or []:
+                e = slot(f.get("event"), f.get("event_slug"), f.get("date"), f.get("players"))
+                if e and f.get("place"):
+                    k = (f["place"], a.get("slug"))
+                    r = e["results"].get(k, {})
+                    r.update({**arche, "place": f["place"], "record": f.get("record") or r.get("record") or "", "deck": f.get("slug") or r.get("deck") or ""})
+                    e["results"][k] = r
+            for f in a.get("form") or []:
+                e = slot(f.get("event"), f.get("event_slug"), f.get("date"), f.get("players"))
+                if e and f.get("place"):
+                    k = (f["place"], a.get("slug"))
+                    e["results"].setdefault(k, {**arche, "place": f["place"], "record": "", "deck": ""})
+        for b in sn.get("best_performers") or []:
+            e = slot(b.get("event"), b.get("event_slug"), b.get("date"), b.get("players"))
+            if e and b.get("place"):
+                k = (b["place"], b.get("slug"))
+                r = e["results"].get(k, {})
+                r.update({"archetype": b.get("archetype"), "arch": b.get("slug"), "leader": b.get("leader"), "place": b["place"], "record": b.get("record") or r.get("record") or "", "deck": r.get("deck", "")})
+                e["results"][k] = r
+
+    now = time.time()
+    out = []
+    for e in ev.values():
+        prize = prize_of(e["name"])
+        big_field = (e["players"] or 0) >= 200
+        if prize:  # a stated prize under $5k only counts if the field was big
+            major = prize >= 5000 or big_field
+        else:
+            major = big_field or bool(MAJOR_WORDS.search(e["name"] or ""))
+        try:
+            e["date"] = int(float(e["date"]))
+        except (TypeError, ValueError):
+            continue
+        if e["date"] > 1e11:
+            e["date"] //= 1000
+        if not major or now - e["date"] > 60 * 86400:
+            continue
+        res = sorted(e["results"].values(), key=lambda r: (r["place"], r.get("archetype") or ""))
+        seen, top = set(), []
+        for r in res:
+            if (r["place"], r.get("arch")) in seen:
+                continue
+            seen.add((r["place"], r.get("arch")))
+            top.append(r)
+        out.append({"name": e["name"], "slug": e["slug"], "date": e["date"], "players": e["players"], "prize": prize,
+                    "kind": event_kind(e["name"]), "results": top[:12]})
+    out.sort(key=lambda x: -x["date"])
+
+    # official news headlines
+    headlines = []
+    try:
+        r = s.get("https://playriftbound.com/en-us/news/", timeout=30)
+        m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, _re.S)
+        if m:
+            data = json.loads(m.group(1))
+            seen_t = set()
+
+            def walk(o, d=0):
+                if d > 14 or len(headlines) >= 15:
+                    return
+                if isinstance(o, dict):
+                    t = o.get("title")
+                    if isinstance(t, str) and t not in seen_t and (o.get("media") or o.get("image")) and (o.get("action") or o.get("url")):
+                        blob = json.dumps(o)
+                        url = (o.get("action") or {}).get("payload", {}).get("url") if isinstance(o.get("action"), dict) else o.get("url")
+                        img = _re.search(r'https:[^"]+?\.(?:jpg|png|webp)', json.dumps(o.get("media") or o.get("image")))
+                        date = next((o[k] for k in o if _re.search(r"date|publish", k, _re.I) and isinstance(o[k], str)), "")
+                        if url:
+                            seen_t.add(t)
+                            headlines.append({"title": t, "url": url if url.startswith("http") else "https://playriftbound.com" + url,
+                                              "img": (img.group(0) + "?w=320") if img else "", "date": date[:10], "kind": o.get("category", {}).get("title") if isinstance(o.get("category"), dict) else ""})
+                    for v in o.values():
+                        walk(v, d + 1)
+                elif isinstance(o, list):
+                    for v in o:
+                        walk(v, d + 1)
+            walk(data)
+    except Exception as e:  # noqa: BLE001
+        print(f"  ! official news: {e}")
+    save("news.json", {"updated": int(now), "events": out[:20], "headlines": headlines})
+    print(f"News: {len(out)} major events, {len(headlines)} headlines")
+
+
 def fetch_set_art():
     """Download each set's official key art once, cropped to one consistent 16:9 size."""
     from PIL import Image
@@ -256,10 +394,12 @@ def main():
 
     prev = load("decks.json", {}).get("windows", {})
     windows = {"30d": build(snap)}
+    raw_snaps = [snap]
     for w in ("14d", "7d"):
         sw = get(f"getmetasnapshot?game=riftbound&window={w}")
         if sw and sw.get("archetypes"):
             windows[w] = build(sw)
+            raw_snaps.append(sw)
         elif w in prev:
             windows[w] = prev[w]
             print(f"  {w} snapshot unavailable; kept previous")
@@ -271,6 +411,10 @@ def main():
         "windows": windows,
     })
     out = main30["archetypes"]
+    try:
+        build_news(raw_snaps)
+    except Exception as e:  # noqa: BLE001
+        print(f"  ! news: {e}")
     try:
         fetch_set_art()
     except Exception as e:  # noqa: BLE001

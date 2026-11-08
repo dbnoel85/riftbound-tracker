@@ -107,7 +107,7 @@ function show(view) {
   $$('.view').forEach((v) => v.classList.add('hidden'));
   $('#v-' + view).classList.remove('hidden');
   $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
-  $('#title').textContent = { collection: 'Collection', scan: 'Scan cards', add: 'Add cards', movers: 'Top movers', decks: 'Meta decks', events: 'Events', score: 'Score', more: 'Settings' }[view];
+  $('#title').textContent = { collection: 'Collection', scan: 'Scan cards', add: 'Add cards', movers: 'Top movers', decks: 'Meta decks', events: 'Events & News', score: 'Score', more: 'Settings' }[view];
   $('#hdr-add').classList.toggle('hidden', view === 'add' || view === 'score');
   $('#hdr-more').classList.toggle('hidden', view === 'more' || view === 'score');
   if (view === 'score') { renderScore(); keepAwake(true); } else keepAwake(false);
@@ -1470,7 +1470,7 @@ function saveMetaToMine(a) {
 /* ---------------------------------------------------------------- events */
 const EV_KEY = 'rbt.events.v1';
 const EV = Object.assign({ events: [] }, loadJSON(EV_KEY, {}));
-const EVS = { tab: 'mine', up: null };
+const EVS = { tab: 'news', up: null, news: null, nf: 'all' };
 const EV_TYPES = ['Nexus Night', 'Summoner Skirmish', 'Pre-Rift', 'Showdown Series', 'Regional Qualifier', 'Regional', 'Regional Championship', 'Continental', 'Store tournament', 'Casual / other'];
 const BIG = new Set(['Showdown Series', 'Regional Qualifier', 'Regional', 'Regional Championship', 'Continental']);
 function saveEV() { try { localStorage.setItem(EV_KEY, JSON.stringify(EV)); } catch { toast('Could not save on this device'); } }
@@ -1488,6 +1488,7 @@ const deckLabel = (e) => e.deckId ? (MD.decks.find((d) => d.id === e.deckId)?.na
 async function renderEvents() {
   $$('#ev-tab button').forEach((b) => b.classList.toggle('on', b.dataset.v === EVS.tab));
   if (EVS.tab === 'upcoming') return renderUpcoming();
+  if (EVS.tab === 'news') return renderNews();
   const body = $('#ev-body'); const today = todayISO();
   const up = EV.events.filter((e) => (e.date || '9999') >= today).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const past = EV.events.filter((e) => e.date && e.date < today).sort((a, b) => b.date.localeCompare(a.date));
@@ -1522,6 +1523,47 @@ async function renderEvents() {
     <h2>Results</h2>
     <ul class="list">${past.map(row).join('') || '<li class="empty">Past events and your results will show here.</li>'}</ul>`;
   $('#ev-new').onclick = () => { const e = newEvent({}); pushSheet(() => renderEvent(e.id)); };
+}
+const kPrize = (v) => v >= 1000 ? '$' + (v % 1000 ? (v / 1000).toFixed(1) : v / 1000) + 'k' : '$' + v;
+const unixDay = (t) => new Date(t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function unixBox(t) { const d = new Date(t * 1000); return `<div class="date"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</small></div>`; }
+async function renderNews() {
+  const body = $('#ev-body');
+  if (!EVS.news) {
+    body.innerHTML = '<p class="sub">Loading…</p>';
+    try { EVS.news = await (await fetch('data/news.json')).json(); } catch { EVS.news = { events: [], headlines: [] }; }
+    try { await loadDecks(); } catch { /* deck links optional */ }
+  }
+  const N = EVS.news; const evs = (N.events || []).filter((e) => EVS.nf === 'all' || (EVS.nf === 'prize' ? e.prize >= 5000 : true));
+  const place = (p) => p === 1 ? '<span class="plc g">1st</span>' : p === 2 ? '<span class="plc s">2nd</span>' : p <= 4 ? `<span class="plc b">${ordinal(p)}</span>` : `<span class="plc">${p <= 8 ? 'Top 8' : ordinal(p)}</span>`;
+  const resRow = (r) => {
+    const inApp = r.arch && D.data && findArch(r.arch);
+    return `<li class="nres" ${inApp ? `data-arch="${esc(r.arch)}"` : ''}>${place(r.place)}<span class="nm">${esc(r.archetype || 'Unknown deck')}</span>${r.record ? `<span class="rec">${esc(r.record)}</span>` : ''}${r.deck ? `<a href="https://riftbound.gg/decks/${encodeURIComponent(r.deck)}/" target="_blank" rel="noopener" class="lnk" aria-label="Decklist">List ↗</a>` : ''}</li>`;
+  };
+  let html = `<div class="seg mini" id="news-f"><button data-f="all" class="${EVS.nf === 'all' ? 'on' : ''}">Major events</button><button data-f="prize" class="${EVS.nf === 'prize' ? 'on' : ''}">$5k+ prize pool</button></div>
+    <h2>Recent results</h2>`;
+  if (!evs.length) html += '<p class="empty">No big-event results in the last 60 days yet — they appear here after the next daily update.</p>';
+  for (const e of evs) {
+    const top = (e.results || []).slice(0, 8);
+    html += `<div class="card-box newsev">
+      <div class="nhead evrow">${unixBox(e.date)}<div class="info">
+        <div class="nm" style="white-space:normal">${esc(e.name)}</div>
+        <div class="meta wrap"><span class="evtype big">${esc(e.kind)}</span>${e.prize ? `<span class="prize">${kPrize(e.prize)} prize pool</span>` : ''}${e.players ? `${e.players} players` : ''}</div>
+      </div></div>
+      ${top.length ? `<ul class="nlist">${top.map(resRow).join('')}</ul>` : '<p class="sub">Standings not posted yet.</p>'}
+      ${e.slug ? `<a class="sub" href="https://riftbound.gg/events/${encodeURIComponent(e.slug)}/" target="_blank" rel="noopener">Full standings ↗</a>` : ''}
+    </div>`;
+  }
+  const hl = N.headlines || [];
+  if (hl.length) {
+    html += '<h2>Official news</h2><ul class="list">' + hl.map((h) => `<li class="item hl"><a href="${esc(h.url)}" target="_blank" rel="noopener">
+      ${h.img ? `<img src="${esc(h.img)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<div class="info"><div class="nm" style="white-space:normal">${esc(h.title)}</div>
+      <div class="meta">${[h.kind, h.date && fmtDate(h.date)].filter(Boolean).map(esc).join(' · ')}</div></div></a></li>`).join('') + '</ul>';
+  }
+  html += `<p class="sub center">Results from tournament data (riftbound.gg / dotgg)${hl.length ? ' and playriftbound.com' : ''}. Updated ${N.updated ? unixDay(N.updated) : '—'}.</p>`;
+  body.innerHTML = html;
+  $('#news-f').onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; EVS.nf = b.dataset.f; renderNews(); };
+  $$('#ev-body .nres[data-arch]').forEach((li) => li.onclick = (ev) => { if (ev.target.closest('a')) return; openDeck(li.dataset.arch); });
 }
 function newEvent(f) {
   const e = { id: Date.now().toString(36), name: f.name || '', date: f.date || todayISO(), end: f.end || '', time: f.time || '', loc: f.loc || '', type: f.type || 'Nexus Night', format: 'Constructed', deckId: '', deckName: '', fee: '', prize: '', notes: '', place: '', players: '', url: f.url || '', rounds: [], created: Date.now(), mod: Date.now() };
