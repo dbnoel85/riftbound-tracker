@@ -78,8 +78,8 @@ def rnd(x):
 
 
 def price_of(row):
-    """Market price, falling back to mid/low when TCGplayer has no market yet."""
-    for f in ("marketPrice", "midPrice", "lowPrice"):
+    """TCGplayer market price; if TCGplayer has none yet, the lowest listing (flagged as an estimate)."""
+    for f in ("marketPrice", "lowPrice", "midPrice"):
         v = row.get(f)
         if v is not None:
             return rnd(v)
