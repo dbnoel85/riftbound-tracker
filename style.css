@@ -309,15 +309,43 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 .item.hl a{display:flex;gap:10px;align-items:center;color:inherit;text-decoration:none;width:100%}
 .item.hl img{width:84px;height:48px;object-fit:cover;border-radius:3px;flex:none}
 
-/* ---- same phone layout on iPad and computer: one centered column */
+/* ---- responsive: adapts to phone, iPad and computer (same features everywhere) */
+:root{--col:100%}
+.list>li{contain:layout paint}
+.list>li.item{content-visibility:auto;contain-intrinsic-size:auto 86px}
 @media (min-width:640px){
-  :root{--col:560px}
-  main{max-width:var(--col);margin:0 auto}
-  .top{padding-left:max(14px,calc(50% - var(--col)/2));padding-right:max(14px,calc(50% - var(--col)/2))}
-  .tabs{padding-left:max(4px,calc(50% - var(--col)/2));padding-right:max(4px,calc(50% - var(--col)/2))}
-  .sheet{justify-content:center}
-  .sheet-body{max-width:calc(var(--col) + 32px)}
-  .setstrip,.chips{scrollbar-width:thin}
+  :root{--col:920px}
+  main{max-width:var(--col);margin:0 auto;padding-left:18px;padding-right:18px}
+  .top{padding-left:max(18px,calc(50% - var(--col)/2 + 18px));padding-right:max(18px,calc(50% - var(--col)/2 + 18px))}
+  .tabs{padding-left:max(4px,calc(50% - 360px));padding-right:max(4px,calc(50% - 360px))}
   .tabs button .tl-sm{font-size:11px}
+  /* card lists become a grid */
+  .list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:stretch}
+  .list>li{margin:0}
+  .list>li:not(.item),.list>li.scan-hit{grid-column:1/-1}
+  .item{margin-bottom:0}
+  /* set tiles wrap into a grid instead of side-scrolling */
+  .setstrip{flex-wrap:wrap;overflow:visible;margin:0;padding:2px 0 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .settile{width:auto}
+  .chips{flex-wrap:wrap;overflow:visible}
+  /* single-purpose screens stay a comfortable width */
+  #v-scan,#v-score,#v-more{max-width:720px;margin-left:auto;margin-right:auto}
+  .ngrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+  .ngrid .card-box{margin:0}
+  /* detail sheets open as a centered panel */
+  .sheet{justify-content:center}
+  .sheet-body{max-width:760px;box-shadow:0 0 0 1px var(--line2),0 0 60px rgba(0,0,0,.6)}
+  .detail-img{max-width:340px}
+  .toast{bottom:calc(96px + var(--safe-b))}
 }
+@media (min-width:1100px){
+  :root{--col:1240px}
+  .list{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ngrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .sheet-body{max-width:860px}
+  .sheet-body .dl{columns:2;column-gap:28px}
+  .sheet-body .dl>li{break-inside:avoid}
+}
+@media (min-width:1600px){ .list{grid-template-columns:repeat(4,minmax(0,1fr))} }
 @media (hover:hover){ .item,.settile,.nres[data-arch],button{cursor:pointer} }
+.ngrid>.empty{grid-column:1/-1}

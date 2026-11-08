@@ -31,7 +31,7 @@ function chg(d, pc) {
   const pcs = pc == null ? '' : ` (${sign}${Math.abs(pc).toFixed(1)}%)`;
   return `<span class="${cls}">${sign}${money(Math.abs(d))}${pcs}</span>`;
 }
-function img(u, cls = '') { return u ? `<img loading="lazy" class="${cls}" src="${esc(u)}" alt="">` : `<div class="thumb ${cls}"></div>`; }
+function img(u, cls = '') { return u ? `<img loading="lazy" decoding="async" class="${cls}" src="${esc(u)}" alt="">` : `<div class="thumb ${cls}"></div>`; }
 function bigImg(u) { return u ? u.replace(/_\d+w\.jpg$/, '_in_1000x1000.jpg') : ''; }
 function setAbbr(g) { const gr = S.groups.get(g); return gr ? (gr.abbr || gr.name) : ''; }
 function setName(g) { const gr = S.groups.get(g); return gr ? gr.name : ''; }
@@ -161,7 +161,7 @@ function renderSetStrip() {
   let all = { total: 0, have: 0 }; for (const x of st.values()) { all.total += x.total; all.have += x.have; }
   const cur = S.prefs.colSet || 'all';
   const tile = (key, name, x, abbr) => { const pc = x.total ? Math.floor(x.have / x.total * 100) : 0;
-    const art = abbr ? `<img loading="lazy" src="assets/sets/${esc(abbr)}.jpg" alt="" onerror="this.remove()">` : '<span class="allicon">✦</span>';
+    const art = abbr ? `<img loading="lazy" decoding="async" src="assets/sets/${esc(abbr)}.jpg" alt="" onerror="this.remove()">` : '<span class="allicon">✦</span>';
     return `<button class="settile ${cur === key ? 'on' : ''} ${pc === 100 ? 'done' : ''}" data-colset="${key}" aria-label="${esc(name)}: ${x.have} of ${x.total}">
       <span class="setart">${art}<span class="setcode">${esc(abbr || 'ALL')}</span><span class="setname">${esc(name)}</span></span>
       <span class="setfoot"><span class="setnum"><b>${x.have}</b> / ${x.total}</span><span class="setpc">${pc === 100 ? '✓ ' : ''}${pc}%</span></span>
@@ -1544,6 +1544,7 @@ async function renderNews() {
   };
   let html = `<div class="seg mini" id="news-f"><button data-f="all" class="${EVS.nf === 'all' ? 'on' : ''}">Major events</button><button data-f="prize" class="${EVS.nf === 'prize' ? 'on' : ''}">$5k+ prize pool</button></div>
     <h2>Recent results</h2>`;
+  html += '<div class="ngrid">';
   if (!evs.length) html += '<p class="empty">No big-event results in the last 60 days yet — they appear here after the next daily update.</p>';
   for (const e of evs) {
     const top = (e.results || []).slice(0, 8);
@@ -1555,6 +1556,7 @@ async function renderNews() {
       ${top.length ? `<ul class="nlist">${top.map(resRow).join('')}</ul>` : '<p class="sub">Standings not posted yet.</p>'}
     </div>`;
   }
+  html += '</div>';
   const hl = N.headlines || [];
   if (hl.length) {
     html += '<h2>Official news</h2><ul class="list">' + hl.map((h) => `<li class="item hl"><a href="${esc(h.url)}" target="_blank" rel="noopener">
