@@ -192,6 +192,15 @@
       <div class="row" style="justify-content:space-between;align-items:center">
         <label class="toggle small"><input type="checkbox" id="sc-flip" checked> Flip opponent's side to face them</label>
       </div>
+      <div class="bgpick">
+        <span class="sub">Opponent background</span>
+        <div class="seg mini" id="sc-bg"><button data-bg="default">Default</button><button data-bg="photo">Photo</button></div>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <label class="ghost sm filebtn" for="sc-bgfile" id="sc-bgchoose">Choose photo…</label>
+          <input type="file" id="sc-bgfile" accept="image/*" hidden>
+          <button class="ghost sm hidden" id="sc-bgdel">Remove photo</button>
+        </div>
+      </div>
       <h3>Record <span id="sc-record" class="sub"></span></h3>
       <ul id="sc-hist" class="sets"></ul>
       <button class="ghost sm" id="sc-clearhist">Clear history</button>

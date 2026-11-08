@@ -1721,6 +1721,18 @@ function wishAlert() {
 /* ---------------------------------------------------------------- score counter */
 const SC_KEY = 'rbt.score.v1';
 const SC = Object.assign({ me: 0, opp: 0, target: 8, gamesMe: 0, gamesOpp: 0, undo: [], hist: [], oppName: 'Opponent', flip: true, done: false }, loadJSON(SC_KEY, {}));
+const BG_KEY = 'rbt.oppbg.v1';
+let OPP_BG = (() => { try { return localStorage.getItem(BG_KEY) || ''; } catch { return ''; } })();
+function shrinkPhoto(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file); const im = new Image();
+    im.onload = () => { const s = Math.min(1, 900 / Math.max(im.width, im.height)); const c = document.createElement('canvas');
+      c.width = Math.round(im.width * s); c.height = Math.round(im.height * s); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', 0.82)); };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('bad image')); };
+    im.src = url;
+  });
+}
 function saveScore() { try { localStorage.setItem(SC_KEY, JSON.stringify({ ...SC, undo: SC.undo.slice(-50) })); } catch {} }
 function renderScore() {
   $('#sc-me').textContent = SC.me; $('#sc-opp').textContent = SC.opp;
@@ -1729,6 +1741,12 @@ function renderScore() {
   $('#sc-oppname').value = SC.oppName;
   $('#sc-flip').checked = SC.flip;
   $('#pl-opp').classList.toggle('flipped', SC.flip);
+  const usePhoto = SC.bg === 'photo' && OPP_BG;
+  $('#pl-opp').classList.toggle('photo', !!usePhoto);
+  $('#pl-opp').style.backgroundImage = usePhoto ? `linear-gradient(180deg,rgba(8,10,24,.35),rgba(8,10,24,.6)),url("${OPP_BG}")` : '';
+  $$('#sc-bg button').forEach((b) => b.classList.toggle('on', b.dataset.bg === (usePhoto ? 'photo' : 'default')));
+  $('#sc-bgchoose').textContent = OPP_BG ? 'Change photo…' : 'Choose photo…';
+  $('#sc-bgdel').classList.toggle('hidden', !OPP_BG);
   $('#pl-me').classList.toggle('won', SC.me >= SC.target);
   $('#pl-opp').classList.toggle('won', SC.opp >= SC.target);
   const w = $('#sc-win');
@@ -1781,6 +1799,13 @@ function wireScore() {
   $('#sc-tminus').onclick = () => { SC.target = Math.max(1, SC.target - 1); saveScore(); renderScore(); };
   $('#sc-tplus').onclick = () => { SC.target = Math.min(30, SC.target + 1); saveScore(); renderScore(); };
   $('#sc-oppname').onchange = (e) => { SC.oppName = e.target.value.trim() || 'Opponent'; saveScore(); };
+  $('#sc-bg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.bg === 'photo' && !OPP_BG) { $('#sc-bgfile').click(); return; }
+    SC.bg = b.dataset.bg; saveScore(); renderScore(); };
+  $('#sc-bgfile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { const d = await shrinkPhoto(f); localStorage.setItem(BG_KEY, d); OPP_BG = d; SC.bg = 'photo'; saveScore(); renderScore(); toast('Opponent background set'); }
+    catch { toast('Could not use that photo'); } };
+  $('#sc-bgdel').onclick = () => { try { localStorage.removeItem(BG_KEY); } catch {} OPP_BG = ''; SC.bg = 'default'; saveScore(); renderScore(); };
   $('#sc-flip').onchange = (e) => { SC.flip = e.target.checked; saveScore(); renderScore(); };
   $('#sc-clearhist').onclick = async () => { if (await confirmBox('Clear your game history?')) { SC.hist = []; SC.gamesMe = SC.gamesOpp = 0; saveScore(); renderScore(); } };
   document.addEventListener('visibilitychange', () => { if (!document.hidden && S.view === 'score') keepAwake(true); });

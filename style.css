@@ -349,3 +349,9 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 @media (min-width:1600px){ .list{grid-template-columns:repeat(4,minmax(0,1fr))} }
 @media (hover:hover){ .item,.settile,.nres[data-arch],button{cursor:pointer} }
 .ngrid>.empty{grid-column:1/-1}
+
+.pl.opp.photo{background-size:cover;background-position:center 30%;background-repeat:no-repeat}
+.pl.opp.photo .pname{color:#fff8e6;text-shadow:0 1px 6px rgba(0,0,0,.9)}
+.pl.opp.photo .snum{text-shadow:0 2px 18px rgba(0,0,0,.9),0 0 30px rgba(155,123,255,.6)}
+.bgpick{margin:10px 0 14px}
+.filebtn{display:inline-flex;align-items:center;cursor:pointer}
