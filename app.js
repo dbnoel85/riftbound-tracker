@@ -513,7 +513,8 @@ async function drawChart(it) {
   const up = P[P.length - 1].v >= P[0].v; const col = up ? '#45e0d0' : '#ff6a57';
   const line = P.map((p, i) => `${i ? 'L' : 'M'}${X(p.d).toFixed(1)},${Y(p.v).toFixed(1)}`).join('');
   const area = `${line}L${X(P[P.length - 1].d).toFixed(1)},${H - B}L${X(P[0].d).toFixed(1)},${H - B}Z`;
-  const fd = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  CH.yr = P[0].d.slice(0, 4) !== P[P.length - 1].d.slice(0, 4);
+  const fd = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', CH.yr ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
   const iHi = vs.indexOf(Math.max(...vs)), iLo = vs.indexOf(Math.min(...vs));
   svg.innerHTML = `<defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".35"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
     ${[0.25, 0.5, 0.75].map((f) => `<line x1="${L}" x2="${W - R}" y1="${T + f * (H - T - B)}" y2="${T + f * (H - T - B)}" stroke="#2a3360" stroke-dasharray="2 4"/>`).join('')}
@@ -539,7 +540,7 @@ function chartPoint(i) {
   const l = $('#xh-l'), c = $('#xh-c'); if (!l) return;
   l.setAttribute('x1', x); l.setAttribute('x2', x); c.setAttribute('cx', x); c.setAttribute('cy', y);
   const d0 = p.v - P[0].v;
-  $('#readout').innerHTML = `<b>${new Date(p.d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</b> · <b class="rv">${money(p.v)}</b> · ${i ? chg(d0, P[0].v ? d0 / P[0].v * 100 : null) + ' <span class="flat">since ' + new Date(P[0].d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '</span>' : '<span class="flat">start of range</span>'}`;
+  $('#readout').innerHTML = `<b>${new Date(p.d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</b> · <b class="rv">${money(p.v)}</b> · ${i ? chg(d0, P[0].v ? d0 / P[0].v * 100 : null) + ' <span class="flat">since ' + new Date(P[0].d + 'T00:00:00').toLocaleDateString('en-US', CH.yr ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' }) + '</span>' : '<span class="flat">start of range</span>'}`;
 }
 /* Full-screen pages (card, deck) stack up; Back / the phone's back gesture steps out one level. */
 const SHEET = [];
