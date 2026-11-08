@@ -276,3 +276,8 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 @media (prefers-reduced-motion:reduce){.tabs svg.ti{transition:none}}
 .mkt{margin:12px 0 0}.mkt .big{display:block;margin:2px 0}
 .sold{display:inline-block;margin-top:4px;font-weight:700;font-size:14px}
+
+.wishon{color:#ff8fb1}
+.item.hit{border-color:var(--rift);box-shadow:0 0 16px rgba(69,224,208,.15)}
+.dot{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--rift);color:#062a27;font-size:11px;font-weight:800}
+.px .ghost.sm{display:block;margin-left:auto}

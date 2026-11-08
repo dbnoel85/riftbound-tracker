@@ -172,6 +172,11 @@ function renderSetStrip() {
 }
 function renderCollection() {
   if (!S.cards) return;
+  const wish = S.prefs.colView === 'wish';
+  $$('#col-top button').forEach((b) => b.classList.toggle('on', (b.dataset.c === 'wish') === wish));
+  $('#col-main').classList.toggle('hidden', wish); $('#wish-view').classList.toggle('hidden', !wish);
+  wishAlert();
+  if (wish) { renderWishlist(); return; }
   renderSetStrip();
   const cur = S.prefs.colSet || 'all';
   const inSet = (it) => cur === 'all' || String(it.g) === cur;
@@ -440,6 +445,7 @@ function renderDetail(k) {
       <input id="cost" type="number" inputmode="decimal" step="0.01" min="0" style="width:110px" value="${owned && owned.cost != null ? owned.cost : ''}" ${owned ? '' : 'disabled'}>
       <span id="pl" class="sub"></span>
     </div>
+    <div class="card-box wishbox" id="wishbox"></div>
     ${siblings.length ? `<div class="row">${siblings.map((v) => `<button class="ghost" data-open="${esc(v.k)}">${esc(v.s)} · ${money(v.m)}</button>`).join('')}</div>` : ''}
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
@@ -462,6 +468,7 @@ function renderDetail(k) {
   });
   $('#cost').oninput = (e) => { const en = S.inv.items[k]; if (!en) return; const v = parseFloat(e.target.value); en.cost = isNaN(v) ? null : v; saveInv(); upd(); };
   $$('#sheet [data-open]').forEach((b) => b.onclick = () => openDetail(b.dataset.open));
+  renderWishBox(k);
   drawChart(it);
 }
 async function drawChart(it) {
@@ -835,7 +842,7 @@ function download(name, text, type) {
 function exportBackup() {
   const items = {};
   for (const [k, e] of Object.entries(S.inv.items)) { const it = S.byKey.get(k); items[k] = { ...e, name: it ? it.n : e.name, number: it ? it.num : '' }; }
-  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 3, items, decks: MD.decks, events: EV.events }, null, 1), 'application/json');
+  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 4, items, decks: MD.decks, events: EV.events, wishlist: WL.items }, null, 1), 'application/json');
 }
 function exportCSV() {
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
@@ -853,6 +860,7 @@ async function importBackup(file) {
     for (const [k, e] of Object.entries(data.items)) S.inv.items[k] = { qty: +e.qty || 1, added: e.added || Date.now(), cost: e.cost ?? null, name: e.name };
     if (Array.isArray(data.decks)) { MD.decks = data.decks; saveMD(); }
     if (Array.isArray(data.events)) { EV.events = data.events; saveEV(); }
+    if (data.wishlist && typeof data.wishlist === 'object') { WL.items = data.wishlist; saveWL(); }
     saveInv(); toast('Backup restored'); show('collection');
   } catch { toast('That file isn\'t a Riftbound Tracker backup'); }
 }
@@ -864,6 +872,7 @@ function wire() {
   $('#hdr-more').onclick = () => show('more');
   wireDecks(); wireScore(); wireEvents();
   $('#col-filter').oninput = renderCollection;
+  $('#col-top').onclick = (e) => { const b = e.target.closest('[data-c]'); if (!b) return; S.prefs.colView = b.dataset.c; savePrefs(); renderCollection(); };
   $('#col-sets').onclick = (e) => { const b = e.target.closest('[data-colset]'); if (!b) return; S.prefs.colSet = b.dataset.colset; savePrefs(); renderCollection(); };
   $('#col-setmode').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; S.prefs.colMode = b.dataset.m; savePrefs(); renderCollection(); };
   $('#col-sort').value = S.prefs.sort;
@@ -1178,7 +1187,7 @@ function renderDeck(slug) {
     if (!buy.length) html += '<p class="sub">Nothing to buy.</p>';
     else {
       html += '<ul class="dl">' + buy.map((l) => { const p = cardPrice(l.c.n), r = cardRef(l.c.n); return `<li data-card="${esc(r ? r.k : '')}"><span class="cnt">${l.miss}×</span><span class="nm">${esc(l.c.n)}<small>${l.sec === 'Side' ? 'Sideboard' : esc(l.sec)}</small></span><span class="st">${p ? money(p.m * l.miss) : '—'}</span></li>`; }).join('') + '</ul>';
-      html += `<div class="row"><button class="ghost" id="dk-copy">Copy list</button><span class="sub" style="align-self:center">Paste into TCGplayer Mass Entry</span></div>`;
+      html += `<div class="row"><button class="ghost" id="dk-copy">Copy list</button><button class="ghost" id="dk-wish">♡ Add all to wishlist</button></div><p class="sub">Copy list pastes straight into TCGplayer Mass Entry.</p>`;
     }
   }
   html += `<button class="primary ghost" id="dk-save" style="width:100%;padding:13px;margin-top:14px">Save to My decks</button>
@@ -1186,6 +1195,10 @@ function renderDeck(slug) {
   $('#sheet-content').innerHTML = html;
   $$('#dk-mode button').forEach((x) => x.onclick = () => { D.deckMode = x.dataset.m; renderDeck(slug); });
   const sv = $('#dk-save'); if (sv) sv.onclick = () => saveMetaToMine(a);
+  const wb = $('#dk-wish'); if (wb) wb.onclick = () => {
+    let n = 0; for (const l of an.lines.concat(an.side)) { if (l.miss <= 0) continue; const r = cardRef(l.c.n); if (!r) continue; const w = WL.items[r.k] || { qty: 0, added: Date.now() }; w.qty = Math.max(w.qty, l.miss); w.note = w.note || a.name.split(' - ')[0] + ' deck'; WL.items[r.k] = w; n++; }
+    saveWL(); toast(`${n} card${n === 1 ? '' : 's'} added to your wishlist`);
+  };
   const cp = $('#dk-copy');
   if (cp) cp.onclick = async () => {
     const txt = an.lines.concat(an.side).filter((l) => l.miss > 0).map((l) => `${l.miss} ${l.c.n}`).join('\n');
@@ -1545,6 +1558,63 @@ function wireEvents() {
   $('#ev-tab').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; EVS.tab = b.dataset.v; renderEvents(); };
 }
 
+/* ---------------------------------------------------------------- wishlist */
+const WL_KEY = 'rbt.wish.v1';
+const WL = Object.assign({ items: {} }, loadJSON(WL_KEY, {}));
+function saveWL() { try { localStorage.setItem(WL_KEY, JSON.stringify(WL)); } catch { toast('Could not save on this device'); } }
+const ownedQty = (k) => S.inv.items[k]?.qty || 0;
+const wlHit = (it, w) => w.max != null && it.m != null && it.m <= w.max;
+function renderWishBox(k) {
+  const box = $('#wishbox'); if (!box) return;
+  const it = S.byKey.get(k); const w = WL.items[k];
+  if (!w) {
+    box.innerHTML = `<button class="ghost" id="wl-add" style="width:100%">♡ Add to wishlist</button>`;
+    $('#wl-add').onclick = () => { WL.items[k] = { qty: 1, max: null, added: Date.now() }; saveWL(); toast('Added to wishlist'); renderWishBox(k); };
+    return;
+  }
+  box.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center;margin:0"><b class="wishon">♥ On your wishlist</b><button class="ghost sm" id="wl-rm">Remove</button></div>
+    <div class="row" style="align-items:center;gap:12px">
+      <span class="sub">Want</span><div class="stepper"><button data-wq="-1">−</button><span>${w.qty}</span><button data-wq="1">+</button></div>
+      <span class="sub">Buy at or under $</span><input id="wl-max" type="number" inputmode="decimal" step="0.01" min="0" style="width:96px" value="${w.max ?? ''}" placeholder="any">
+    </div>
+    ${wlHit(it, w) ? `<p class="ok" style="margin:4px 0 0">✓ Market price ${money(it.m)} is at or under your target.</p>` : w.max != null && it.m != null ? `<p class="sub" style="margin:4px 0 0">Market is ${money(it.m)}, ${money(it.m - w.max)} above your target.</p>` : w.max != null ? '<p class="sub" style="margin:4px 0 0">No market price yet — you\'ll see a match here once TCGplayer has one.</p>' : ''}`;
+  $('#wl-rm').onclick = () => { delete WL.items[k]; saveWL(); renderWishBox(k); };
+  $$('#wishbox [data-wq]').forEach((b) => b.onclick = () => { w.qty = Math.max(1, w.qty + +b.dataset.wq); saveWL(); renderWishBox(k); });
+  $('#wl-max').onchange = (e) => { const v = parseFloat(e.target.value); w.max = isNaN(v) ? null : v; saveWL(); renderWishBox(k); };
+}
+function renderWishlist() {
+  const body = $('#wish-view');
+  const rows = Object.entries(WL.items).map(([k, w]) => ({ k, w, it: S.byKey.get(k) })).filter((r) => r.it);
+  let total = 0, hits = 0;
+  for (const r of rows) { const need = Math.max(0, r.w.qty - ownedQty(r.k)); total += (r.it.m || 0) * need; if (wlHit(r.it, r.w)) hits++; }
+  rows.sort((a, b) => (wlHit(b.it, b.w) - wlHit(a.it, a.w)) || ((b.it.m || 0) - (a.it.m || 0)));
+  body.innerHTML = `<div class="summary"><div><div class="label">Wishlist cost at market</div><div class="big">${money(total)}</div>
+      <div class="chg">${hits ? `<span class="ok">${hits} at or under your target price</span>` : '<span class="flat">Set a target price on any card to watch for deals</span>'}</div></div>
+      <div class="right"><div class="label">Cards</div><div class="mid">${rows.reduce((t, r) => t + r.w.qty, 0)}</div></div></div>
+    ${rows.length ? `<div class="row"><button class="ghost" id="wl-copy">Copy for TCGplayer Mass Entry</button></div>` : ''}
+    <ul class="list">${rows.map(({ k, w, it }) => { const own = ownedQty(k); const hit = wlHit(it, w);
+      return `<li class="item ${hit ? 'hit' : ''}" data-k="${esc(k)}">${img(it.img)}<div class="info">
+        <div class="nm">${esc(it.n)}${variantTags(it)}</div>
+        <div class="meta">${metaLine(it)}</div>
+        <div class="meta">Want ${w.qty}${own ? ` · <span class="ok">own ${own}</span>` : ''}${w.max != null ? ` · target ≤ ${money(w.max)}` : ''}${w.note ? ' · ' + esc(w.note) : ''}</div>
+      </div><div class="px"><b class="${hit ? 'ok' : ''}">${money(it.m)}</b><small>${chg(it.d, it.pc)}</small>
+        <button class="ghost sm" data-gotit="${esc(k)}" style="margin-top:6px">Got it</button></div></li>`; }).join('') ||
+      '<li class="empty">Nothing here yet. Open any card and tap <b>♡ Add to wishlist</b>, or use <b>Add all to wishlist</b> on a deck\'s buy list.</li>'}</ul>`;
+  $$('#wish-view [data-gotit]').forEach((b) => b.onclick = (e) => {
+    e.stopPropagation(); const k = b.dataset.gotit; const w = WL.items[k]; const need = Math.max(1, w.qty - ownedQty(k));
+    addCard(k, need); delete WL.items[k]; saveWL(); renderWishlist();
+  });
+  const cp = $('#wl-copy'); if (cp) cp.onclick = async () => {
+    const txt = rows.map(({ k, w, it }) => `${Math.max(1, w.qty - ownedQty(k))} ${it.n.replace(/\s*\(.*?\)\s*/g, ' ').trim()}`).join('\n');
+    try { await navigator.clipboard.writeText(txt); toast('Copied — paste into TCGplayer Mass Entry'); } catch { toast('Couldn\'t copy on this device'); }
+  };
+}
+function wishAlert() {
+  const n = Object.entries(WL.items).filter(([k, w]) => { const it = S.byKey.get(k); return it && wlHit(it, w); }).length;
+  const t = $('#col-top [data-c=wish]'); if (t) t.innerHTML = `Wishlist${n ? ` <span class="dot">${n}</span>` : ''}`;
+  return n;
+}
+
 /* ---------------------------------------------------------------- score counter */
 const SC_KEY = 'rbt.score.v1';
 const SC = Object.assign({ me: 0, opp: 0, target: 8, gamesMe: 0, gamesOpp: 0, undo: [], hist: [], oppName: 'Opponent', flip: true, done: false }, loadJSON(SC_KEY, {}));
@@ -1622,6 +1692,7 @@ async function init() {
   try { await loadData(); }
   catch { $('#col-empty').classList.remove('hidden'); $('#col-empty').innerHTML = '<p>Price data is still being prepared. Check back in a few minutes.</p>'; return; }
   checkStale();
+  setTimeout(() => { const n = wishAlert(); if (n) toast(`♥ ${n} wishlist card${n === 1 ? ' is' : 's are'} at or under your target price`, 4000); }, 1200);
   show(location.hash === '#scan' ? 'scan' : location.hash === '#score' ? 'score' : location.hash === '#events' ? 'events' : 'collection');
 }
 init();
