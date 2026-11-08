@@ -235,7 +235,7 @@ function renderCollection() {
       <div class="info">
         <div class="nm">${esc(r.it.n)}${variantTags(r.it)}</div>
         <div class="meta"><span class="qty">×${r.e.qty}</span>${metaLine(r.it)}</div>
-        <div class="meta">${money(r.it.m)} each</div>
+        <div class="meta">${r.it.est ? '~' : ''}${money(r.it.m)} each${r.it.est ? ' <span class="flat">(no market price yet)</span>' : ''}</div>
       </div>
       <div class="px"><b>${money(r.value)}</b><small>${chg(r.dval, r.it.pc)}</small></div>
     </li>`; }).join('');
@@ -416,12 +416,19 @@ function renderDetail(k) {
     <img class="detail-img" src="${esc(bigImg(it.img))}" onerror="this.onerror=null;this.src='${esc(it.img)}'" alt="">
     <h2>${esc(it.n)}${variantTags(it)}</h2>
     <div class="sub">${esc(setName(it.g))}${it.num ? ' · ' + esc(it.num) : ''}${it.r ? ' · ' + esc(it.r) : ''}</div>
-    <div class="kv">
-      <div><span class="label">Market</span><b>${money(it.m)}</b></div>
-      <div><span class="label">This week</span><b>${chg(it.d, it.pc)}</b></div>
-      <div><span class="label">Last week</span><b>${money(it.w)}</b></div>
-      <div><span class="label">Lowest listing</span><b>${money(it.low)}</b></div>
+    <div class="card-box mkt">
+      <span class="label">TCGplayer market price${it.s !== 'Normal' ? ' · ' + esc(it.s) : ''}</span>
+      <b class="big">${it.tm != null || !('tm' in it) ? money(it.m) : '—'}</b>
+      <div class="chg">${chg(it.d, it.pc)} <span class="flat">vs. last week (${money(it.w)})</span></div>
+      ${it.est ? `<p class="sub" style="margin:6px 0 0">TCGplayer hasn't set a market price for this one yet, so the app values it at <b>${money(it.m)}</b> (its lowest listing) until it does.</p>` : ''}
     </div>
+    <div class="kv">
+      <div><span class="label">Lowest listing</span><b>${money(it.low)}</b></div>
+      <div><span class="label">Mid price</span><b>${money(it.mid)}</b></div>
+      ${it.dl != null ? `<div><span class="label">TCGplayer Direct low</span><b>${money(it.dl)}</b></div>` : ''}
+      <div><span class="label">Last sold</span>${it.u ? `<a class="sold" href="${esc(it.u)}" target="_blank" rel="noopener">See latest sales ↗</a>` : '<b>—</b>'}</div>
+    </div>
+    <p class="sub" style="margin-top:-4px">Market price is TCGplayer's own figure, based on recent completed sales. Prices refresh daily${S.cards ? ' · updated ' + fmtDate(S.cards.updated) : ''}.</p>
     <div class="label">Price history (weekly)</div>
     <svg class="chart" id="chart" viewBox="0 0 300 120" preserveAspectRatio="none"></svg>
     <div class="row" style="justify-content:space-between;align-items:center;margin-top:14px">

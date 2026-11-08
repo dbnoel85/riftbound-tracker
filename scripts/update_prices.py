@@ -272,6 +272,10 @@ def main():
                 "u": p.get("url") or "",
                 "m": m,
                 "low": rnd(row.get("lowPrice")),
+                "mid": rnd(row.get("midPrice")),
+                "dl": rnd(row.get("directLowPrice")),
+                "tm": rnd(row.get("marketPrice")),   # TCGplayer market price exactly as published (None if TCGplayer has none)
+                "est": 1 if (row.get("marketPrice") is None and m is not None) else 0,
                 "w": w,
                 "d": d_abs,
                 "pc": d_pct,

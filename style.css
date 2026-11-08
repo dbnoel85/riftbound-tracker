@@ -274,3 +274,5 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
   background:radial-gradient(closest-side,rgba(241,212,142,.16),transparent);pointer-events:none}
 .tabs button:active svg.ti{transform:scale(.92)}
 @media (prefers-reduced-motion:reduce){.tabs svg.ti{transition:none}}
+.mkt{margin:12px 0 0}.mkt .big{display:block;margin:2px 0}
+.sold{display:inline-block;margin-top:4px;font-weight:700;font-size:14px}
