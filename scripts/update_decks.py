@@ -199,7 +199,7 @@ def build_news(snaps):
         if prize:  # a stated prize under $5k only counts if the field was big
             major = prize >= 5000 or big_field
         else:
-            major = big_field or bool(MAJOR_WORDS.search(e["name"] or ""))
+            major = big_field or ((e["players"] or 0) >= 100 and bool(MAJOR_WORDS.search(e["name"] or "")))
         try:
             e["date"] = int(float(e["date"]))
         except (TypeError, ValueError):

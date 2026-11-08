@@ -1551,7 +1551,6 @@ async function renderNews() {
         <div class="meta wrap"><span class="evtype big">${esc(e.kind)}</span>${e.prize ? `<span class="prize">${kPrize(e.prize)} prize pool</span>` : ''}${e.players ? `${e.players} players` : ''}</div>
       </div></div>
       ${top.length ? `<ul class="nlist">${top.map(resRow).join('')}</ul>` : '<p class="sub">Standings not posted yet.</p>'}
-      ${e.slug ? `<a class="sub" href="https://riftbound.gg/events/${encodeURIComponent(e.slug)}/" target="_blank" rel="noopener">Full standings ↗</a>` : ''}
     </div>`;
   }
   const hl = N.headlines || [];
