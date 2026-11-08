@@ -434,8 +434,12 @@ function renderDetail(k) {
       <div><span class="label">Last sold</span>${it.u ? `<a class="sold" href="${esc(it.u)}" target="_blank" rel="noopener">See latest sales ↗</a>` : '<b>—</b>'}</div>
     </div>
     <p class="sub" style="margin-top:-4px">Market price is TCGplayer's own figure, based on recent completed sales. Prices refresh daily${S.cards ? ' · updated ' + fmtDate(S.cards.updated) : ''}.</p>
-    <div class="label">Price history (weekly)</div>
-    <svg class="chart" id="chart" viewBox="0 0 300 120" preserveAspectRatio="none"></svg>
+    <div class="row" style="justify-content:space-between;align-items:center;margin:14px 0 2px"><span class="label">Price history</span>
+      <div class="rng" id="rng"><button data-r="7">7D</button><button data-r="14">14D</button><button data-r="30">30D</button><button data-r="max">Max</button></div></div>
+    <div class="sub" id="rngsum" style="margin-bottom:4px"></div>
+    <svg class="chart" id="chart" viewBox="0 0 320 150"></svg>
+    <input type="range" id="chart-slider" class="slider" min="0" max="0" value="0" aria-label="Move along the price chart">
+    <div class="readout" id="readout"></div>
     <div class="row" style="justify-content:space-between;align-items:center;margin-top:14px">
       <div class="stepper"><button data-q="-1">−</button><span id="qty">${owned ? owned.qty : 0}</span><button data-q="1">+</button></div>
       <div class="sub">${owned ? 'Value ' + money((it.m || 0) * owned.qty) : 'Not in collection'}</div>
@@ -471,18 +475,71 @@ function renderDetail(k) {
   renderWishBox(k);
   drawChart(it);
 }
+/* ---- price chart: 7 / 14 / 30 days / max, with a slider to read exact points */
+const HIST = {};
+async function loadHist(g) {
+  if (!HIST[g]) HIST[g] = fetch(`data/hist/${g}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return HIST[g];
+}
+const CH = { range: '30' };
 async function drawChart(it) {
-  const h = await loadHistory();
-  const ser = (h.series[it.k] || []).map((v, i) => ({ v, d: h.dates[i] })).filter((p) => p.v != null);
-  if (it.m != null && (!ser.length || ser[ser.length - 1].d !== S.cards.updated)) ser.push({ v: it.m, d: S.cards.updated });
   const svg = $('#chart'); if (!svg) return;
-  if (ser.length < 2) { svg.innerHTML = '<text x="150" y="64" fill="#97a2c8" font-size="12" text-anchor="middle">History builds up week by week</text>'; return; }
-  const vs = ser.map((p) => p.v), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
-  const pts = ser.map((p, i) => [8 + (i / (ser.length - 1)) * 284, 108 - ((p.v - lo) / span) * 92]);
-  const col = vs[vs.length - 1] >= vs[0] ? '#45e0d0' : '#ff6a57';
-  svg.innerHTML = `<polyline fill="none" stroke="${col}" stroke-width="2.5" vector-effect="non-scaling-stroke" points="${pts.map((p) => p.join(',')).join(' ')}"/>
-    <text x="6" y="12" fill="#97a2c8" font-size="10">${money(hi)}</text><text x="6" y="118" fill="#97a2c8" font-size="10">${money(lo)}</text>
-    <text x="294" y="118" fill="#97a2c8" font-size="10" text-anchor="end">${fmtDate(ser[0].d)} – now</text>`;
+  const [h, w] = await Promise.all([loadHist(it.g), loadHistory()]);
+  let pts = [];
+  if (h && h.s[it.k]) pts = h.s[it.k].map((v, i) => ({ d: h.dates[i], v })).filter((p) => p.v != null);
+  if (!pts.length && w.series[it.k]) pts = w.series[it.k].map((v, i) => ({ d: w.dates[i], v })).filter((p) => p.v != null); // weekly fallback
+  if (it.m != null && (!pts.length || pts[pts.length - 1].d < S.cards.updated)) pts.push({ d: S.cards.updated, v: it.m });
+  CH.all = pts; CH.it = it;
+  $$('#rng button').forEach((b) => { b.classList.toggle('on', b.dataset.r === CH.range); b.onclick = () => { CH.range = b.dataset.r; drawChart(it); }; });
+  const end = new Date(S.cards.updated + 'T00:00:00');
+  const since = CH.range === 'max' ? null : new Date(end - (+CH.range) * 864e5);
+  const P = since ? pts.filter((p) => new Date(p.d + 'T00:00:00') >= since) : pts;
+  CH.P = P;
+  const slider = $('#chart-slider');
+  if (P.length < 2) {
+    svg.innerHTML = '<text x="160" y="78" fill="#97a2c8" font-size="12" text-anchor="middle">Not enough price history for this range yet</text>';
+    slider.classList.add('hidden'); $('#readout').textContent = ''; $('#rngsum').textContent = '';
+    return;
+  }
+  slider.classList.remove('hidden');
+  const W = 320, H = 150, L = 6, R = 6, T = 14, B = 22;
+  const t0 = +new Date(P[0].d), t1 = +new Date(P[P.length - 1].d);
+  const vs = P.map((p) => p.v); let lo = Math.min(...vs), hi = Math.max(...vs);
+  if (hi === lo) { hi += 0.5; lo = Math.max(0, lo - 0.5); }
+  const pad = (hi - lo) * 0.12; const y0 = lo - pad, y1 = hi + pad;
+  const X = (d) => L + ((+new Date(d) - t0) / Math.max(1, t1 - t0)) * (W - L - R);
+  const Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  CH.X = X; CH.Y = Y; CH.W = W;
+  const up = P[P.length - 1].v >= P[0].v; const col = up ? '#45e0d0' : '#ff6a57';
+  const line = P.map((p, i) => `${i ? 'L' : 'M'}${X(p.d).toFixed(1)},${Y(p.v).toFixed(1)}`).join('');
+  const area = `${line}L${X(P[P.length - 1].d).toFixed(1)},${H - B}L${X(P[0].d).toFixed(1)},${H - B}Z`;
+  const fd = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const iHi = vs.indexOf(Math.max(...vs)), iLo = vs.indexOf(Math.min(...vs));
+  svg.innerHTML = `<defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".35"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    ${[0.25, 0.5, 0.75].map((f) => `<line x1="${L}" x2="${W - R}" y1="${T + f * (H - T - B)}" y2="${T + f * (H - T - B)}" stroke="#2a3360" stroke-dasharray="2 4"/>`).join('')}
+    <path d="${area}" fill="url(#cg)"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="${Math.min(W - R - 2, Math.max(L + 2, X(P[iHi].d)))}" y="${Y(P[iHi].v) - 5}" fill="#ece5d3" font-size="9.5" text-anchor="${X(P[iHi].d) > W - 40 ? 'end' : X(P[iHi].d) < 40 ? 'start' : 'middle'}">${money(P[iHi].v)}</text>
+    <text x="${Math.min(W - R - 2, Math.max(L + 2, X(P[iLo].d)))}" y="${Math.min(H - B - 3, Y(P[iLo].v) + 12)}" fill="#97a2c8" font-size="9.5" text-anchor="${X(P[iLo].d) > W - 40 ? 'end' : X(P[iLo].d) < 40 ? 'start' : 'middle'}">${money(P[iLo].v)}</text>
+    <text x="${L}" y="${H - 6}" fill="#97a2c8" font-size="9.5">${fd(P[0].d)}</text>
+    <text x="${W - R}" y="${H - 6}" fill="#97a2c8" font-size="9.5" text-anchor="end">${fd(P[P.length - 1].d)}</text>
+    <g id="xh"><line id="xh-l" y1="${T - 6}" y2="${H - B}" stroke="#f1d48e" stroke-width="1" stroke-dasharray="3 3"/><circle id="xh-c" r="4.5" fill="#0c1124" stroke="#f1d48e" stroke-width="2"/></g>`;
+  const chg0 = P[P.length - 1].v - P[0].v;
+  $('#rngsum').innerHTML = `${chg(chg0, P[0].v ? chg0 / P[0].v * 100 : null)} <span class="flat">· high ${money(Math.max(...vs))} · low ${money(Math.min(...vs))}</span>`;
+  slider.max = P.length - 1; slider.value = P.length - 1;
+  slider.oninput = () => chartPoint(+slider.value);
+  const pick = (e) => { const r = svg.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * W; let best = 0, bd = 1e9; P.forEach((p, i) => { const dd = Math.abs(X(p.d) - x); if (dd < bd) { bd = dd; best = i; } }); slider.value = best; chartPoint(best); };
+  svg.onpointerdown = (e) => { svg.setPointerCapture(e.pointerId); pick(e); };
+  svg.onpointermove = (e) => { if (e.buttons || e.pointerType === 'touch') pick(e); };
+  chartPoint(P.length - 1);
+}
+function chartPoint(i) {
+  const P = CH.P; if (!P || !P[i]) return;
+  const p = P[i], x = CH.X(p.d), y = CH.Y(p.v);
+  const l = $('#xh-l'), c = $('#xh-c'); if (!l) return;
+  l.setAttribute('x1', x); l.setAttribute('x2', x); c.setAttribute('cx', x); c.setAttribute('cy', y);
+  const d0 = p.v - P[0].v;
+  $('#readout').innerHTML = `<b>${new Date(p.d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</b> · <b class="rv">${money(p.v)}</b> · ${i ? chg(d0, P[0].v ? d0 / P[0].v * 100 : null) + ' <span class="flat">since ' + new Date(P[0].d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '</span>' : '<span class="flat">start of range</span>'}`;
 }
 /* Full-screen pages (card, deck) stack up; Back / the phone's back gesture steps out one level. */
 const SHEET = [];

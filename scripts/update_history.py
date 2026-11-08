@@ -21,7 +21,7 @@ DATA = up.DATA
 HIST = os.path.join(DATA, "hist")
 DAILY_DAYS = 120
 START = dt.date(2025, 8, 1)
-MAX_ARCHIVES = int(os.environ.get("HIST_MAX_ARCHIVES", "70"))
+MAX_ARCHIVES = int(os.environ.get("HIST_MAX_ARCHIVES", "200"))
 
 
 def load_json(path, default):
