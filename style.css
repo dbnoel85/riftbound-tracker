@@ -308,3 +308,16 @@ h3{font:400 17px/1.2 var(--display);margin:0 0 8px;color:var(--gold)}
 .plc.b{background:linear-gradient(135deg,#d9a36a,#8a5a2e);color:#1a0f06}
 .item.hl a{display:flex;gap:10px;align-items:center;color:inherit;text-decoration:none;width:100%}
 .item.hl img{width:84px;height:48px;object-fit:cover;border-radius:3px;flex:none}
+
+/* ---- same phone layout on iPad and computer: one centered column */
+@media (min-width:640px){
+  :root{--col:560px}
+  main{max-width:var(--col);margin:0 auto}
+  .top{padding-left:max(14px,calc(50% - var(--col)/2));padding-right:max(14px,calc(50% - var(--col)/2))}
+  .tabs{padding-left:max(4px,calc(50% - var(--col)/2));padding-right:max(4px,calc(50% - var(--col)/2))}
+  .sheet{justify-content:center}
+  .sheet-body{max-width:calc(var(--col) + 32px)}
+  .setstrip,.chips{scrollbar-width:thin}
+  .tabs button .tl-sm{font-size:11px}
+}
+@media (hover:hover){ .item,.settile,.nres[data-arch],button{cursor:pointer} }

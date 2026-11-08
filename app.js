@@ -931,6 +931,8 @@ function wire() {
   wireDecks(); wireScore(); wireEvents();
   $('#col-filter').oninput = renderCollection;
   $('#col-top').onclick = (e) => { const b = e.target.closest('[data-c]'); if (!b) return; S.prefs.colView = b.dataset.c; savePrefs(); renderCollection(); };
+  // mouse wheel scrolls side-scrolling strips on a computer
+  document.addEventListener('wheel', (e) => { const el = e.target.closest('.setstrip,.chips'); if (!el || Math.abs(e.deltaX) > Math.abs(e.deltaY) || el.scrollWidth <= el.clientWidth) return; el.scrollLeft += e.deltaY; e.preventDefault(); }, { passive: false });
   $('#col-sets').onclick = (e) => { const b = e.target.closest('[data-colset]'); if (!b) return; S.prefs.colSet = b.dataset.colset; savePrefs(); renderCollection(); };
   $('#col-setmode').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; S.prefs.colMode = b.dataset.m; savePrefs(); renderCollection(); };
   $('#col-sort').value = S.prefs.sort;
