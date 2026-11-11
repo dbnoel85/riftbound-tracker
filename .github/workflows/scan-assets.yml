@@ -1,0 +1,20 @@
+name: scan-assets
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests pillow
+      - run: python scripts/fetch_scan_assets.py
+      - name: push to scan-assets branch
+        run: |
+          cd scan-assets
+          git init -q -b scan-assets
+          git config user.name "github-actions"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -qm "scan test assets"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" scan-assets
