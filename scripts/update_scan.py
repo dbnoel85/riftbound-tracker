@@ -157,6 +157,9 @@ def main():
             time.sleep(0.05)
         if n and n % 200 == 0:
             print(f"  ...{n}")
+    if len(ids) == len(have) and os.path.exists(f"{DATA}/sprite.jpg"):
+        print("Scanner sprite unchanged (no new images available)")
+        return
     rows = (len(ids) + COLS - 1) // COLS
     sheet = np.zeros((rows * TH, COLS * TW, 3), np.uint8)
     for i, t in enumerate(thumbs):
