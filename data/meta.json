@@ -14,8 +14,16 @@
   24819,
   24832,
   24861,
-  24901
+  24901,
+  24943
  ],
- "sourceStamp": "2026-11-10T20:05:49+0000",
- "updated": "2026-11-10"
+ "newGroups": [
+  {
+   "added": "2026-11-11",
+   "id": 24943,
+   "name": "Riftbound x K/DA: Couture Collection"
+  }
+ ],
+ "sourceStamp": "2026-11-11T20:05:27+0000",
+ "updated": "2026-11-11"
 }
