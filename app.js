@@ -1276,7 +1276,8 @@ async function renderDecks() {
   $$('#dk-tab button').forEach((b) => b.classList.toggle('on', b.dataset.v === D.tab));
   $$('#dk-win button').forEach((b) => b.classList.toggle('on', b.dataset.w === D.win));
   try { await loadDecks(); } catch { $('#dk-list').innerHTML = '<li class="empty">Deck data isn\'t available yet — check back after the next daily update.</li>'; return; }
-  $('#dk-win').classList.toggle('hidden', D.tab === 'mine');
+  $('#dk-win').classList.toggle('hidden', D.tab === 'mine' && !deckQuery());
+  if (deckQuery()) { renderDeckSearch(); return; }
   if (D.tab === 'mine') { renderMyDecksList(); return; }
   const d = winData();
   const days = { '30d': '30', '14d': '14', '7d': '7' }[D.win] || '30';
@@ -1288,7 +1289,9 @@ async function renderDecks() {
     ready: `Lists you're closest to building with the cards you own. <span class="flat">(${src})</span>`,
   }[D.tab];
   const rows = deckCandidates();
-  $('#dk-list').innerHTML = rows.map((a) => {
+  $('#dk-list').innerHTML = rows.map((a) => deckRowHTML(a)).join('') || '<li class="empty">Nothing here yet.</li>';
+}
+function deckRowHTML(a, why = '') {
     const an = a.list ? analyzeDeck(a) : null;
     const leg = cardRef(D.rb[a.leader]?.n || a.name);
     return `<li class="item" data-deck="${esc(a.slug)}">
@@ -1298,9 +1301,64 @@ async function renderDecks() {
         <div class="meta wrap">${domTags(a.colors)} <b class="rk">#${a.pos ?? a.rank}</b> ${pctTxt(a.winrate)} wins · top 8 ${pctTxt(a.top8)} · ${a.share}% of decks${a.enough === false ? ' · <span class="part">small sample</span>' : ''}</div>
         ${an ? `<div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div><div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>`
         : '<div class="meta">No public decklist yet</div>'}
+        ${why ? `<div class="meta hitwhy">${why}</div>` : ''}
       </div>
     </li>`;
-  }).join('') || '<li class="empty">Nothing here yet.</li>';
+}
+
+/* ---- deck search: by legend or by any card in the list */
+const normDeckName = (s) => String(s || '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
+const deckQuery = () => normDeckName(D.q).length >= 2 ? normDeckName(D.q) : '';
+function deckNameIndex() {
+  if (D.nameIdx) return D.nameIdx;
+  const m = new Map(); // name -> {name, legend, ids[]}
+  for (const [id, c] of Object.entries(D.rb)) {
+    if (!c.n) continue;
+    const base = c.n.replace(/\s*\([^)]*\)\s*$/, ''); // "Jinx - Loose Cannon (Metal Promo)" -> one entry
+    const k = normDeckName(base), e = m.get(k) || { name: base, legend: false, ids: [] };
+    e.ids.push(id); if (c.t === 'Legend') e.legend = true; m.set(k, e);
+  }
+  return (D.nameIdx = m);
+}
+function renderDeckSearch() {
+  const q = deckQuery(), idx = deckNameIndex();
+  // suggestions: legends first, then cards; names starting with the text first
+  const hits = [...idx.entries()].filter(([k]) => k.includes(q))
+    .sort((a, b) => (b[1].legend - a[1].legend) || (b[0].startsWith(q) - a[0].startsWith(q)) || a[0].localeCompare(b[0]));
+  const exact = idx.get(q);
+  $('#dk-sug').innerHTML = exact ? `<button class="on" data-clear="1">${exact.legend ? 'Legend' : 'Card'}: ${esc(exact.name)} ✕</button>`
+    : hits.slice(0, 10).map(([, e]) => `<button data-name="${esc(e.name)}">${e.legend ? '<b>Legend</b> · ' : ''}${esc(e.name)}</button>`).join('');
+  const ids = new Set((exact ? [exact] : hits.map(([, e]) => e)).flatMap((e) => e.ids));
+  const isLeg = (id) => D.rb[id]?.t === 'Legend';
+  const all = ranked(); const out = [];
+  for (const a of all) {
+    const legHit = ids.has(a.leader) || (!exact && normDeckName(a.name).includes(q)) || (exact && exact.legend && normDeckName(a.name).startsWith(normDeckName(exact.name)));
+    let why = '', score = 0;
+    if (legHit) { why = '<b>Legend</b>'; score = 3; }
+    const uses = [];
+    if (a.list) {
+      for (const [zone, z] of [['main', a.list.main || {}], ['side', a.list.side || {}]]) for (const [id, n] of Object.entries(z)) {
+        if (ids.has(id) && !isLeg(id)) uses.push(`${n}× ${esc(D.rb[id]?.n || id)}${zone === 'side' ? ' (sideboard)' : ''}`);
+      }
+    } else for (const k of a.key || []) if (ids.has(k.id) || (!exact && normDeckName(k.n).includes(q))) uses.push(`${k.x || ''}× ${esc(k.n)} <span class="flat">(${Math.round((k.w || 0) * 100)}% of lists)</span>`);
+    if (uses.length) { why = (why ? why + ' · ' : '') + 'Runs ' + uses.slice(0, 3).join(', ') + (uses.length > 3 ? ` +${uses.length - 3} more` : ''); score = Math.max(score, uses.some((u) => !u.includes('sideboard')) ? 2 : 1); }
+    if (score) out.push({ a, why, score });
+  }
+  out.sort((x, y) => (y.score - x.score) || ((x.a.pos ?? x.a.rank) - (y.a.pos ?? y.a.rank)));
+  const mine = MD.decks.filter((dk) => [dk.leader, ...Object.keys(dk.main || {}), ...Object.keys(dk.side || {})].some((id) => ids.has(id)));
+  const days = { '30d': '30', '14d': '14', '7d': '7' }[D.win] || '30';
+  const label = exact ? esc(exact.name) : `“${esc(D.q.trim())}”`;
+  $('#dk-info').innerHTML = out.length || mine.length
+    ? `${out.length} meta deck${out.length === 1 ? '' : 's'} with ${label} (last ${days} days), strongest first.${exact ? '' : ' Tap a name above to narrow it down.'}`
+    : `No decks found with ${label}.${hits.length && !exact ? ' Try one of the names above.' : ''}`;
+  let html = out.map((o) => deckRowHTML(o.a, o.why)).join('');
+  if (mine.length) {
+    html += '<li class="dsec" style="list-style:none">My decks</li>' + mine.map((dk) => {
+      const leg = cardRef(D.rb[dk.leader]?.n || '');
+      return `<li class="item" data-mydeck="${esc(dk.id)}">${img(leg && leg.img)}<div class="info"><div class="nm">${esc(dk.name)}</div><div class="meta">${esc(D.rb[dk.leader]?.n || '')}</div></div></li>`;
+    }).join('');
+  }
+  $('#dk-list').innerHTML = html || '<li class="empty">Nothing matches yet.</li>';
 }
 
 function openDeck(slug) { pushSheet(() => renderDeck(slug)); }
@@ -1386,7 +1444,15 @@ function lineHTML(l) {
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 function wireDecks() {
   D.win = S.prefs.deckWin || '30d';
-  $('#dk-tab').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.tab = b.dataset.v; renderDecks(); };
+  $('#dk-tab').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.tab = b.dataset.v; D.q = ''; $('#dk-q').value = ''; $('#dk-sug').innerHTML = ''; renderDecks(); };
+  let qt;
+  $('#dk-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { D.q = e.target.value; if (!deckQuery()) $('#dk-sug').innerHTML = ''; renderDecks(); }, 180); };
+  $('#dk-sug').onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    D.q = b.dataset.clear ? '' : b.dataset.name; $('#dk-q').value = D.q;
+    if (!D.q) $('#dk-sug').innerHTML = '';
+    renderDecks(); if (!D.q) $('#dk-q').focus();
+  };
   $('#dk-win').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.win = b.dataset.w; S.prefs.deckWin = D.win; savePrefs(); renderDecks(); };
 }
 
