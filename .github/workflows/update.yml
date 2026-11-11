@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install requests pillow py7zr
+      - run: pip install requests pillow py7zr numpy opencv-python-headless
       - name: Pull Riftbound catalog and prices
         env:
           FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '' }}
@@ -38,6 +38,10 @@ jobs:
       - name: Pull meta decks
         continue-on-error: true
         run: python scripts/update_decks.py
+      - name: Scanner reference images (new cards only)
+        continue-on-error: true
+        timeout-minutes: 30
+        run: python scripts/update_scan.py
       - name: Price history (chart)
         continue-on-error: true
         timeout-minutes: 60
@@ -46,7 +50,7 @@ jobs:
         run: |
           git config user.name "price-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data assets
+          git add data assets scan-src
           if git diff --cached --quiet; then
             echo "No data changes"
           else

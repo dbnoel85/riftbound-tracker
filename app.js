@@ -581,7 +581,7 @@ async function startCamera() {
     const v = $('#video'); v.srcObject = stream; await v.play().catch(() => {});
     msg.textContent = 'Line the card up inside the frame';
     try { const tr = stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : {}; if ((caps.focusMode || []).includes('continuous')) await tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch {}
-    await Promise.all([getOCR(), loadHashes()]).catch(() => {});
+    await Promise.all([getOCR(), loadHashes(), window.CardScan ? CardScan.load().catch(() => { SCAN.legacy = true; }) : null]).catch(() => {});
     setAuto(SCAN.auto);
   } catch (e) {
     msg.textContent = 'Camera blocked — allow camera access in settings, or use Photo.';
@@ -624,9 +624,38 @@ function grabFromVideo() {
   c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
   return c;
 }
+/** The whole visible camera area at full resolution, plus where the on-screen guide sits in it. */
+function grabFrame() {
+  const v = $('#video'); if (!v.videoWidth) return null;
+  const wrap = $('.cam-wrap').getBoundingClientRect(), box = $('.guide-box').getBoundingClientRect();
+  const scale = Math.max(wrap.width / v.videoWidth, wrap.height / v.videoHeight);
+  const offX = (v.videoWidth * scale - wrap.width) / 2, offY = (v.videoHeight * scale - wrap.height) / 2;
+  const sx = offX / scale, sy = offY / scale, sw = wrap.width / scale, sh = wrap.height / scale;
+  const k = Math.min(1, 1600 / Math.max(sw, sh));
+  const c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+  c.getContext('2d', { willReadFrequently: true }).drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  const f = c.width / wrap.width; // screen px -> frame px
+  const gx = (box.left - wrap.left) * f, gy = (box.top - wrap.top) * f, gw = box.width * f, gh = box.height * f;
+  c.guide = [[gx, gy], [gx + gw, gy], [gx + gw, gy + gh], [gx, gy + gh]];
+  c.screenScale = 1 / f;
+  return c;
+}
+/** card-shaped centre crop of a canvas (old reader's input) */
+async function grabCentre(src) {
+  const r = 63 / 88; let cw = src.width, ch = cw / r; if (ch > src.height) { ch = src.height; cw = ch * r; }
+  cw *= 0.94; ch *= 0.94;
+  const c = document.createElement('canvas'); c.width = 945; c.height = 1320;
+  c.getContext('2d').drawImage(src, (src.width - cw) / 2, (src.height - ch) / 2, cw, ch, 0, 0, 945, 1320); return c;
+}
 /** From a still photo: assume the card fills most of the frame; crop to card shape around the centre. */
 async function grabFromFile(file) {
   const bmp = await createImageBitmap(file);
+  if (window.CardScan) { // new recognizer finds the card anywhere in the photo
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d', { willReadFrequently: true }).drawImage(bmp, 0, 0, c.width, c.height);
+    c.isPhoto = true; return c;
+  }
   const r = 63 / 88; let w = bmp.width, h = bmp.height;
   let cw = w, ch = cw / r; if (ch > h) { ch = h; cw = ch * r; }
   cw *= 0.94; ch *= 0.94;
@@ -723,6 +752,66 @@ async function readCode(canvas) {
 function rotated(canvas) { // battlefields are printed sideways
   const c = document.createElement('canvas'); c.width = canvas.height; c.height = canvas.width;
   const x = c.getContext('2d'); x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(canvas, 0, 0); return c;
+}
+/* ---- new recognizer: outline -> flatten -> match artwork against every printing; the printed number settles look-alikes */
+function codeMatches(items, codes) {
+  const m = String(items[0].num || '').match(/^(?:[A-Z]{1,3}\s*)?0*(\d{1,3})([a-z*]?)\/0*(\d{2,3})$/i);
+  if (!m) return 0;
+  for (const c of codes) if (c.n === +m[1] && c.tot === +m[3]) return (c.suf || '') === (m[2] || '').toLowerCase() ? 2 : 1;
+  return 0;
+}
+const REFTW = (pid) => { const g = CardScan.twinsOf ? CardScan.twinsOf(pid) : [String(pid)]; return g.slice().sort().join(','); };
+async function identifyArt(canvas) {
+  const r = await CardScan.recognise(canvas);
+  const prod = (pid) => { const items = S.byPid.get(+pid) || S.byPid.get(String(pid)); return items && !items[0].sealed ? { pid: items[0].p, items } : null; };
+  const out = { sure: false, best: null, cands: [], why: 'art', quad: null, score: r.score || 0, margin: r.margin || 0, group: null, codes: [] };
+  if (!r.best) return out;
+  out.quad = r.best.quad;
+  const group = (r.best.twins || [String(r.best.pid)]).map(prod).filter(Boolean);
+  out.group = group.map((g) => String(g.pid)).sort().join(',');
+  const seen = new Set(group.map((g) => String(g.pid)));
+  const rest = r.cands.map((c) => prod(c.pid)).filter((c) => c && !seen.has(String(c.pid)) && seen.add(String(c.pid)));
+  // same artwork in several printings (promo reprints, signed/numbered versions): read the number
+  let pick = group[0];
+  if (group.length > 1) {
+    let codes = [];
+    try { codes = await readCode(CardScan.flatten(canvas, r.best.quad)); } catch (e) { console.warn(e); }
+    out.codes = codes;
+    const byCode = group.map((g) => ({ g, m: codeMatches(g.items, codes) })).sort((a, b) => b.m - a.m);
+    if (byCode[0].m) { pick = byCode[0].g; out.why = 'number'; }
+    else {
+      const main = group.find((g) => { const grp = S.groups.get(g.items[0].g); return grp && MAIN_SETS.has(grp.abbr); });
+      if (main) pick = main;
+    }
+  }
+  out.best = pick;
+  out.cands = [pick, ...group.filter((g) => g !== pick), ...rest].map((c) => ({ ...c, art: true }));
+  // confident when the artwork clearly beats every different-looking card (or agrees across two frames)
+  // (tuned on test footage: true matches score ~0.9-1.0, look-alike backgrounds and misreads stay under ~0.82)
+  const prev = SCAN.prevGroup; SCAN.prevGroup = out.score >= 0.85 && out.margin >= 0.03 ? out.group : null;
+  out.sure = out.score >= 0.85 && (out.margin >= 0.05 || (out.margin >= 0.03 && prev === out.group));
+  // look-alikes (e.g. a signed or alternate version of the same art): the printed number decides
+  if (!out.sure && out.score >= 0.85 && out.margin < 0.05 && !(SCAN.ocrFor === out.group && Date.now() - SCAN.ocrAt < 1500)) {
+    SCAN.ocrFor = out.group; SCAN.ocrAt = Date.now();
+    let codes = out.codes;
+    if (!codes.length) { try { codes = await readCode(CardScan.flatten(canvas, r.best.quad)); } catch (e) { console.warn(e); } }
+    const close = r.cands.filter((c) => c.score >= r.best.score - 0.1).map((c) => prod(c.pid)).filter(Boolean);
+    const hit = close.find((c) => codeMatches(c.items, codes) === 2) || close.find((c) => codeMatches(c.items, codes) === 1);
+    if (hit) { out.best = hit; out.cands = [hit, ...out.cands.filter((c) => String(c.pid) !== String(hit.pid))]; out.sure = true; out.why = 'number'; out.group = (REFTW(hit.pid)); }
+  }
+  return out;
+}
+function drawOutline(canvas, quad, state) {
+  const ov = $('#scan-overlay'); if (!ov) return;
+  const r = ov.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  if (ov.width !== Math.round(r.width * dpr)) { ov.width = Math.round(r.width * dpr); ov.height = Math.round(r.height * dpr); }
+  const x = ov.getContext('2d'); x.clearRect(0, 0, ov.width, ov.height);
+  if (!quad || !canvas || canvas.isPhoto) return;
+  const k = (canvas.screenScale || 1) * dpr;
+  x.lineWidth = 4 * dpr; x.lineJoin = 'round';
+  x.strokeStyle = state === 'ok' ? '#5fe08a' : state === 'maybe' ? '#f1d48e' : 'rgba(241,212,142,.5)';
+  x.shadowColor = x.strokeStyle; x.shadowBlur = 12 * dpr;
+  x.beginPath(); quad.forEach(([px, py], i) => (i ? x.lineTo(px * k, py * k) : x.moveTo(px * k, py * k))); x.closePath(); x.stroke();
 }
 /** Returns { sure, best, cands, why } */
 async function identify(canvas, { useName = true } = {}) {
@@ -825,26 +914,49 @@ async function runScan(canvas, manual) {
   if (SCAN.busy) return; SCAN.busy = true;
   const msg = $('#cam-msg');
   try {
-    if (!manual && SCAN.holdHash) {
-      // the card we just added is still in view: wait until it changes
-      if (hamming(dhash(canvas), SCAN.holdHash) < 46) { msg.textContent = 'Added ✓ — show the next card'; return; }
-      SCAN.holdHash = null;
+    let res;
+    if (window.CardScan && !SCAN.legacy) {
+      try { res = await identifyArt(canvas); } catch (e) { console.warn('recognizer', e); SCAN.legacy = true; }
     }
-    msg.textContent = 'Reading…';
-    const res = await identify(canvas, { useName: true });
+    if (res) {
+      drawOutline(canvas, res.score >= 0.6 ? res.quad : null, res.sure ? 'ok' : res.score >= 0.85 ? 'maybe' : '');
+      if (!manual && SCAN.holdGroup) {
+        // the card we just added is still in view: wait until it is taken away or a different card shows up
+        const present = res.best && res.score >= 0.8;
+        if (present && res.group === SCAN.holdGroup) { SCAN.holdMiss = 0; drawOutline(canvas, res.quad, 'ok'); msg.textContent = 'Added ✓ — show the next card'; return; }
+        if (!present) {
+          if (++SCAN.holdMiss < 2) { msg.textContent = 'Added ✓ — show the next card'; return; }
+          SCAN.holdGroup = null; SCAN.holdMiss = 0; if (SCAN.lastAdd) SCAN.lastAdd.gap = true; msg.textContent = 'Ready for the next card'; return;
+        }
+        SCAN.holdGroup = null; SCAN.holdMiss = 0;
+      }
+      if (!res.best || res.score < 0.6) { res = { sure: false, best: null, cands: [], hash: null }; if (SCAN.lastAdd) SCAN.lastAdd.gap = true; }
+      // the same card coming back into view without having been taken away: don't count it twice
+      if (!manual && res.sure && SCAN.lastAdd && SCAN.lastAdd.group === res.group && !SCAN.lastAdd.gap && Date.now() - SCAN.lastAdd.t < 5000) { SCAN.holdGroup = res.group; msg.textContent = 'Added ✓ — show the next card'; return; }
+      res.hash = res.group;
+      if (manual && !res.best) { try { const old = await identify(canvas.isPhoto ? await grabCentre(canvas) : canvas, { useName: true }); if (old.cands.length) res = old; } catch (e) { console.warn(e); } }
+    } else {
+      if (!manual && SCAN.holdHash) {
+        if (hamming(dhash(canvas), SCAN.holdHash) < 46) { msg.textContent = 'Added ✓ — show the next card'; return; }
+        SCAN.holdHash = null;
+      }
+      msg.textContent = 'Reading…';
+      res = await identify(canvas, { useName: true });
+    }
     if (res.sure && res.best) {
       const it = pickFinish(res.best.items);
       addCard(it.k);
       if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
       SCAN.last = { k: it.k, res };
-      SCAN.holdHash = res.hash;
+      if (res.group) { SCAN.holdGroup = res.group; SCAN.holdMiss = 0; SCAN.prevGroup = null; SCAN.lastAdd = { group: res.group, t: Date.now(), gap: false }; } else SCAN.holdHash = res.hash;
       showAdded(it, res.best, res.cands);
       msg.textContent = `Added ✓ ${it.n}`;
     } else if (res.cands.length) {
-      if (manual || SCAN.shownFor === null || hamming(res.hash, SCAN.shownFor) > 46) { showMaybe(res); SCAN.shownFor = res.hash; }
+      const changed = res.group ? res.group !== SCAN.shownFor : (SCAN.shownFor === null || hamming(res.hash, SCAN.shownFor) > 46);
+      if (manual || changed) { showMaybe(res); SCAN.shownFor = res.hash; }
       msg.textContent = 'Not sure which version — pick below, or hold steady';
     } else {
-      msg.textContent = manual ? 'Couldn\'t read that card — try more light or fill the frame' : 'Looking for a card…';
+      msg.textContent = manual ? 'Couldn\'t recognize that card — try more light or less glare' : 'Looking for a card…';
       if (manual) $('#scan-status').textContent = 'Couldn\'t read the number or name. Fill the frame with the card, avoid glare, or use ＋ to search.';
     }
   } finally { SCAN.busy = false; }
@@ -852,8 +964,8 @@ async function runScan(canvas, manual) {
 function scanLoop() {
   clearTimeout(SCAN.timer);
   if (!SCAN.auto || S.view !== 'scan' || !stream || document.hidden) return;
-  const c = grabFromVideo();
-  const next = () => { SCAN.timer = setTimeout(scanLoop, 350); };
+  const c = window.CardScan && !SCAN.legacy ? grabFrame() : grabFromVideo();
+  const next = () => { SCAN.timer = setTimeout(scanLoop, 120); };
   if (!c) return next();
   runScan(c, false).then(next, next);
 }
@@ -869,8 +981,8 @@ function wireScan() {
   SCAN.auto = S.prefs.autoScan !== false;
   $('#btn-capture').onclick = async () => {
     if (SCAN.auto) { setAuto(false); return; }
-    const c = grabFromVideo(); if (!c) { toast('Camera not ready — try Photo'); return; }
-    SCAN.holdHash = null; runScan(c, true);
+    const c = window.CardScan && !SCAN.legacy ? grabFrame() : grabFromVideo(); if (!c) { toast('Camera not ready — try Photo'); return; }
+    SCAN.holdHash = null; SCAN.holdGroup = null; runScan(c, true);
   };
   $('#scan-autotoggle').onchange = (e) => setAuto(e.target.checked);
   $('#scan-results').addEventListener('click', (e) => {
@@ -960,7 +1072,7 @@ function wire() {
     if (md) { pushSheet(() => renderMyDeck(md.dataset.mydeck)); return; }
   });
   wireScan();
-  $('#scan-file').onchange = async (e) => { const f = e.target.files[0]; if (f) { SCAN.holdHash = null; runScan(await grabFromFile(f), true); } e.target.value = ''; };
+  $('#scan-file').onchange = async (e) => { const f = e.target.files[0]; if (f) { SCAN.holdHash = null; SCAN.holdGroup = null; runScan(await grabFromFile(f), true); } e.target.value = ''; };
   $('#btn-export').onclick = exportBackup;
   $('#btn-csv').onclick = exportCSV;
   $('#import-file').onchange = (e) => { const f = e.target.files[0]; if (f) importBackup(f); e.target.value = ''; };
