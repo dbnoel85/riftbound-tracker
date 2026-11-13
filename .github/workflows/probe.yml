@@ -14,10 +14,8 @@ jobs:
           print("MU", json.dumps(a["matchups"])[:900])
           print("CARDS", json.dumps(a["cards"])[:600])
           print("EVID", json.dumps(a.get("evidence"))[:300])
-          for u in ["https://playriftbound.com/en-us/rules-hub/", "https://playriftbound.com/en-us/news/rules-and-releases/"]:
-              try:
-                  h = get(u).decode("utf8", "ignore"); t = re.sub(r"<[^>]+>", " ", h); t = re.sub(r"\s+", " ", t)
-                  for m in list(re.finditer(r"[Ee]rrat", t))[:8]: print("ERR", u, t[max(0, m.start()-150):m.start()+250])
-                  print("LINKS", u, len(h), sorted(set(re.findall(r'href="(/en-us/[^"]*(?:errat|rule|ban)[^"]*)"', h)))[:30])
-              except Exception as e: print("FAIL", u, e)
+          for u in ["https://playriftbound.com/en-us/news/announcements/radiance-errata-updates/", "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/"]:
+              h = get(u).decode("utf8", "ignore")
+              m = re.search(r'id="rich-text-html">(.*?)</section>', h, re.S) or re.search(r'id="rich-text-html">(.*)', h, re.S)
+              print("ERRATA", u, len(h), re.sub(r"\s+", " ", (m.group(1) if m else h))[:2500])
           PY
