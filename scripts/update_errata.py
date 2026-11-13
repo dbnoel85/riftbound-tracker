@@ -27,7 +27,9 @@ def main():
         except Exception as e:  # noqa: BLE001
             print("  !", u, e); continue
         tm = re.search(r"<title>(.*?)</title>", h)
-        title = html.unescape(tm.group(1)).split("|")[0].strip() if tm else u
+        title = html.unescape(tm.group(1)).split("|")[0].strip() if tm else ""
+        if not title or title.startswith("/"):
+            title = u.rstrip("/").split("/")[-1].replace("-", " ").title().replace("Riftbound ", "")
         date = (re.search(r'dateTime="(\d{4}-\d{2}-\d{2})', h) or [None, ""])[1]
         blocks = re.findall(r'id="rich-text-html">(.*?)</div></div></div>', h, re.S)
         body = max(blocks, key=len) if blocks else ""

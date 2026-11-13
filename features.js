@@ -246,8 +246,8 @@ function boxValue(groupId) {
 function boxEvHTML() {
   const rows = S.cards.groups.map((g) => ({ g, v: boxValue(g.id) })).filter((x) => x.v && x.v.box);
   if (!rows.length) return '';
-  return `<li style="list-style:none"><div class="card-box"><h3>Open or keep sealed?</h3><p class="sub">Estimated singles value of one 24-pack display at today's market prices. "Sellable" ignores cards under $1, which are hard to sell. Riot doesn't publish pull rates, so hit counts are community estimates — real boxes vary a lot.</p>
-    <ul class="dl">${rows.map(({ g, v }) => { const ratio = v.real.total / v.box.m; return `<li data-k="${esc(v.box.k)}"><span class="nm">${esc(g.name)}<small>Box ${money(v.box.m)} · singles ${money(v.all.total)} · sellable ${money(v.real.total)}</small></span><span class="st"><b class="${ratio >= 1 ? 'pos' : 'neg'}">${ratio >= 1.15 ? 'Open' : ratio >= 0.9 ? 'Close call' : 'Keep sealed'}</b><br><small class="sub">${Math.round(ratio * 100)}% of price</small></span></li>`; }).join('')}</ul></div></li>`;
+  return `<li style="list-style:none"><div class="card-box"><h3>Open or keep sealed?</h3><p class="sub">Estimated singles value of one 24-pack display at today's market prices. "Sellable" ignores cards under $1, which are hard to sell; "Open" needs sellable singles about 25% above the box price to cover selling fees and effort. Riot doesn't publish pull rates, so hit counts are community estimates — real boxes vary a lot.</p>
+    <ul class="dl">${rows.map(({ g, v }) => { const ratio = v.real.total / v.box.m; return `<li data-k="${esc(v.box.k)}"><span class="nm">${esc(g.name)}<small>Box ${money(v.box.m)} · singles ${money(v.all.total)} · sellable ${money(v.real.total)}</small></span><span class="st"><b class="${ratio >= 1 ? 'pos' : 'neg'}">${ratio >= 1.25 ? 'Open' : ratio >= 0.95 ? 'Close call' : 'Keep sealed'}</b><br><small class="sub">${Math.round(ratio * 100)}% of price</small></span></li>`; }).join('')}</ul></div></li>`;
 }
 
 /* ---------------------------------------------------------------- keyword glossary */
@@ -375,5 +375,62 @@ async function fillErrata(it) {
   const e = await loadErrata(); const list = e[banKey(it.n).replace(/\b\w/g, (c) => c)] || null;
   const key = Object.keys(e).find((k) => banKey(k) === banKey(it.n)); const x = key && e[key];
   const box = $('#detail-text'); if (!x || !box) return;
-  box.insertAdjacentHTML('beforeend', `<div class="card-box errata"><span class="label">Errata · ${esc(fmtDate(x[0].date))}</span><p><b>Current official text:</b><br>${esc(x[0].new).replace(/\n/g, '<br>')}</p><details><summary class="sub">Printed text</summary><p class="sub">${esc(x[0].old).replace(/\n/g, '<br>')}</p></details><a class="sub" href="${esc(x[0].url)}" target="_blank" rel="noopener">${esc(x[0].title)} ↗</a></div>`);
+  box.insertAdjacentHTML('beforeend', `<div class="card-box errata"><span class="label">Errata · ${esc(fmtDate(x[0].date))}</span><p><b>Current official text:</b><br>${symText(x[0].new)}</p><details><summary class="sub">Printed text</summary><p class="sub">${symText(x[0].old)}</p></details><a class="sub" href="${esc(x[0].url)}" target="_blank" rel="noopener">${esc(x[0].title)} ↗</a></div>`);
 }
+
+/* ---------------------------------------------------------------- Rules & guide (learn the game) */
+let RULES = null;
+async function loadRules() { if (!RULES) { try { RULES = await (await fetch('data/rules.json', { cache: 'no-cache' })).json(); } catch { RULES = { docs: [], articles: [] }; } } return RULES; }
+/** official text uses symbols like [M] (might) and [A] (a rune of any color) */
+const symText = (t) => esc(t).replace(/\[M\]/g, 'might').replace(/\[A\]/g, '<i>any rune</i>').replace(/\n/g, '<br>');
+const LEARN = [
+  ['Goal', `<p>Be the first to <b>8 points</b> (11 in 2v2). You score by taking and keeping <b>battlefields</b>:</p>
+    <ul><li><b>Conquer</b> — win control of a battlefield on your turn: +1 point.</li><li><b>Hold</b> — still control it at the start of your turn: +1 point.</li></ul>
+    <p class="sub"><b>Final-point rule:</b> your winning point can't come from a single conquer. Get it by holding, or by scoring every battlefield in play that turn. Otherwise that conquer draws you a card instead.</p>`],
+  ['Your deck', `<ul><li><b>1 Legend</b> — your champion's legend card. It sets your two <b>domains</b> and starts in play.</li>
+    <li><b>Main deck: 40 cards</b> — units, spells and gear from your legend's domains (plus colorless). Max 3 copies of a card. Includes your <b>chosen champion</b>, a champion unit matching your legend, set aside to start.</li>
+    <li><b>Rune deck: 12 runes</b> — your resources, from your domains.</li>
+    <li><b>3 battlefields</b> — you choose one to put into play each game.</li></ul>
+    <p class="sub">The app checks these rules for you in My decks.</p>`],
+  ['Domains', `<p>Every card belongs to one of six domains (or none):</p><p>${['Fury', 'Calm', 'Mind', 'Body', 'Chaos', 'Order'].map((d) => `<span class="dom ${d}">${d}</span>`).join(' ')}</p>
+    <p class="sub">Fury is aggressive damage, Calm protection and patience, Mind tricks and card advantage, Body big sturdy units, Chaos disruption and surprise, Order teamwork and control. Your legend picks two.</p>`],
+  ['A turn (A-B-C-D)', `<ol><li><b>Awaken</b> — ready everything you exhausted.</li><li><b>Beginning</b> — score 1 point for each battlefield you hold; start-of-turn effects.</li>
+    <li><b>Channel</b> — put the top 2 runes of your rune deck into play (the second player channels 3 on their first turn).</li><li><b>Draw</b> — draw 1 card.</li></ol>
+    <p>Then your <b>action phase</b>: exhaust runes for energy and power to play cards, move units from base to battlefields (and back) to attack.</p>`],
+  ['Showdowns & combat', `<p>Moving into a battlefield the opponent controls (or contests) starts a <b>showdown</b>: players take turns playing <b>[Action]</b> and <b>[Reaction]</b> cards, then units deal damage equal to their <b>might</b>. Whoever has units left controls the battlefield.</p>
+    <p class="sub">[Reaction] cards can be played any time, even mid-showdown or on the opponent's turn. See the keyword glossary for the rest.</p>`],
+  ['Starting a game', `<ul><li>Shuffle, choose battlefields, place your legend and chosen champion.</li><li>Draw <b>4 cards</b>; you may recycle up to 2 and redraw that many (mulligan).</li><li>Going second? You channel 3 runes on your first turn to catch up.</li></ul>`],
+  ['Formats', `<ul><li><b>Standard</b> — 1v1 Constructed with all legal sets, first to 8. The main tournament format.</li><li><b>2v2 Constructed</b> — teams of two, first to 11, with a few extra bans. Pick yours in Settings.</li><li><b>Sealed / draft</b> — build from packs opened at the event (Legacy is the first draft-focused set).</li></ul>`],
+];
+async function renderLearn() {
+  const R = await loadRules(); await Promise.all([loadGlossary(), loadErrata()]);
+  const open = S.prefs.learnOpen ?? 0;
+  const docs = (R.docs || []).filter((d) => d.url);
+  $('#sheet-content').innerHTML = `<div class="detail learn"><h2>Rules &amp; guide</h2>
+    <p class="sub">Everything about how Riftbound works. Official documents are refreshed daily from Riot's Rules Hub and saved in the app so they open offline.</p>
+    <div class="dsec">Official rules</div>
+    <ul class="list">${docs.map((d) => `<li class="item"><span class="alicon">📘</span><div class="info"><div class="nm" style="white-space:normal">${esc(d.title)}</div><div class="meta">${d.kb ? d.kb.toLocaleString() + ' KB · ' : ''}PDF${d.changed ? ' · <span class="pos">updated</span>' : ''}</div></div>
+      <div class="col">${d.local ? `<a class="ghost sm" href="${esc(d.local)}" target="_blank" rel="noopener">Open</a>` : ''}<a class="sub" href="${esc(d.url)}" target="_blank" rel="noopener">Riot ↗</a></div></li>`).join('') || `<li class="item"><div class="info"><div class="nm">Riftbound Rules Hub</div><div class="meta">Core rules, tournament rules and more</div></div><a class="ghost sm" href="${esc(R.hub || 'https://playriftbound.com/en-us/rules-hub/')}" target="_blank" rel="noopener">Open ↗</a></li>`}</ul>
+    <div class="dsec">Learn to play</div>
+    <div class="acc">${LEARN.map(([t, b], i) => `<details ${i === open ? 'open' : ''} data-i="${i}"><summary>${t}</summary><div class="accb">${b}</div></details>`).join('')}</div>
+    <div class="dsec">Look things up</div>
+    <div class="tiles">
+      <button class="tile" id="lr-gloss"><b>Keywords</b><span>${Object.keys(GL || {}).length} explained</span></button>
+      <button class="tile" id="lr-bans"><b>Ban list</b><span>${BAN.byKey.size} cards</span></button>
+      <button class="tile" id="lr-errata"><b>Errata</b><span>${Object.keys(ERR || {}).length} updated cards</span></button>
+      <button class="tile" id="lr-score"><b>Score counter</b><span>First to 8</span></button>
+    </div>
+    ${(R.articles || []).length ? `<div class="dsec">Rules updates &amp; FAQs</div><ul class="dl">${R.articles.slice(0, 12).map((a) => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener" class="nm" style="color:var(--text);text-decoration:none">${esc(a.title)}<small>${esc(fmtDate(a.date))}</small></a><span class="st">↗</span></li>`).join('')}</ul>` : ''}
+    <p class="sub">Quick guide written for this app; when in doubt the official Core Rules win.</p></div>`;
+  $$('#sheet-content details').forEach((d) => d.ontoggle = () => { if (d.open) { S.prefs.learnOpen = +d.dataset.i; savePrefs(); } });
+  $('#lr-gloss').onclick = () => { GLQ = ''; pushSheet(renderGlossary); };
+  $('#lr-bans').onclick = () => pushSheet(renderBanList);
+  $('#lr-errata').onclick = () => pushSheet(renderErrataList);
+  $('#lr-score').onclick = () => { closeSheet(); show('score'); };
+}
+function renderErrataList() {
+  const e = ERR || {};
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>Errata</h2><p class="sub">Cards whose official text changed after printing. The current text is what counts in play. Also shown on each card's page.</p>
+    <ul class="dl">${Object.entries(e).sort((a, b) => (b[1][0].date || '').localeCompare(a[1][0].date || '')).map(([n, x]) => { const r = cardRef(n); return `<li style="display:block" ${r ? `data-card="${esc(r.k)}"` : ''}><b>${esc(n)}</b> <small class="sub">· ${esc(fmtDate(x[0].date))}</small><div class="sub" style="margin-top:3px">${symText(x[0].new)}</div></li>`; }).join('') || '<li class="sub">No errata loaded yet.</li>'}</ul></div>`;
+}
+(function wireLearn() { const b = $('#hdr-learn'); if (b) b.onclick = () => pushSheet(renderLearn); })();

@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v36';
+const SHELL_VERSION = 'v37';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -426,7 +426,7 @@ function renderMovers() {
   $('#mv-metric').classList.toggle('hidden', scope === 'sealed');
   if (scope === 'sealed') {
     const rows = sealedRows();
-    $('#mv-up').innerHTML = rows.map((it) => `<li class="item" data-k="${esc(it.k)}">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}</div><div class="meta">${esc(setName(it.g))}</div></div><div class="px"><b>${money(it.m)}</b><small>${chg(it.d, it.pc)}</small></div></li>`).join('') || '<li class="empty">No sealed products yet.</li>';
+    $('#mv-up').innerHTML = (typeof boxEvHTML === 'function' ? boxEvHTML() : '') + rows.map((it) => `<li class="item" data-k="${esc(it.k)}">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}</div><div class="meta">${esc(setName(it.g))}</div></div><div class="px"><b>${money(it.m)}</b><small>${chg(it.d, it.pc)}</small></div></li>`).join('') || '<li class="empty">No sealed products yet.</li>';
     $('#mv-down').innerHTML = '';
     $$('#v-movers h2, #v-movers .mvh').forEach((h, i) => { h.dataset.orig = h.dataset.orig || h.textContent; h.textContent = i === 0 ? 'Sealed product prices' : ''; });
     return;
@@ -1439,7 +1439,7 @@ async function renderDecks() {
   try { await loadDecks(); } catch { $('#dk-list').innerHTML = '<li class="empty">Deck data isn\'t available yet — check back after the next daily update.</li>'; return; }
   $('#dk-win').classList.toggle('hidden', D.tab === 'mine' && !deckQuery());
   if (deckQuery()) { renderDeckSearch(); return; }
-  if (D.tab === 'staples') { $('#dk-win').classList.remove('hidden'); renderStaples(); return; }
+  if (D.tab === 'staples') { $('#dk-win').classList.remove('hidden'); $('#dk-legal-wrap').classList.add('hidden'); renderStaples(); return; }
   if (D.tab === 'mine') { renderMyDecksList(); return; }
   const d = winData();
   const days = { '30d': '30', '14d': '14', '7d': '7' }[D.win] || '30';

@@ -411,3 +411,22 @@ html[data-text="xl"] body{zoom:1.2}
 #dk-tab button{font-size:13px}
 #add-everywhere:empty{display:none}
 #sum-history{margin-top:4px;display:inline-block}
+/* ---- rules & guide */
+.learn .acc details{border:1px solid var(--line);border-radius:4px;margin:0 0 8px;background:rgba(12,18,40,.6)}
+.learn .acc summary{padding:12px 14px;font-family:Marcellus,serif;font-size:16px;color:var(--gold);cursor:pointer;list-style:none}
+.learn .acc summary::-webkit-details-marker{display:none}
+.learn .acc summary::after{content:'＋';float:right;color:var(--sub)}
+.learn .acc details[open] summary::after{content:'−'}
+.learn .accb{padding:0 14px 12px;line-height:1.5}
+.learn .accb ul,.learn .accb ol{padding-left:20px;margin:6px 0}
+.learn .accb li{margin:3px 0}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 8px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px;border:1px solid var(--line);border-radius:4px;background:linear-gradient(160deg,rgba(241,212,142,.08),rgba(12,18,40,.7));color:var(--text);text-align:left;cursor:pointer}
+.tile b{font-family:Marcellus,serif;font-size:15px;color:var(--gold)}
+.tile span{font-size:12px;color:var(--sub)}
+.item .col{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.item .col a.ghost{text-decoration:none;padding:6px 12px}
+.errata{border-color:rgba(69,224,208,.4)!important}
+.errata summary{cursor:pointer;margin-top:6px}
+
+#title{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
