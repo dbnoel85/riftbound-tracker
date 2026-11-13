@@ -1,0 +1,25 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          python3 - <<'PY'
+          import json, urllib.request, re
+          def get(u):
+              r = urllib.request.Request(u, headers={"User-Agent": "riftbound-tracker"}); return urllib.request.urlopen(r, timeout=30).read()
+          s = json.loads(get("https://api.dotgg.gg/cgfw/getmetasnapshot?game=riftbound&window=30d"))
+          print("TOP", list(s.keys()))
+          a = s["archetypes"][0]; print("ARCH", list(a.keys()))
+          for k, v in s.items():
+              if k != "archetypes": print("KEY", k, str(v)[:300])
+          for k in a: 
+              if 'match' in k.lower() or 'vs' in k.lower(): print("AM", k, str(a[k])[:400])
+          for u in ["https://playriftbound.com/en-us/rules-hub/", "https://playriftbound.com/en-us/news/rules-and-releases/"]:
+              try:
+                  h = get(u).decode("utf8", "ignore"); t = re.sub(r"<[^>]+>", " ", h); t = re.sub(r"\s+", " ", t)
+                  for m in list(re.finditer(r"[Ee]rrat", t))[:8]: print("ERR", u, t[max(0, m.start()-150):m.start()+250])
+                  print("LINKS", u, sorted(set(re.findall(r'href="(/en-us/[^"]*(?:errat|rule|ban)[^"]*)"', h)))[:30])
+              except Exception as e: print("FAIL", u, e)
+          PY
