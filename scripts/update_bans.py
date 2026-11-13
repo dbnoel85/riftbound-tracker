@@ -59,11 +59,24 @@ def main():
             k = norm(it)
             if k in names and names[k][0] not in [c["id"] for c in cards]:
                 cards.append({"name": names[k][1], "id": names[k][0]})
+            elif len(it) < 60:
+                print(f"  (not a card name: {it!r})")
+        # cross-check with "Eight cards and two battlefields ..." when the article says how many
+        words = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve".split())}
+        cnt = re.search(r"\b(\w+) cards?(?: and (\w+) battlefields?)?(?: are| is)? being added", text, re.I)
+        expected = None
+        if cnt:
+            f = lambda w: int(w) if w and w.isdigit() else words.get((w or "").lower())
+            if f(cnt.group(1)) is not None:
+                expected = f(cnt.group(1)) + (f(cnt.group(2)) or 0)
         lead = text[:4000].lower()
         unban = bool(re.search(r"unban|removed from the ban|no longer banned|lifting", lead))
         formats = ["standard", "2v2"] if "2v2" in lead else ["standard"]
         a = {"title": title, "announced": (h.get("date") or time.strftime("%Y-%m-%d"))[:10], "effective": effective,
              "url": url + "/", "formats": formats, "cards": [] if unban else cards, "auto": True}
+        if expected is not None and expected != len(cards):
+            a["incomplete"] = True  # some names weren't recognised: the app points to Riot's article
+            print(f"  ! expected {expected} cards, matched {len(cards)}")
         if unban or not cards or not effective:
             a["review"] = True  # shown as news, but no cards are marked until checked
         desc = re.search(r'<meta[^>]+name="description"[^>]+content="([^"]+)"', page)
