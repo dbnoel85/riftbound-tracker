@@ -1,0 +1,54 @@
+{
+  "updated": "2026-11-13",
+  "rulesHub": "https://playriftbound.com/en-us/rules-hub/",
+  "announcements": [
+    {
+      "title": "Radiance Ban List Updates (Effective November 23, 2026)",
+      "announced": "2026-11-13",
+      "effective": "2026-11-23",
+      "url": "https://playriftbound.com/en-us/news/announcements/radiance-ban-list-updates-effective-november-23-2026/",
+      "formats": ["standard", "2v2"],
+      "summary": "Eight cards and two battlefields join the Standard and 2v2 Constructed ban list. Events before Monday, November 23 can still use them. From 2027, bans are announced in fixed windows: the Friday two weeks before each Continental and the Friday two weeks after.",
+      "cards": [
+        {"name": "Riven - Broken Blade", "id": "RAD-043"},
+        {"name": "Zhonya's Hourglass", "id": "OGN-077"},
+        {"name": "Stellacorn Herder", "id": "SFD-048"},
+        {"name": "Nocturne - Horrifying", "id": "OGN-194"},
+        {"name": "Rhasa the Sunderer", "id": "OGN-195"},
+        {"name": "Brynhir Thundersong", "id": "OGN-026"},
+        {"name": "Dazzling Aurora", "id": "OGN-160"},
+        {"name": "Baited Hook", "id": "OGN-242"},
+        {"name": "Emperor's Dais", "id": "SFD-207"},
+        {"name": "Star Spring", "id": "UNL-215"}
+      ]
+    },
+    {
+      "title": "September Ban List Updates (Effective September 18, 2026)",
+      "announced": "2026-09-18", "effective": "2026-09-18",
+      "url": "https://playriftbound.com/en-us/news/announcements/september-ban-list-updates-effective-september-18-2026/",
+      "formats": ["standard", "2v2"],
+      "cards": [{"name": "Ekko - Recurrent", "id": "OGN-110"}, {"name": "Stacked Deck", "id": "OGN-183"}]
+    },
+    {
+      "title": "July Ban List Updates",
+      "announced": "2026-07-07", "effective": "2026-07-24",
+      "url": "https://playriftbound.com/en-us/news/announcements/july-ban-list-updates/",
+      "formats": ["standard", "2v2"],
+      "cards": [{"name": "Stealthy Pursuer", "id": "OGN-177"}, {"name": "Aspirant's Climb", "id": "OGN-276"}, {"name": "The Arena's Greatest", "id": "OGN-290"}]
+    },
+    {
+      "title": "July Ban List Updates — Constructed 2v2",
+      "announced": "2026-07-07", "effective": "2026-07-24",
+      "url": "https://playriftbound.com/en-us/news/announcements/july-ban-list-updates/",
+      "formats": ["2v2"],
+      "cards": [{"name": "Master Yi - Wuju Bladesman", "id": "OGS-019"}]
+    },
+    {
+      "title": "First Riftbound ban list",
+      "announced": "2026-03-31", "effective": "2026-03-31",
+      "url": "https://playriftbound.com/en-us/rules-hub/",
+      "formats": ["standard", "2v2"],
+      "cards": [{"name": "Called Shot", "id": "SFD-122"}, {"name": "Scrapheap", "id": "OGN-182"}, {"name": "Draven - Vanquisher", "id": "SFD-020"}, {"name": "Fight or Flight", "id": "OGN-168"}, {"name": "The Dreaming Tree", "id": "OGN-292"}, {"name": "Obelisk of Power", "id": "OGN-284"}, {"name": "Reaver's Row", "id": "OGN-285"}]
+    }
+  ]
+}

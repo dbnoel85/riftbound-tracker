@@ -1,0 +1,10 @@
+{
+  "updated": "2026-11-13",
+  "releases": [
+    {"name": "Legacy", "code": "LGC", "kind": "Set 6 · first draft-focused set", "date": "2027-01-29", "previews": "From Convergence Fest, Dec 13–15, 2026", "prerift": "2027-01-22/2027-01-28", "cards": "346 cards (93 showcase)", "products": "Boosters, Champion Decks (Tryndamere, Ashe, Lux, Garen), Vault Bundle, Pre-Rift kits", "url": "https://playriftbound.com/en-us/news/announcements/august-2026-roadmap/"},
+    {"name": "Proving Grounds, 2nd Edition", "kind": "Four-player starter box", "date": "2027-02-19", "products": "Champion decks: Heimerdinger, Karma, Vladimir, Illaoi", "url": "https://playriftbound.com/en-us/news/announcements/august-2026-roadmap/"},
+    {"name": "The Reckoning", "kind": "Set 7", "date": "2027-04-30", "prerift": "2027-04-23/2027-04-29", "cards": "264 cards (67 showcase)", "url": "https://playriftbound.com/en-us/news/announcements/august-2026-roadmap/"},
+    {"name": "Set 8 (Bandle City)", "kind": "Set 8", "date": "2027-Q3", "url": "https://playriftbound.com/en-us/news/announcements/products-and-sets-into-2027/"},
+    {"name": "Set 9", "kind": "Set 9", "date": "2027-Q4", "url": "https://playriftbound.com/en-us/news/announcements/products-and-sets-into-2027/"}
+  ]
+}

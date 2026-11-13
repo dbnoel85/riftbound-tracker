@@ -49,7 +49,41 @@ function confirmBox(text) {
 function variantTags(it) {
   let t = '';
   if (it.s && it.s !== 'Normal') t += `<span class="tag foil">${esc(it.s)}</span>`;
-  return t;
+  return t + banTag(it.n);
+}
+
+/* ---------------------------------------------------------------- ban list (data/bans.json, updated from Riot's announcements) */
+const BAN = { data: null, byKey: new Map() };
+const banKey = (n) => String(n || '').replace(/\u2019/g, "'").replace(/\s*\([^)]*\)\s*$/, '').replace(/\s*-\s*starter$/i, '').replace(/, /g, ' - ').replace(/\s+/g, ' ').trim().toLowerCase();
+async function loadBans() {
+  try { BAN.data = await (await fetch('data/bans.json', { cache: 'no-cache' })).json(); } catch { BAN.data = { announcements: [] }; }
+  BAN.byKey.clear();
+  for (const a of BAN.data.announcements || []) {
+    if (a.review) continue;
+    for (const c of a.cards || []) {
+      const k = banKey(c.name), e = BAN.byKey.get(k) || { name: c.name, fmt: {} };
+      for (const f of a.formats || ['standard']) if (!e.fmt[f] || (a.effective || '') < e.fmt[f].effective) e.fmt[f] = { effective: a.effective || a.announced, url: a.url, title: a.title };
+      BAN.byKey.set(k, e);
+    }
+  }
+}
+/** {state:'banned'|'soon', fmt, effective, url} for Standard (or 2v2-only), or null */
+function banInfo(name) {
+  const e = BAN.byKey.get(banKey(name)); if (!e) return null;
+  const f = e.fmt.standard ? 'standard' : '2v2', x = e.fmt[f];
+  return { state: (x.effective || '') <= todayISO() ? 'banned' : 'soon', fmt: f, both: !!(e.fmt.standard && e.fmt['2v2']), effective: x.effective, url: x.url, title: x.title };
+}
+const shortDate = (iso) => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+function banTag(name) {
+  const b = banInfo(name); if (!b) return '';
+  const where = b.fmt === '2v2' ? ' 2v2' : '';
+  return b.state === 'banned' ? `<span class="tag ban">Banned${where}</span>` : `<span class="tag ban soon">Banned${where} ${esc(shortDate(b.effective))}</span>`;
+}
+function banBox(name) {
+  const b = banInfo(name); if (!b) return '';
+  const fmts = b.both ? 'Standard and 2v2 Constructed' : b.fmt === '2v2' ? '2v2 Constructed' : 'Standard Constructed';
+  return `<div class="card-box banbox"><b>${b.state === 'banned' ? '⛔ Banned' : '⚠ Being banned'} in ${fmts}</b>
+    <div class="sub">${b.state === 'banned' ? 'Since' : 'From'} ${esc(new Date(b.effective + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))}${b.state === 'soon' ? ' — still legal until then' : ''}. <a href="${esc(b.url)}" target="_blank" rel="noopener">Riot's announcement ↗</a></div></div>`;
 }
 function metaLine(it) { return [setAbbr(it.g), it.num, it.r].filter(Boolean).map(esc).join(' · '); }
 
@@ -282,7 +316,7 @@ function productRow(items, extra = '') {
   return `<li class="item" data-k="${esc(it.k)}">
       ${img(it.img)}
       <div class="info">
-        <div class="nm">${esc(it.n)}</div>
+        <div class="nm">${esc(it.n)}${banTag(it.n)}</div>
         <div class="meta">${metaLine(it)}</div>
         ${extra}
       </div>
@@ -421,6 +455,7 @@ function renderDetail(k) {
     <img class="detail-img" src="${esc(bigImg(it.img))}" onerror="this.onerror=null;this.src='${esc(it.img)}'" alt="">
     <h2>${esc(it.n)}${variantTags(it)}</h2>
     <div class="sub">${esc(setName(it.g))}${it.num ? ' · ' + esc(it.num) : ''}${it.r ? ' · ' + esc(it.r) : ''}</div>
+    ${banBox(it.n)}
     <div class="card-box mkt">
       <span class="label">TCGplayer market price${it.s !== 'Normal' ? ' · ' + esc(it.s) : ''}</span>
       <b class="big">${it.tm != null || !('tm' in it) ? money(it.m) : '—'}</b>
@@ -1291,6 +1326,17 @@ async function renderDecks() {
   const rows = deckCandidates();
   $('#dk-list').innerHTML = rows.map((a) => deckRowHTML(a)).join('') || '<li class="empty">Nothing here yet.</li>';
 }
+function deckBans(a) {
+  const ids = a.list ? [a.leader, ...Object.keys(a.list.main || {}), ...Object.keys(a.list.side || {})] : [a.leader, ...(a.key || []).map((k) => k.id)];
+  const seen = new Map();
+  for (const id of ids) { const n = D.rb[id]?.n; const b = n && banInfo(n); if (b && b.fmt === 'standard' && !seen.has(banKey(n))) seen.set(banKey(n), { n, b }); }
+  return [...seen.values()];
+}
+function deckBanLine(a) {
+  const bs = deckBans(a); if (!bs.length) return '';
+  const soon = bs.every((x) => x.b.state === 'soon');
+  return `<div class="meta banline">${soon ? '⚠' : '⛔'} ${bs.length} card${bs.length === 1 ? '' : 's'} ${soon ? 'banned from ' + esc(shortDate(bs[0].b.effective)) : 'now banned'}: ${bs.slice(0, 3).map((x) => esc(x.n)).join(', ')}${bs.length > 3 ? '…' : ''}</div>`;
+}
 function deckRowHTML(a, why = '') {
     const an = a.list ? analyzeDeck(a) : null;
     const leg = cardRef(D.rb[a.leader]?.n || a.name);
@@ -1302,6 +1348,7 @@ function deckRowHTML(a, why = '') {
         ${an ? `<div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div><div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>`
         : '<div class="meta">No public decklist yet</div>'}
         ${why ? `<div class="meta hitwhy">${why}</div>` : ''}
+        ${deckBanLine(a)}
       </div>
     </li>`;
 }
@@ -1384,6 +1431,9 @@ function renderDeck(slug) {
   }
   const an = analyzeDeck(a);
   const mode = D.deckMode || 'list';
+  const dbans = deckBans(a);
+  if (dbans.length) html += `<div class="card-box banbox"><b>${dbans.every((x) => x.b.state === 'soon') ? '⚠ This list has cards being banned' : '⛔ This list has banned cards'}</b>
+    <div class="sub">${dbans.map((x) => `${esc(x.n)} (${x.b.state === 'soon' ? 'from ' + esc(shortDate(x.b.effective)) : 'banned'})`).join(' · ')}. The stats come from tournaments played before the ban. Use <b>My version</b> or save it to My decks to replace them.</div></div>`;
   html += `${b ? `<p class="sub">${a.listFrom30 ? 'Best list from the last 30 days: ' : 'List: '}<b>${ordinal(b.place)} of ${b.players}</b> · ${esc(b.event)}${b.record ? ' · ' + esc(b.record) : ''}${when ? ' · ' + when : ''}</p>` : ''}
     <div class="card-box">
       <b>You own ${an.mainHave} of ${an.mainTotal} main-deck cards</b> (${Math.round(an.pct * 100)}% of the whole list)
@@ -1439,7 +1489,7 @@ function lineHTML(l) {
   const p = cardPrice(l.c.n);
   const st = l.miss === 0 ? '<span class="ok">✓ own</span>' : l.have > 0 ? `<span class="part">own ${l.have}/${l.cnt}</span>` : '<span class="no">need</span>';
   const r = cardRef(l.c.n);
-  return `<li data-card="${esc(r ? r.k : '')}"><span class="cnt">${l.cnt}×</span><span class="nm">${esc(l.c.n)}<small>${[l.c.t, l.c.c != null ? l.c.c + ' energy' : '', (l.c.d || []).join('/')].filter(Boolean).map(esc).join(' · ')}</small></span><span class="st">${st}<br><small class="sub">${money(p && p.m)}</small></span></li>`;
+  return `<li data-card="${esc(r ? r.k : '')}"${banInfo(l.c.n) ? ' class="banned"' : ''}><span class="cnt">${l.cnt}×</span><span class="nm">${esc(l.c.n)}${banTag(l.c.n)}<small>${[l.c.t, l.c.c != null ? l.c.c + ' energy' : '', (l.c.d || []).join('/')].filter(Boolean).map(esc).join(' · ')}</small></span><span class="st">${st}<br><small class="sub">${money(p && p.m)}</small></span></li>`;
 }
 const ordinal = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 function wireDecks() {
@@ -1489,6 +1539,10 @@ function mdProblems(dk) {
     if (!r.d.every((d) => colors.has(d))) out.push(`${r.n} is outside your legend's domains`);
   }
   for (const [n, k] of byName) if (k > 3) out.push(`${k} copies of ${n} (max 3)`);
+  for (const id of [dk.leader, ...Object.keys(dk.main), ...Object.keys(dk.side)]) {
+    const b = D.rb[id] && banInfo(D.rb[id].n);
+    if (b && b.fmt === 'standard') out.push(`${D.rb[id].n} is ${b.state === 'banned' ? 'banned' : 'banned from ' + shortDate(b.effective)}`);
+  }
   const champ = Object.keys(dk.main).some((id) => D.rb[id]?.st === 'Champion' && (D.rb[id].tg || []).some((t) => tags.includes(t)));
   if (!champ) out.push('No chosen champion yet (a champion unit of your legend)');
   return [...new Set(out)];
@@ -1707,6 +1761,53 @@ async function renderEvents() {
 const kPrize = (v) => v >= 1000 ? '$' + (v % 1000 ? (v / 1000).toFixed(1) : v / 1000) + 'k' : '$' + v;
 const unixDay = (t) => new Date(t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 function unixBox(t) { const d = new Date(t * 1000); return `<div class="date"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</small></div>`; }
+async function newsTopHTML() {
+  if (!BAN.data) await loadBans();
+  if (!EVS.rel) { try { EVS.rel = await (await fetch('data/releases.json', { cache: 'no-cache' })).json(); } catch { EVS.rel = { releases: [] }; } }
+  let h = '';
+  const a = (BAN.data.announcements || [])[0];
+  if (a) {
+    const pending = a.effective && a.effective > todayISO();
+    const cardsHTML = (a.cards || []).map((c) => { const r = cardRef(c.name); return `<li class="banc" ${r ? `data-k="${esc(r.k)}"` : ''}>${img(r && r.img)}<span>${esc(c.name)}</span></li>`; }).join('');
+    h += `<h2>Ban list</h2><div class="card-box newsban">
+      <div class="nm" style="white-space:normal">${esc(a.title)}</div>
+      <div class="meta wrap"><span class="evtype big">${pending ? 'Takes effect ' + esc(shortDate(a.effective)) : 'In effect'}</span> Announced ${esc(shortDate(a.announced))} · ${(a.formats || []).map((f) => f === '2v2' ? '2v2' : 'Standard').join(' & ')}</div>
+      ${a.summary ? `<p class="sub" style="margin:8px 0">${esc(a.summary)}</p>` : ''}
+      ${a.review ? '<p class="sub">The card list for this announcement is being checked — see Riot\'s article for details.</p>' : `<ul class="banlist">${cardsHTML}</ul>`}
+      <div class="row" style="justify-content:space-between;margin-top:8px"><a class="sub" href="${esc(a.url)}" target="_blank" rel="noopener">Read Riot's announcement ↗</a><button class="ghost sm" id="ban-all">Full ban list</button></div>
+    </div>`;
+  }
+  const rel = (EVS.rel.releases || []).filter((r) => !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || r.date >= todayISO());
+  if (rel.length) {
+    h += '<h2>Upcoming releases</h2><ul class="list rel">' + rel.map((r) => {
+      const exact = /^\d{4}-\d{2}-\d{2}$/.test(r.date);
+      const d = exact ? new Date(r.date + 'T12:00:00') : null;
+      const days = d ? Math.ceil((d - new Date()) / 86400000) : null;
+      const pr = r.prerift ? r.prerift.split('/').map(shortDate).join('–') : '';
+      return `<li class="item evrow"><a href="${esc(r.url)}" target="_blank" rel="noopener" style="display:contents;color:inherit;text-decoration:none">
+        ${d ? `<div class="date"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</small></div>` : `<div class="date"><b style="font-size:15px">${esc(r.date.split('-')[1] || '')}</b><small>${esc(r.date.split('-')[0])}</small></div>`}
+        <div class="info"><div class="nm" style="white-space:normal">${esc(r.name)}</div>
+        <div class="meta wrap">${esc(r.kind || '')}${days != null ? ` · <b>${days} day${days === 1 ? '' : 's'} away</b>` : ''}</div>
+        ${pr || r.previews ? `<div class="meta wrap">${pr ? 'Pre-Rift ' + esc(pr) : ''}${pr && r.previews ? ' · ' : ''}${r.previews ? 'Previews: ' + esc(r.previews) : ''}</div>` : ''}
+        ${r.cards || r.products ? `<div class="meta wrap flat">${[r.cards, r.products].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
+        </div></a></li>`;
+    }).join('') + '</ul>';
+  }
+  return h;
+}
+function renderBanList() {
+  const groups = { standard: [], '2v2': [] };
+  for (const [, e] of BAN.byKey) for (const f of Object.keys(e.fmt)) groups[f].push({ n: e.name, ...e.fmt[f] });
+  const today = todayISO();
+  const block = (title, arr) => arr.length ? `<div class="dsec">${title} (${arr.length})</div><ul class="dl">` + arr.sort((x, y) => (y.effective || '').localeCompare(x.effective || '') || x.n.localeCompare(y.n)).map((x) => {
+    const r = cardRef(x.n);
+    return `<li ${r ? `data-card="${esc(r.k)}"` : ''}><span class="nm">${esc(x.n)}<small>${esc(D.rb && r ? (D.rb[Object.keys(D.rb).find((id) => banKey(D.rb[id].n) === banKey(x.n))]?.t || '') : '')}</small></span><span class="st">${x.effective > today ? '<span class="part">from ' + esc(shortDate(x.effective)) + '</span>' : '<span class="no">since ' + esc(shortDate(x.effective)) + '</span>'}</span></li>`;
+  }).join('') + '</ul>' : '';
+  const only2 = groups['2v2'].filter((x) => !groups.standard.some((y) => banKey(y.n) === banKey(x.n)));
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>Ban list</h2><p class="sub">Every card banned in Riftbound Constructed, newest first. Banned cards are also marked across the app — in your collection, card pages and deck lists. This list updates itself when Riot announces new bans.</p>
+    ${block('Standard (also 2v2)', groups.standard)}${block('2v2 only', only2)}
+    <p class="sub">Official list: <a href="${esc(BAN.data.rulesHub || 'https://playriftbound.com/en-us/rules-hub/')}" target="_blank" rel="noopener">Riftbound Rules Hub ↗</a></p></div>`;
+}
 async function renderNews() {
   const body = $('#ev-body');
   if (!EVS.news) {
@@ -1720,7 +1821,8 @@ async function renderNews() {
     const inApp = r.arch && D.data && findArch(r.arch);
     return `<li class="nres" ${inApp ? `data-arch="${esc(r.arch)}"` : ''}>${place(r.place)}<span class="nm">${esc(r.archetype || 'Unknown deck')}</span>${r.record ? `<span class="rec">${esc(r.record)}</span>` : ''}${r.deck ? `<a href="https://riftbound.gg/decks/${encodeURIComponent(r.deck)}/" target="_blank" rel="noopener" class="lnk" aria-label="Decklist">List ↗</a>` : ''}</li>`;
   };
-  let html = `<div class="seg mini" id="news-f"><button data-f="all" class="${EVS.nf === 'all' ? 'on' : ''}">Major events</button><button data-f="prize" class="${EVS.nf === 'prize' ? 'on' : ''}">$5k+ prize pool</button></div>
+  let html = await newsTopHTML();
+  html += `<div class="seg mini" id="news-f"><button data-f="all" class="${EVS.nf === 'all' ? 'on' : ''}">Major events</button><button data-f="prize" class="${EVS.nf === 'prize' ? 'on' : ''}">$5k+ prize pool</button></div>
     <h2>Recent results</h2>`;
   html += '<div class="ngrid">';
   if (!evs.length) html += '<p class="empty">No big-event results in the last 60 days yet — they appear here after the next daily update.</p>';
@@ -1743,6 +1845,8 @@ async function renderNews() {
   }
   html += `<p class="sub center">Results from tournament data (riftbound.gg / dotgg)${hl.length ? ' and playriftbound.com' : ''}. Updated ${N.updated ? unixDay(N.updated) : '—'}.</p>`;
   body.innerHTML = html;
+  const ba = $('#ban-all'); if (ba) ba.onclick = () => pushSheet(renderBanList);
+  $$('#ev-body .banc[data-k]').forEach((li) => li.onclick = () => openDetail(li.dataset.k));
   $('#news-f').onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; EVS.nf = b.dataset.f; renderNews(); };
   $$('#ev-body .nres[data-arch]').forEach((li) => li.onclick = (ev) => { if (ev.target.closest('a')) return; openDeck(li.dataset.arch); });
 }
@@ -1995,7 +2099,7 @@ async function init() {
   wire();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-  try { await loadData(); }
+  try { await Promise.all([loadData(), loadBans()]); }
   catch { $('#col-empty').classList.remove('hidden'); $('#col-empty').innerHTML = '<p>Price data is still being prepared. Check back in a few minutes.</p>'; return; }
   checkStale();
   setTimeout(() => { const n = wishAlert(); if (n) toast(`♥ ${n} wishlist card${n === 1 ? ' is' : 's are'} at or under your target price`, 4000); }, 1200);
