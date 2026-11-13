@@ -9,13 +9,9 @@ jobs:
           import json, urllib.request, re
           def get(u):
               r = urllib.request.Request(u, headers={"User-Agent": "riftbound-tracker"}); return urllib.request.urlopen(r, timeout=30).read()
-          s = json.loads(get("https://api.dotgg.gg/cgfw/getmetasnapshot?game=riftbound&window=30d"))
-          a = s["archetypes"][0]
-          print("MU", json.dumps(a["matchups"])[:900])
-          print("CARDS", json.dumps(a["cards"])[:600])
-          print("EVID", json.dumps(a.get("evidence"))[:300])
-          for u in ["https://playriftbound.com/en-us/news/announcements/radiance-errata-updates/", "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/"]:
+          for u in ["https://playriftbound.com/en-us/news/announcements/radiance-errata-updates/", "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/"]:
               h = get(u).decode("utf8", "ignore")
-              m = re.search(r'id="rich-text-html">(.*?)</section>', h, re.S) or re.search(r'id="rich-text-html">(.*)', h, re.S)
-              print("ERRATA", u, len(h), re.sub(r"\s+", " ", (m.group(1) if m else h))[:2500])
+              blocks = re.findall(r'id="rich-text-html">(.*?)</div></div></div>', h, re.S)
+              big = max(blocks, key=len) if blocks else ""
+              print("HTML", u, len(blocks), big[:3000].replace("\n", " "))
           PY
