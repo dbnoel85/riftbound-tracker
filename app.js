@@ -1773,6 +1773,7 @@ async function newsTopHTML() {
       <div class="nm" style="white-space:normal">${esc(a.title)}</div>
       <div class="meta wrap"><span class="evtype big">${pending ? 'Takes effect ' + esc(shortDate(a.effective)) : 'In effect'}</span> Announced ${esc(shortDate(a.announced))} · ${(a.formats || []).map((f) => f === '2v2' ? '2v2' : 'Standard').join(' & ')}</div>
       ${a.summary ? `<p class="sub" style="margin:8px 0">${esc(a.summary)}</p>` : ''}
+      ${a.incomplete ? '<p class="sub">Some names in this announcement couldn\'t be matched to cards — check Riot\'s article for the full list.</p>' : ''}
       ${a.review ? '<p class="sub">The card list for this announcement is being checked — see Riot\'s article for details.</p>' : `<ul class="banlist">${cardsHTML}</ul>`}
       <div class="row" style="justify-content:space-between;margin-top:8px"><a class="sub" href="${esc(a.url)}" target="_blank" rel="noopener">Read Riot's announcement ↗</a><button class="ghost sm" id="ban-all">Full ban list</button></div>
     </div>`;
