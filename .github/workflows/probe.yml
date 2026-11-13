@@ -1,0 +1,26 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          python3 - <<'PY'
+          import json, urllib.request, re
+          def get(u, ua="Mozilla/5.0 (riftbound-tracker)"):
+              r = urllib.request.Request(u, headers={"User-Agent": ua}); return urllib.request.urlopen(r, timeout=30).read()
+          s = json.loads(get("https://api.dotgg.gg/cgfw/getmetasnapshot?game=riftbound&window=30d"))
+          print("MUTOT", [(a["slug"], a.get("matchups_total"), len(a.get("matchups") or [])) for a in s["archetypes"][:8]])
+          try:
+              h = get("https://riftdecks.com/stats/winrate").decode("utf8", "ignore")
+              print("RD len", len(h))
+              print("RD scripts", re.findall(r'<script[^>]+src="([^"]+)"', h)[:15])
+              print("RD api", sorted(set(re.findall(r'["\'](/api/[^"\']+|https?://[^"\']*api[^"\']*)["\']', h)))[:20])
+              i = h.find("winrate"); print("RD snippet", re.sub(r"\s+", " ", h[i:i+1500]))
+              m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', h, re.S)
+              print("RD next", (m.group(1)[:1500] if m else "none"))
+              print("RD table", len(re.findall(r"<td", h)), re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " | ", h))[ :0])
+              t = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", h)); j = t.find("Matrix"); print("RD text", t[j:j+2500])
+          except Exception as e:
+              print("RD FAIL", e)
+          PY
