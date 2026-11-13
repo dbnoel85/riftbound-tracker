@@ -3,7 +3,6 @@
   {
    "title": "Core Rules",
    "url": "https://cmsassets.rgpub.io/sanity/files/dsfx7636/news_live/5c7946f7c3b8c6e0faff85ab6dadc6d2e721ea94.pdf",
-   "changed": true,
    "local": "assets/rules/core-rules.pdf",
    "sha1": "5c7946f7c3b8c6e0faff85ab6dadc6d2e721ea94",
    "kb": 1574
@@ -11,7 +10,6 @@
   {
    "title": "Tournament Rules",
    "url": "https://cmsassets.rgpub.io/sanity/files/dsfx7636/news_live/861752822d217edf37d9febaeaf77a7d924c1bb6.pdf",
-   "changed": true,
    "local": "assets/rules/tournament-rules.pdf",
    "sha1": "861752822d217edf37d9febaeaf77a7d924c1bb6",
    "kb": 17099
@@ -29,8 +27,8 @@
    "date": "2026-10-09"
   },
   {
-   "title": "Radiance Errata Updates",
-   "url": "https://playriftbound.com/en-us/news/announcements/radiance-errata-updates",
+   "title": "Core Rules: Radiance Patch Notes (Effective October 16, 2026)",
+   "url": "https://playriftbound.com/en-us/news/announcements/core-rules-radiance-patch-notes-effective-october-16-2026",
    "date": "2026-10-09"
   },
   {
