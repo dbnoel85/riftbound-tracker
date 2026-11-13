@@ -434,3 +434,97 @@ function renderErrataList() {
     <ul class="dl">${Object.entries(e).sort((a, b) => (b[1][0].date || '').localeCompare(a[1][0].date || '')).map(([n, x]) => { const r = cardRef(n); return `<li style="display:block" ${r ? `data-card="${esc(r.k)}"` : ''}><b>${esc(n)}</b> <small class="sub">· ${esc(fmtDate(x[0].date))}</small><div class="sub" style="margin-top:3px">${symText(x[0].new)}</div></li>`; }).join('') || '<li class="sub">No errata loaded yet.</li>'}</ul></div>`;
 }
 (function wireLearn() { const b = $('#hdr-learn'); if (b) b.onclick = () => pushSheet(renderLearn); })();
+
+/* ---------------------------------------------------------------- legend vs legend matchup matrix */
+let MX = null;           // data/matrix.json (TopDeck.gg rounds), when the daily job has a key
+function loadMatrix() {
+  if (MX !== null) return Promise.resolve(MX);
+  return fetch('data/matrix.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : false)).catch(() => false).then((j) => (MX = j));
+}
+const mxChamp = (s) => normDeckName(s).split(/\s*[-,–]\s*/)[0];
+/** map a legend string from any source onto a meta archetype (for names, art and deck links) */
+function mxArch(name) {
+  const arch = ranked(), k = normDeckName(name);
+  let a = arch.find((x) => normDeckName(x.name) === k);
+  if (!a) { const c = mxChamp(name), hits = arch.filter((x) => mxChamp(x.name) === c); if (hits.length === 1 || (hits.length && !/-/.test(name))) a = hits[0]; }
+  return a || null;
+}
+/** {legends: Map(name -> {n, w, a}), get(A, B) -> {w, l, d, n} | null, src, matches} */
+function matrixData() {
+  const legends = new Map(), cells = new Map();
+  const put = (x, y, w, l, d) => { cells.set(x + '|' + y, { w, l, d, n: w + l + d }); cells.set(y + '|' + x, { w: l, l: w, d, n: w + l + d }); };
+  const win = MX && MX.windows && (MX.windows[D.win] || MX.windows['30d']);
+  let src, matches = 0;
+  if (win && win.matches) {
+    src = MX.source || 'TopDeck.gg'; matches = win.matches;
+    const nm = (s) => (mxArch(s) || { name: s }).name;
+    for (const [s, e] of Object.entries(win.legends || {})) { const k = nm(s), o = legends.get(k) || { n: 0, w: 0 }; o.n += e.n; o.w += e.w; legends.set(k, o); }
+    for (const [key, [w, l, d]] of Object.entries(win.cells || {})) {
+      const [x0, y0] = key.split('|'), x = nm(x0), y = nm(y0); if (x === y) continue;
+      const old = cells.get(x + '|' + y); if (old) put(x, y, old.w + w, old.l + l, old.d + d); else put(x, y, w, l, d);
+    }
+  } else {
+    src = 'riftbound.gg deck data';
+    const ws = winData();
+    for (const a of ws.archetypes) {
+      legends.set(a.name, { n: a.winrateN || 0, w: Math.round((a.winrate || 0) * (a.winrateN || 0)) });
+      for (const m of a.mu || []) {
+        if (!m.n || m.vs === a.name) continue;
+        const ex = cells.get(a.name + '|' + m.vs); if (ex && ex.n >= m.n) continue;   // the same games seen from the other side
+        const w = Math.round(m.wr * m.n); put(a.name, m.vs, w, m.n - w, 0); matches += m.n;
+      }
+    }
+  }
+  for (const [k, e] of legends) e.a = mxArch(k);
+  return { legends, get: (x, y) => cells.get(x + '|' + y) || null, src, matches, sparse: !win || !win.matches };
+}
+function mxColor(p, n) {
+  // ember below 50%, rift above; strength grows with distance from even and with sample size
+  const t = Math.min(1, Math.abs(p - 0.5) / 0.25) * Math.min(1, 0.35 + n / 60);
+  return p >= 0.5 ? `rgba(69,224,208,${(0.12 + t * 0.6).toFixed(2)})` : `rgba(255,106,87,${(0.12 + t * 0.6).toFixed(2)})`;
+}
+async function renderMatrix() {
+  await loadMatrix();
+  const M = matrixData();
+  const minN = +(S.prefs.mxMin ?? 10);
+  const order = [...M.legends.entries()].filter(([, e]) => e.n).sort((a, b) => b[1].n - a[1].n).map(([k]) => k);
+  if (!order.length) { $('#dk-info').innerHTML = ''; $('#dk-list').innerHTML = '<li class="empty">No matchup data yet — check back after the next daily update.</li>'; return; }
+  let focus = S.prefs.mxFocus && M.legends.has(S.prefs.mxFocus) ? S.prefs.mxFocus : order[0];
+  const days = { '30d': 30, '14d': 14, '7d': 7 }[D.win] || 30;
+  const pc = (c) => (c.w + c.d / 2) / c.n;
+  const short = (s) => s.replace(/\s+-\s+Starter$/, '').split(' - ')[0];
+  const fe = M.legends.get(focus);
+  const rows = order.filter((o) => o !== focus).map((o) => ({ o, c: M.get(focus, o) })).filter((r) => r.c && r.c.n >= minN).sort((a, b) => pc(b.c) - pc(a.c));
+  const top = order.slice(0, Math.min(order.length, 14));
+  const legImg = (k) => { const a = M.legends.get(k)?.a; const r = a && cardRef(D.rb[a.leader]?.n || a.name); return r && r.img; };
+
+  $('#dk-info').innerHTML = `How each legend does against the others in tournament play over the last ${days} days. Pick a legend to see its best and worst matchups; the grid reads across a row (row legend's win rate vs the column).
+    <span class="flat">(${M.matches.toLocaleString()} matches · ${esc(M.src)})</span>
+    ${M.sparse ? '<br><span class="part">Only the strongest and weakest matchup per legend is published in the free deck data, so many grid cells are empty. The full grid fills in once tournament round data is connected.</span>' : ''}
+    <div class="mx-ctl"><label>Legend <select id="mx-focus">${order.map((k) => `<option ${k === focus ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select></label>
+    <div class="seg mini" id="mx-min">${[0, 10, 30].map((n) => `<button data-n="${n}" class="${n === minN ? 'on' : ''}">${n ? n + '+ games' : 'All'}</button>`).join('')}</div></div>`;
+
+  const bar = (p) => { const d = Math.round((p - 0.5) * 100); return `<span class="mx-bar"><i class="${d >= 0 ? 'p' : 'n'}" style="${d >= 0 ? 'left:50%' : `right:50%`};width:${Math.min(50, Math.abs(d))}%"></i></span>`; };
+  const focusHTML = `<li class="mx-focus">${img(legImg(focus))}<div class="info"><div class="nm">${esc(focus)}</div>
+      <div class="meta">${fe.n ? `${Math.round(fe.w / fe.n * 100)}% overall · ${fe.n.toLocaleString()} games` : ''}${fe.a ? ` · <button class="mx-open" data-deck="${esc(fe.a.slug)}">Open deck list</button>` : ''}</div></div></li>` +
+    (rows.length ? rows.map(({ o, c }) => { const p = pc(c), a = M.legends.get(o)?.a; return `<li class="mx-row" ${a ? `data-mxf="${esc(o)}"` : ''}>
+      <span class="nm">vs ${esc(o)}<small>${c.w}-${c.l}${c.d ? '-' + c.d : ''} · ${c.n.toLocaleString()} games${c.n < 20 ? ' · small sample' : ''}</small></span>${bar(p)}<b class="${p >= 0.5 ? 'pos' : 'neg'}">${Math.round(p * 100)}%</b></li>`; }).join('')
+      : `<li class="empty">No matchups for ${esc(short(focus))} with ${minN}+ games${M.sparse ? ' in the free deck data' : ''}. Try <b>All</b>.</li>`);
+
+  const grid = `<li class="mx-wrap"><div class="mx-scroll"><table class="mx"><thead><tr><th class="corner">vs →</th>${top.map((c) => `<th title="${esc(c)}"><span>${esc(short(c))}</span></th>`).join('')}</tr></thead><tbody>` +
+    top.map((r) => `<tr class="${r === focus ? 'on' : ''}"><th data-mxf="${esc(r)}">${esc(short(r))}</th>${top.map((c) => {
+      if (r === c) return '<td class="self"></td>';
+      const x = M.get(r, c); if (!x || x.n < minN) return '<td class="nil">·</td>';
+      const p = pc(x); return `<td style="background:${mxColor(p, x.n)}" data-mxc="${esc(r)}|${esc(c)}">${Math.round(p * 100)}<small>${x.n}</small></td>`;
+    }).join('')}</tr>`).join('') + `</tbody></table></div><p class="sub">Most-played ${top.length} legends. Big number = row legend's win %, small = games. Tap a row name to focus it.</p></li>`;
+
+  $('#dk-list').innerHTML = focusHTML + grid + (M.src.includes('TopDeck') ? '<li class="sub center">Matchup data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener">TopDeck.gg</a></li>' : '');
+  const setFocus = (k) => { S.prefs.mxFocus = k; savePrefs(); renderMatrix(); $('#v-decks').scrollIntoView({ block: 'start' }); };
+  $('#mx-focus').onchange = (e) => setFocus(e.target.value);
+  $('#mx-min').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mxMin = +b.dataset.n; savePrefs(); renderMatrix(); };
+  $('#dk-list').querySelectorAll('[data-mxf]').forEach((el) => el.addEventListener('click', (e) => { e.stopPropagation(); setFocus(el.dataset.mxf); }));
+  $('#dk-list').querySelectorAll('[data-mxc]').forEach((el) => el.addEventListener('click', (e) => {
+    e.stopPropagation(); const [r, c] = el.dataset.mxc.split('|'), x = M.get(r, c);
+    toast(`${short(r)} vs ${short(c)}: ${Math.round(pc(x) * 100)}% (${x.w}-${x.l}${x.d ? '-' + x.d : ''}, ${x.n} games)`);
+  }));
+}

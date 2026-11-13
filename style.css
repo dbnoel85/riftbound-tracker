@@ -430,3 +430,41 @@ html[data-text="xl"] body{zoom:1.2}
 .errata summary{cursor:pointer;margin-top:6px}
 
 #title{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* decks tabs: six of them — let them scroll on narrow phones instead of squashing */
+#dk-tab{overflow-x:auto;scrollbar-width:none}#dk-tab::-webkit-scrollbar{display:none}
+#dk-tab button{flex:1 0 auto;white-space:nowrap;padding-left:8px;padding-right:8px}
+
+/* matchup matrix */
+.mx-ctl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:10px}
+.mx-ctl label{display:flex;gap:8px;align-items:center;color:var(--sub);font-size:13px;flex:1 1 220px}
+.mx-ctl select{flex:1;padding:8px 10px}
+.mx-ctl .seg{margin:0;flex:0 0 auto}
+.mx-ctl .seg button{padding:7px 10px;font-size:12.5px}
+#dk-list .mx-focus{display:flex;gap:12px;align-items:center;padding:10px 4px 12px;border-bottom:1px solid var(--line)}
+.mx-focus img,.mx-focus .thumb{width:54px;height:75px;object-fit:cover;border-radius:3px;flex:none}
+.mx-focus .nm{font:400 19px/1.15 var(--display);color:var(--gold)}
+.mx-open{margin-top:6px;background:none;border:1px solid var(--line2);color:var(--gold);padding:5px 10px;border-radius:2px;font-size:12.5px}
+#dk-list .mx-row{display:grid;grid-template-columns:minmax(0,1fr) 34% 44px;gap:10px;align-items:center;padding:9px 4px;border-bottom:1px solid rgba(42,51,96,.6);cursor:pointer}
+.mx-row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mx-row .nm small{display:block;color:var(--sub);font-size:11.5px}
+.mx-row b{text-align:right;font-variant-numeric:tabular-nums}
+.mx-bar{position:relative;height:8px;background:var(--deep);border-radius:4px}
+.mx-bar::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line2)}
+.mx-bar i{position:absolute;top:0;bottom:0;border-radius:4px}
+.mx-bar i.p{background:var(--rift)}.mx-bar i.n{background:var(--ember)}
+#dk-list .mx-wrap{padding:14px 0 4px;list-style:none}
+.mx-scroll{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:3px;-webkit-overflow-scrolling:touch}
+table.mx{border-collapse:separate;border-spacing:0;font-size:12px;font-variant-numeric:tabular-nums}
+table.mx th,table.mx td{border-right:1px solid rgba(42,51,96,.7);border-bottom:1px solid rgba(42,51,96,.7)}
+table.mx thead th{position:sticky;top:0;background:var(--deep);height:92px;min-width:40px;vertical-align:bottom;padding:4px 0;z-index:1}
+table.mx thead th span{display:inline-block;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;color:var(--sub);font-weight:600}
+table.mx th.corner{left:0;z-index:3;color:var(--sub);font-weight:500;font-size:11px;text-align:left;padding-left:8px}
+table.mx tbody th{position:sticky;left:0;background:var(--deep);text-align:left;padding:0 10px;white-space:nowrap;font-weight:600;color:var(--text);z-index:2;cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+table.mx tr.on th{color:var(--gold);box-shadow:inset 3px 0 0 var(--gold)}
+table.mx td{width:40px;height:40px;text-align:center;font-weight:700;color:var(--text);cursor:pointer;line-height:1}
+table.mx td small{display:block;font-size:9px;font-weight:500;color:rgba(230,236,255,.6);margin-top:2px}
+table.mx td.self{background:repeating-linear-gradient(45deg,transparent 0 4px,rgba(58,69,128,.35) 4px 5px)}
+table.mx td.nil{color:var(--line2);font-weight:400;cursor:default}
+table.mx tr.on td{box-shadow:inset 0 2px 0 rgba(241,212,142,.5),inset 0 -2px 0 rgba(241,212,142,.5)}
+.mx-ctl .seg button{white-space:nowrap}

@@ -38,6 +38,11 @@ jobs:
       - name: Pull meta decks
         continue-on-error: true
         run: python scripts/update_decks.py
+      - name: Legend matchup matrix (TopDeck.gg)
+        continue-on-error: true
+        env:
+          TOPDECK_KEY: ${{ secrets.TOPDECK_KEY }}
+        run: python scripts/update_matrix.py
       - name: Keyword glossary
         continue-on-error: true
         run: python scripts/build_glossary.py

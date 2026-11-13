@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v37';
+const SHELL_VERSION = 'v38';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -1440,6 +1440,7 @@ async function renderDecks() {
   $('#dk-win').classList.toggle('hidden', D.tab === 'mine' && !deckQuery());
   if (deckQuery()) { renderDeckSearch(); return; }
   if (D.tab === 'staples') { $('#dk-win').classList.remove('hidden'); $('#dk-legal-wrap').classList.add('hidden'); renderStaples(); return; }
+  if (D.tab === 'matrix') { $('#dk-win').classList.remove('hidden'); $('#dk-legal-wrap').classList.add('hidden'); renderMatrix(); return; }
   if (D.tab === 'mine') { renderMyDecksList(); return; }
   const d = winData();
   const days = { '30d': '30', '14d': '14', '7d': '7' }[D.win] || '30';
