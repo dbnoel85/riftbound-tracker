@@ -137,30 +137,48 @@ function matchupHTML() {
 }
 
 /* ---------------------------------------------------------------- meta staples */
-function staples() {
-  const arch = ranked().filter((a) => a.list);
+function staples(win) {
+  const ws = (D.data && D.data.windows) || {};
+  const data = win ? ws[win] : null;
+  const arch = (data ? data.archetypes : ranked()).filter((a) => a.list || (a.key || []).length);
   const totalShare = arch.reduce((t, a) => t + (a.share || 0), 0) || 1;
+  const totalTop = arch.reduce((t, a) => t + (a.share || 0) * (a.top8 || 0), 0) || 1;
   const m = new Map();
   for (const a of arch) {
     const seen = new Set();
-    for (const [id, n] of Object.entries(a.list.main || {})) {
+    // the archetype's card play rates (how many of its lists run each card) — falls back to the sample list
+    const cards = (a.key || []).length ? a.key.map((k) => [k.id, k.x || 1, k.w || 0]) : Object.entries(a.list.main || {}).map(([id, n]) => [id, n, 1]);
+    for (const [id, n, w] of cards) {
       const c = D.rb[id]; if (!c || ['Rune', 'Legend'].includes(c.t)) continue;
       const k = banKey(c.n); if (seen.has(k)) continue; seen.add(k);
-      const e = m.get(k) || { n: c.n.replace(/\s*\([^)]*\)$/, ''), t: c.t, d: c.d, share: 0, copies: 0, decks: [] };
-      e.share += a.share || 0; e.copies += n * (a.share || 0); e.decks.push(a.name);
+      const e = m.get(k) || { n: c.n.replace(/\s*\([^)]*\)$/, ''), t: c.t, d: c.d, share: 0, top: 0, copies: 0, decks: [] };
+      e.share += (a.share || 0) * w; e.top += (a.share || 0) * (a.top8 || 0) * w; e.copies += n * (a.share || 0) * w; e.decks.push(a.name);
       m.set(k, e);
     }
   }
-  return [...m.values()].map((e) => ({ ...e, pct: e.share / totalShare, avg: e.copies / (e.share || 1) })).sort((a, b) => b.pct - a.pct);
+  return [...m.values()].map((e) => ({ ...e, pct: e.share / totalShare, win: e.top / totalTop, avg: e.copies / (e.share || 1) })).sort((a, b) => b.pct - a.pct);
 }
 function renderStaples() {
-  const list = staples().slice(0, 60);
+  const mode = S.prefs.stMode || 'played';
+  const now = staples(D.win), base = D.win !== '30d' ? staples('30d') : null;
+  const prev = new Map((base || []).map((e) => [banKey(e.n), e.pct]));
+  for (const e of now) e.trend = base ? e.pct - (prev.get(banKey(e.n)) || 0) : null;
+  let list = now.slice();
+  if (mode === 'winning') list.sort((a, b) => b.win - a.win);
+  if (mode === 'trending') list = list.filter((e) => e.trend != null).sort((a, b) => b.trend - a.trend);
+  list = list.slice(0, 60);
   const owned = ownedCountByName();
-  $('#dk-info').innerHTML = 'Cards played across the meta, weighted by how popular each deck is. Good singles to own.';
-  $('#dk-list').innerHTML = list.map((e, i) => {
+  $('#dk-info').innerHTML = `<div class="seg mini" id="st-mode"><button data-m="played" class="${mode === 'played' ? 'on' : ''}">Most played</button><button data-m="winning" class="${mode === 'winning' ? 'on' : ''}">In winning lists</button><button data-m="trending" class="${mode === 'trending' ? 'on' : ''}">Trending</button></div>` + ({
+    played: 'Cards across the whole meta, weighted by how popular each deck is and how many of its lists run the card.',
+    winning: 'Weighted by how often each deck reaches top-8 cuts — the cards in lists that actually win.',
+    trending: D.win === '30d' ? 'Pick <b>Last 7 days</b> or <b>Last 14 days</b> above to compare with the last 30 days and see rising tech cards.' : `Cards gaining the most play in the last ${D.win === '7d' ? 7 : 14} days compared with the last 30 — new tech.`,
+  })[mode];
+  $('#st-mode').onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; S.prefs.stMode = b.dataset.m; savePrefs(); renderStaples(); };
+  $('#dk-list').innerHTML = (mode === 'trending' && D.win === '30d') ? '' : list.map((e, i) => {
     const r = cardRef(e.n), have = owned.get(normName(e.n)) || 0, p = cardPrice(e.n);
+    const tr = e.trend != null ? `<span class="${e.trend >= 0 ? 'pos' : 'neg'}">${e.trend >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(e.trend * 100))} pts</span>` : '';
     return `<li class="item" ${r ? `data-k="${esc(r.k)}"` : ''}>${img(r && r.img)}<div class="info"><div class="nm"><b class="rk">#${i + 1}</b> ${esc(e.n)}${banTag(e.n)}</div>
-      <div class="meta wrap">${esc(e.t)} · in <b>${Math.round(e.pct * 100)}%</b> of meta decks · ~${e.avg.toFixed(1)} copies</div>
+      <div class="meta wrap">${esc(e.t)} · in <b>${Math.round(e.pct * 100)}%</b> of meta decks · <b>${Math.round(e.win * 100)}%</b> of top-cut weight · ~${e.avg.toFixed(1)} copies ${tr}</div>
       <div class="meta">${have ? `<span class="ok">✓ you own ${have}</span>` : '<span class="part">not owned</span>'} · ${money(p && p.m)}</div></div></li>`;
   }).join('') || '<li class="empty">No deck lists yet.</li>';
 }
@@ -192,6 +210,44 @@ function renderPreviews() {
 /* ---------------------------------------------------------------- sealed product prices */
 function sealedRows() {
   return S.cards.items.filter((it) => it.sealed && it.m != null).sort((a, b) => b.m - a.m);
+}
+/* Is a booster display worth opening? Expected singles value of 24 packs, from the pack layout
+   (7 common, 3 uncommon, 1 foil, 2 rare-or-better per pack) and community-counted hit rates
+   (~6.5 epics, ~3 alternate/special arts, ~0.9 overnumbered per box; signatures ~1 in 360 packs). */
+const BOX = { common: 168, uncommon: 72, foil: 24, epic: 6.5, alt: 3, over: 0.9, sig: 24 / 360, ult: 24 / 4000 };
+function boxValue(groupId) {
+  const items = S.cards.items.filter((it) => it.g === groupId && !it.sealed && it.m != null);
+  const pick = (f) => items.filter(f).map((it) => it.m);
+  const avg = (a) => a.length ? a.reduce((t, v) => t + v, 0) / a.length : 0;
+  const keep = (a, floor) => a.map((v) => v >= floor ? v : 0);
+  const tag = (it) => (it.n.match(/\(([^)]*)\)\s*$/) || [])[1] || '';
+  const pools = {
+    common: pick((it) => it.r === 'Common' && it.s === 'Normal'),
+    uncommon: pick((it) => it.r === 'Uncommon' && it.s === 'Normal'),
+    foil: pick((it) => (it.r === 'Common' || it.r === 'Uncommon') && it.s === 'Foil'),
+    rare: pick((it) => it.r === 'Rare'),
+    epic: pick((it) => it.r === 'Epic'),
+    alt: pick((it) => it.r === 'Showcase' && /Alternate|Special Art/.test(tag(it))),
+    over: pick((it) => it.r === 'Showcase' && /Overnumbered/.test(tag(it))),
+    sig: pick((it) => it.r === 'Showcase' && /Signature/.test(tag(it))),
+    ult: pick((it) => it.r === 'Showcase' && /Ultimate/.test(tag(it))),
+  };
+  if (!pools.rare.length || !pools.common.length) return null;
+  const hits = BOX.epic + (pools.alt.length ? BOX.alt : 0) + (pools.over.length ? BOX.over : 0);
+  const n = { ...BOX, rare: 48 - hits };
+  const calc = (floor) => {
+    let t = 0; const parts = {};
+    for (const k of ['common', 'uncommon', 'foil', 'rare', 'epic', 'alt', 'over', 'sig', 'ult']) { const v = (pools[k].length ? avg(keep(pools[k], floor)) : 0) * (n[k] || 0); parts[k] = v; t += v; }
+    return { total: t, parts };
+  };
+  const box = S.cards.items.find((it) => it.g === groupId && it.sealed && /Booster (Display|Box)$/.test(it.n));
+  return { all: calc(0), real: calc(1), box };
+}
+function boxEvHTML() {
+  const rows = S.cards.groups.map((g) => ({ g, v: boxValue(g.id) })).filter((x) => x.v && x.v.box);
+  if (!rows.length) return '';
+  return `<li style="list-style:none"><div class="card-box"><h3>Open or keep sealed?</h3><p class="sub">Estimated singles value of one 24-pack display at today's market prices. "Sellable" ignores cards under $1, which are hard to sell. Riot doesn't publish pull rates, so hit counts are community estimates — real boxes vary a lot.</p>
+    <ul class="dl">${rows.map(({ g, v }) => { const ratio = v.real.total / v.box.m; return `<li data-k="${esc(v.box.k)}"><span class="nm">${esc(g.name)}<small>Box ${money(v.box.m)} · singles ${money(v.all.total)} · sellable ${money(v.real.total)}</small></span><span class="st"><b class="${ratio >= 1 ? 'pos' : 'neg'}">${ratio >= 1.15 ? 'Open' : ratio >= 0.9 ? 'Close call' : 'Keep sealed'}</b><br><small class="sub">${Math.round(ratio * 100)}% of price</small></span></li>`; }).join('')}</ul></div></li>`;
 }
 
 /* ---------------------------------------------------------------- keyword glossary */
@@ -305,8 +361,19 @@ async function featuresReady() {
 async function fillDetailText(it) {
   const box = $('#detail-text'); if (!box) return;
   try { await Promise.all([loadCardText(), loadGlossary()]); } catch { return; }
-  const tx = textOf(it.n); if (!tx || !tx.text || $('#detail-text') !== box) return;
+  const tx = textOf(it.n); if (!tx || !tx.text || $('#detail-text') !== box) { fillErrata(it); return; }
   const kws = keywordsIn(tx.text + ' ' + (tx.extra || ''));
   box.innerHTML = `<div class="card-box ctext"><span class="label">Card text</span><p>${esc(tx.text).replace(/\[([^\]]+)\]/g, '<b>[$1]</b>')}</p>
     ${kws.length ? `<div class="kws">${kws.map((k) => `<div><b>${esc(k.k)}</b> — ${esc(k.text)}</div>`).join('')}</div>` : ''}</div>`;
+  fillErrata(it);
+}
+
+/** card page: official errata (from Riot's errata articles) */
+let ERR = null;
+async function loadErrata() { if (!ERR) { try { ERR = await (await fetch('data/errata.json')).json(); } catch { ERR = {}; } } return ERR; }
+async function fillErrata(it) {
+  const e = await loadErrata(); const list = e[banKey(it.n).replace(/\b\w/g, (c) => c)] || null;
+  const key = Object.keys(e).find((k) => banKey(k) === banKey(it.n)); const x = key && e[key];
+  const box = $('#detail-text'); if (!x || !box) return;
+  box.insertAdjacentHTML('beforeend', `<div class="card-box errata"><span class="label">Errata · ${esc(fmtDate(x[0].date))}</span><p><b>Current official text:</b><br>${esc(x[0].new).replace(/\n/g, '<br>')}</p><details><summary class="sub">Printed text</summary><p class="sub">${esc(x[0].old).replace(/\n/g, '<br>')}</p></details><a class="sub" href="${esc(x[0].url)}" target="_blank" rel="noopener">${esc(x[0].title)} ↗</a></div>`);
 }

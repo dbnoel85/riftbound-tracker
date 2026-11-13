@@ -41,6 +41,12 @@ jobs:
       - name: Keyword glossary
         continue-on-error: true
         run: python scripts/build_glossary.py
+      - name: Rulebook and rules articles
+        continue-on-error: true
+        run: python scripts/update_rules.py
+      - name: Card errata
+        continue-on-error: true
+        run: python scripts/update_errata.py
       - name: Ban list announcements
         continue-on-error: true
         run: python scripts/update_bans.py

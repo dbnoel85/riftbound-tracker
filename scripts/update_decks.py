@@ -378,6 +378,7 @@ def main():
                 "top8": a.get("top8_rate"), "topq": a.get("topq_rate"), "cutRate": a.get("cut_rate"),
                 "momentum": a.get("momentum"),
                 "key": [{"id": c.get("id"), "n": c.get("name"), "x": c.get("in_deck"), "w": c.get("weight")} for c in (a.get("cards") or [])],
+                "mu": [{"vs": m.get("vs"), "slug": m.get("vs_slug"), "wr": m.get("winrate"), "n": m.get("n")} for m in (a.get("matchups") or []) if m.get("n")],
                 "best": best and {
                     "event": best.get("event"), "place": best.get("place"), "players": best.get("players"),
                     "record": best.get("record"), "date": best.get("date"), "slug": best.get("slug"),

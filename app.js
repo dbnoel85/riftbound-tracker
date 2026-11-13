@@ -1422,7 +1422,8 @@ function ranked() {
 }
 function findArch(slug) { return ranked().find((x) => x.slug === slug) || ((D.data.windows || {})['30d'] || D.data).archetypes.find((x) => x.slug === slug); }
 function deckCandidates() {
-  const all = ranked();
+  let all = ranked();
+  if (S.prefs.legalOnly) all = all.filter((a) => !deckBans(a).length);
   if (D.tab === 'meta') return all.slice(0, 10);
   if (D.tab === 'other') return all.slice(10);
   return all.filter((a) => a.list).map((a) => ({ a, an: analyzeDeck(a) })).sort((x, y) => (y.an.pct - x.an.pct) || (x.an.costMain - y.an.costMain)).slice(0, 20).map((x) => x.a);
@@ -1449,8 +1450,18 @@ async function renderDecks() {
     other: `Every other legend, strongest first. Ones with too few matches to judge are at the end. <span class="flat">(${src})</span>`,
     ready: `Lists you're closest to building with the cards you own. <span class="flat">(${src})</span>`,
   }[D.tab];
+  // "Legal from <next ban date>" view: hide lists that use banned cards
+  const nextBan = [...BAN.byKey.values()].map((e) => (e.fmt.standard || {}).effective).filter((d) => d && d > todayISO()).sort()[0];
+  $('#dk-legal').checked = !!S.prefs.legalOnly;
+  $('#dk-legal-lbl').textContent = nextBan ? `Legal from ${shortDate(nextBan)} only` : 'Legal decks only';
+  $('#dk-legal-wrap').classList.toggle('hidden', D.tab === 'mine' || D.tab === 'staples');
+  if (S.prefs.legalOnly) {
+    const lastBan = [...BAN.byKey.values()].map((e) => (e.fmt.standard || {}).effective).filter(Boolean).sort().pop();
+    const post = lastBan && lastBan <= todayISO() ? Math.floor((Date.now() - new Date(lastBan + 'T00:00:00')) / 864e5) : -1;
+    $('#dk-info').innerHTML += `<br><span class="banline">Showing only decks with no banned cards. ${post < 0 ? `Stats still come from tournaments before the ${shortDate(lastBan)} bans — once they take effect, the 7-day view shows only post-ban play after a week.` : post < 7 ? `Bans took effect ${post} day${post === 1 ? '' : 's'} ago; the 7-day view will be fully post-ban in ${7 - post} day${7 - post === 1 ? '' : 's'}.` : 'The 7-day view now reflects only post-ban tournaments.'}</span>`;
+  }
   const rows = deckCandidates();
-  $('#dk-list').innerHTML = rows.map((a) => deckRowHTML(a)).join('') || '<li class="empty">Nothing here yet.</li>';
+  $('#dk-list').innerHTML = rows.map((a) => deckRowHTML(a)).join('') || `<li class="empty">${S.prefs.legalOnly ? 'No decks here are free of banned cards yet — new lists appear as post-ban tournaments are reported.' : 'Nothing here yet.'}</li>`;
 }
 function deckBans(a) {
   const ids = a.list ? [a.leader, ...Object.keys(a.list.main || {}), ...Object.keys(a.list.side || {})] : [a.leader, ...(a.key || []).map((k) => k.id)];
@@ -1574,6 +1585,11 @@ function renderDeck(slug) {
       html += `<div class="dsec">${title} (${ls.reduce((t, l) => t + l.cnt, 0)})</div><ul class="dl">` + ls.map(lineHTML).join('') + '</ul>';
     }
     if (an.side.length) html += `<div class="dsec">Sideboard (${an.side.reduce((t, l) => t + l.cnt, 0)})</div><ul class="dl">` + an.side.map(lineHTML).join('') + '</ul>';
+    html += '<div class="row" style="margin-top:10px"><button class="ghost" id="dk-export">Copy deck list</button></div><p class="sub">Plain text list (e.g. <i>3 Defy</i>) — pastes into riftbound.gg, other deck builders, Discord, or this app\'s Import list.</p>';
+    if ((a.mu || []).length) {
+      const mu = a.mu.slice().sort((x, y) => (y.n || 0) - (x.n || 0)).slice(0, 12);
+      html += `<div class="dsec">Matchups (last ${{ '30d': 30, '14d': 14, '7d': 7 }[D.win] || 30} days)</div><ul class="dl">` + mu.map((m) => `<li ${findArch(m.slug) ? `data-deck="${esc(m.slug)}"` : ''}><span class="nm">vs ${esc(m.vs)}<small>${(m.n || 0).toLocaleString()} matches</small></span><span class="st"><b class="${m.wr >= 0.5 ? 'pos' : 'neg'}">${Math.round(m.wr * 100)}%</b></span></li>`).join('') + '</ul>';
+    }
   } else if (mode === 'mine') {
     if (!an.subs.length) html += '<p class="sub">Nothing to swap — you own every card in this list.</p>';
     else {
@@ -1605,6 +1621,12 @@ function renderDeck(slug) {
     let n = 0; for (const l of an.lines.concat(an.side)) { if (l.miss <= 0) continue; const r = cardRef(l.c.n); if (!r) continue; const w = WL.items[r.k] || { qty: 0, added: Date.now() }; w.qty = Math.max(w.qty, l.miss); w.note = w.note || a.name.split(' - ')[0] + ' deck'; WL.items[r.k] = w; n++; }
     saveWL(); toast(`${n} card${n === 1 ? '' : 's'} added to your wishlist`);
   };
+  const ex = $('#dk-export');
+  if (ex) ex.onclick = async () => {
+    const lines = []; for (const [id, n] of Object.entries(a.list.main)) lines.push(`${n} ${D.rb[id]?.n || id}`);
+    if (Object.keys(a.list.side || {}).length) { lines.push('', 'Sideboard'); for (const [id, n] of Object.entries(a.list.side)) lines.push(`${n} ${D.rb[id]?.n || id}`); }
+    try { await navigator.clipboard.writeText(`${a.name}\n` + lines.join('\n')); toast('Deck list copied'); } catch { toast('Couldn\'t copy on this device'); }
+  };
   const cp = $('#dk-copy');
   if (cp) cp.onclick = async () => {
     const txt = an.lines.concat(an.side).filter((l) => l.miss > 0).map((l) => `${l.miss} ${l.c.n}`).join('\n');
@@ -1629,6 +1651,7 @@ function wireDecks() {
     if (!D.q) $('#dk-sug').innerHTML = '';
     renderDecks(); if (!D.q) $('#dk-q').focus();
   };
+  $('#dk-legal').onchange = (e) => { S.prefs.legalOnly = e.target.checked; savePrefs(); renderDecks(); };
   $('#dk-win').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; D.win = b.dataset.w; S.prefs.deckWin = D.win; savePrefs(); renderDecks(); };
 }
 
