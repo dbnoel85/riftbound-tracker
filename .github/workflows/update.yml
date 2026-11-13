@@ -38,6 +38,9 @@ jobs:
       - name: Pull meta decks
         continue-on-error: true
         run: python scripts/update_decks.py
+      - name: Keyword glossary
+        continue-on-error: true
+        run: python scripts/build_glossary.py
       - name: Ban list announcements
         continue-on-error: true
         run: python scripts/update_bans.py

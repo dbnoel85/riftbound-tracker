@@ -1,0 +1,106 @@
+{
+"Accelerate": {
+"text": "You may pay 1 energy and a Fury rune as an additional cost to have me enter ready.",
+"cards": 44
+},
+"Action": {
+"text": "Play on your turn or in showdowns.",
+"cards": 99
+},
+"Ambush": {
+"text": "You may play me as a [Reaction] to a battlefield where you have units.",
+"cards": 22
+},
+"Assault": {
+"text": "+1 might while I'm an attacker.",
+"cards": 22
+},
+"Assault N": {
+"text": "+N might while I'm an attacker.",
+"cards": 22
+},
+"Backline": {
+"text": "I must be assigned combat damage last.",
+"cards": 4
+},
+"Burn N": {
+"text": "Put the top N cards of your Main Deck into your trash.",
+"cards": 6
+},
+"Deflect": {
+"text": "Opponents must pay a rune of any color to choose me with a spell or ability.",
+"cards": 50
+},
+"Deflect N": {
+"text": "Opponents must pay a rune of any color to choose me with a spell or ability.",
+"cards": 9
+},
+"Deploy": {
+"text": "Play this only to a battlefield. When an opponent holds here, kill this.",
+"cards": 19
+},
+"Disarm": {
+"text": "When I attack, give an enemy unit here -1 might this turn.",
+"cards": 10
+},
+"Disarm N": {
+"text": "When I attack, give an enemy unit here -N might this turn.",
+"cards": 3
+},
+"Ganking": {
+"text": "I can move from battlefield to battlefield.",
+"cards": 44
+},
+"Hidden": {
+"text": "Hide now for a rune of any color to react with later for 0 energy.",
+"cards": 59
+},
+"Hunt": {
+"text": "When I conquer or hold, gain 1 XP.",
+"cards": 7
+},
+"Hunt N": {
+"text": "When I conquer or hold, gain N XP.",
+"cards": 10
+},
+"Predict": {
+"text": "Look at the top card of your Main Deck. You may recycle it.",
+"cards": 6
+},
+"Predict N": {
+"text": "Look at the top N cards of your Main Deck. Recycle any of them and put the rest back in any order.",
+"cards": 4
+},
+"Reaction": {
+"text": "Play any time, even before spells and abilities resolve.",
+"cards": 86
+},
+"Shield": {
+"text": "+1 might while I'm a defender.",
+"cards": 21
+},
+"Shield N": {
+"text": "+N might while I'm a defender.",
+"cards": 25
+},
+"Tank": {
+"text": "I must be assigned combat damage first.",
+"cards": 43
+},
+"Temporary": {
+"text": "Kill it at the start of its controller's Beginning Phase, before scoring.",
+"cards": 13
+},
+"Unique": {
+"text": "Your deck can have only 1 card with this name.",
+"cards": 3
+},
+"Vision": {
+"text": "When you play me, look at the top card of your Main Deck. You may recycle it.",
+"cards": 13
+},
+"Weaponmaster": {
+"text": "When you play me, you may [Equip] one of your Equipment to me for a rune of any color less, even if it's already attached.",
+"cards": 19
+}
+}

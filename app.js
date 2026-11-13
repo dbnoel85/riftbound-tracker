@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v35';
+const SHELL_VERSION = 'v36';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -15,7 +15,7 @@ const S = {
   history: null,        // data/history.json (lazy)
   hashes: null,         // data/hashes.json (lazy, for scanner)
   inv: loadJSON(INV_KEY, { items: {} }),
-  prefs: loadJSON(PREF_KEY, { addSet: 'all', mvScope: 'mine', mvMetric: 'pct', mvMin: '1', sort: 'value', seenNew: [] }),
+  prefs: Object.assign({ addSet: 'all', mvScope: 'mine', mvMetric: 'pct', mvMin: '1', sort: 'value', seenNew: [] }, loadJSON(PREF_KEY, {})),
   view: 'collection',
 };
 
@@ -71,7 +71,11 @@ async function loadBans() {
 /** {state:'banned'|'soon', fmt, effective, url} for Standard (or 2v2-only), or null */
 function banInfo(name) {
   const e = BAN.byKey.get(banKey(name)); if (!e) return null;
-  const f = e.fmt.standard ? 'standard' : '2v2', x = e.fmt[f];
+  const mine = S.prefs.format === '2v2' ? '2v2' : 'standard';
+  // 2v2 uses the whole Standard list plus its own; Standard ignores 2v2-only bans except to mention them
+  const f = e.fmt[mine] ? mine : e.fmt.standard ? 'standard' : mine === 'standard' && e.fmt['2v2'] ? '2v2' : null;
+  if (!f) return null;
+  const x = e.fmt[f];
   return { state: (x.effective || '') <= todayISO() ? 'banned' : 'soon', fmt: f, both: !!(e.fmt.standard && e.fmt['2v2']), effective: x.effective, url: x.url, title: x.title };
 }
 const shortDate = (iso) => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
@@ -221,9 +225,11 @@ function renderCollection() {
     $$('#col-setmode button').forEach((b) => b.classList.toggle('on', b.dataset.m === (S.prefs.colMode || 'owned')));
     $('#col-setmode [data-m=owned]').textContent = `Owned (${x.have})`;
     $('#col-setmode [data-m=missing]').textContent = `Missing (${x.total - x.have})`;
+    $('#col-setmode [data-m=binder]').textContent = 'Binder';
     $('#sum-label').textContent = `${g ? g.name : 'Set'} value`;
   } else $('#sum-label').textContent = 'Collection value';
   if (cur !== 'all' && S.prefs.colMode === 'missing') { renderMissing(+cur); return; }
+  if (cur !== 'all' && S.prefs.colMode === 'binder') { $('#col-list').innerHTML = '<li style="list-style:none">' + renderBinder(cur) + '</li>'; $$('#col-list .bslot').forEach((b) => b.onclick = () => openDetail(b.dataset.k)); return; }
   $('#col-list').classList.remove('missing');
   const rows = ownedRows().filter((r) => inSet(r.it));
   let total = 0, totalPrev = 0, count = 0;
@@ -361,6 +367,13 @@ async function renderAdd() {
   $('#add-sets').innerHTML = chips.map(([v, l]) => `<button data-set="${v}" class="${S.prefs.addSet === v ? 'on' : ''}">${esc(l)}</button>`).join('');
   const q = $('#add-q').value.trim().toLowerCase();
   const sealed = $('#add-sealed').checked;
+  // search everywhere: offer decks and keyword help for what was typed
+  const ev = $('#add-everywhere');
+  if (ev) {
+    const kw = q.length >= 3 && typeof GL !== 'undefined' && GL ? Object.keys(GL).find((k) => k.toLowerCase().replace(/ n$/, '') === q) : null;
+    ev.innerHTML = q.length >= 3 ? `<button data-go="decks">Decks with “${esc(q)}” ›</button>${kw ? `<button data-go="kw">What is ${esc(kw.replace(/ N$/, ''))}? ›</button>` : ''}` : '';
+    ev.onclick = (e) => { const b = e.target.closest('[data-go]'); if (!b) return; if (b.dataset.go === 'decks') { show('decks'); D.q = $('#add-q').value.trim(); $('#dk-q').value = D.q; renderDecks(); } else { GLQ = kw.replace(/ N$/, ''); pushSheet(renderGlossary); } };
+  }
   const toks = q.split(/\s+/).filter(Boolean);
   const terms = searchTerms(q);
   const res = []; ADD.snip = new Map();
@@ -410,6 +423,15 @@ function renderMovers() {
   $$('#mv-metric button').forEach((b) => b.classList.toggle('on', b.dataset.v === metric));
   $('#mv-min').value = S.prefs.mvMin;
   $('#mv-period').textContent = S.cards.refDate ? `Change from ${fmtDate(S.cards.refDate)} to ${fmtDate(S.cards.updated)}` : 'Weekly change will appear after the first week of prices.';
+  $('#mv-metric').classList.toggle('hidden', scope === 'sealed');
+  if (scope === 'sealed') {
+    const rows = sealedRows();
+    $('#mv-up').innerHTML = rows.map((it) => `<li class="item" data-k="${esc(it.k)}">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}</div><div class="meta">${esc(setName(it.g))}</div></div><div class="px"><b>${money(it.m)}</b><small>${chg(it.d, it.pc)}</small></div></li>`).join('') || '<li class="empty">No sealed products yet.</li>';
+    $('#mv-down').innerHTML = '';
+    $$('#v-movers h2, #v-movers .mvh').forEach((h, i) => { h.dataset.orig = h.dataset.orig || h.textContent; h.textContent = i === 0 ? 'Sealed product prices' : ''; });
+    return;
+  }
+  $$('#v-movers h2, #v-movers .mvh').forEach((h) => { if (h.dataset.orig) h.textContent = h.dataset.orig; });
   let pool;
   if (scope === 'mine') pool = ownedRows().map((r) => ({ it: r.it, qty: r.e.qty }));
   else pool = S.cards.items.filter((it) => !it.sealed).map((it) => ({ it, qty: 0 }));
@@ -430,7 +452,7 @@ function fmtDate(s) { if (!s) return '—'; const [y, m, d] = s.split('-').map(N
 
 /* ----- more / settings */
 function renderMore() {
-  renderBackupInfo();
+  renderBackupInfo(); renderSync(); renderPrefs();
   if (!S.cards) return;
   const cardsCount = new Set(S.cards.items.filter((i) => !i.sealed).map((i) => i.p)).size;
   $('#data-info').innerHTML = `Last updated <b>${fmtDate(S.cards.updated)}</b> · ${cardsCount.toLocaleString()} cards & variants across ${S.cards.groups.length} sets/promo groups.`;
@@ -458,6 +480,7 @@ function renderDetail(k) {
     <h2>${esc(it.n)}${variantTags(it)}</h2>
     <div class="sub">${esc(setName(it.g))}${it.num ? ' · ' + esc(it.num) : ''}${it.r ? ' · ' + esc(it.r) : ''}</div>
     ${banBox(it.n)}
+    <div id="detail-text"></div>
     <div class="card-box mkt">
       <span class="label">TCGplayer market price${it.s !== 'Normal' ? ' · ' + esc(it.s) : ''}</span>
       <b class="big">${it.tm != null || !('tm' in it) ? money(it.m) : '—'}</b>
@@ -511,6 +534,7 @@ function renderDetail(k) {
   $$('#sheet [data-open]').forEach((b) => b.onclick = () => openDetail(b.dataset.open));
   renderWishBox(k);
   drawChart(it);
+  if (typeof fillDetailText === 'function') fillDetailText(it);
 }
 /* ---- price chart: 7 / 14 / 30 days / max, with a slider to read exact points */
 const HIST = {};
@@ -984,7 +1008,7 @@ async function runScan(canvas, manual) {
       const it = pickFinish(res.best.items);
       addCard(it.k);
       if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-      SCAN.last = { k: it.k, res };
+      SCAN.last = { k: it.k, res }; if (typeof sessionAdd === 'function') sessionAdd(it.k);
       if (res.group) { SCAN.holdGroup = res.group; SCAN.holdMiss = 0; SCAN.prevGroup = null; SCAN.lastAdd = { group: res.group, t: Date.now(), gap: false }; } else SCAN.holdHash = res.hash;
       showAdded(it, res.best, res.cands);
       msg.textContent = `Added ✓ ${it.n}`;
@@ -1087,6 +1111,50 @@ async function restoreSnapshot(t) {
   for (const [k, v] of Object.entries(s.data)) { try { localStorage.setItem(k, v); } catch {} }
   location.reload();
 }
+/* ---- settings: sync, format, text size */
+function renderPrefs() {
+  $$('#pref-format button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.format || 'standard')));
+  $$('#pref-text button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.text || 'm')));
+}
+function applyTextSize() { document.documentElement.dataset.text = S.prefs.text || 'm'; }
+function renderSync() {
+  const box = $('#sync-body'); if (!box) return;
+  const st = window.RBTSync ? RBTSync.state() : { configured: false };
+  if (!st.configured) { box.innerHTML = '<p class="sub">Cloud sync is being set up. Until then your data stays on this device (and in your backups).</p>'; return; }
+  if (st.email) {
+    const when = st.last ? new Date(st.last).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+    box.innerHTML = `<p class="sub">Signed in as <b>${esc(st.email)}</b>. Your cards, decks, wishlist, events and matches sync automatically to every device you sign in on.</p>
+      <p class="sub">${st.status === 'error' ? '⚠ ' + esc(st.err || 'Sync problem — will retry') : st.status === 'saving' ? 'Saving…' : st.status === 'joining' ? 'Combining this device with your account…' : when ? '✓ Up to date · ' + when : '✓ Connected'}</p>
+      <div class="row"><button class="ghost" id="sync-now">Sync now</button><button class="ghost" id="sync-out">Sign out</button></div>`;
+    $('#sync-now').onclick = () => RBTSync.syncNow();
+    $('#sync-out').onclick = async () => { if (await confirmBox('Sign out? Your data stays on this device; it just stops syncing.')) RBTSync.signOut(); };
+    return;
+  }
+  box.innerHTML = `<p class="sub">Sign in to keep your collection and decks the same on your phone, iPad and computer. The first time you sign in, everything already on this device is added to your account — nothing is replaced.</p>
+    <button class="primary" id="sync-google" style="width:100%">Continue with Google</button>
+    <div class="or sub center" style="margin:10px 0">or with email</div>
+    <input id="sync-email" type="email" placeholder="Email" autocomplete="email" style="width:100%;margin-bottom:6px">
+    <input id="sync-pw" type="password" placeholder="Password (6+ characters)" autocomplete="current-password" style="width:100%">
+    <div class="row" style="margin-top:8px"><button class="ghost" id="sync-in">Sign in</button><button class="ghost" id="sync-new">Create account</button></div>
+    <button class="linkbtn sub" id="sync-forgot" style="margin-top:6px">Forgot password?</button>
+    ${st.err && st.status !== 'signed-out' ? `<p class="sub">⚠ ${esc(st.err)}</p>` : ''}`;
+  const err = (e) => toast(({ 'auth/invalid-credential': 'Email or password is wrong', 'auth/wrong-password': 'Email or password is wrong', 'auth/user-not-found': 'No account with that email — tap Create account', 'auth/email-already-in-use': 'That email already has an account — tap Sign in', 'auth/weak-password': 'Use at least 6 characters', 'auth/invalid-email': 'That email doesn\'t look right', 'auth/popup-closed-by-user': 'Sign-in was cancelled' })[e.code] || 'Sign-in failed: ' + (e.message || e), 4000);
+  $('#sync-google').onclick = () => RBTSync.google().catch(err);
+  const em = () => $('#sync-email').value.trim(), pw = () => $('#sync-pw').value;
+  $('#sync-in').onclick = () => RBTSync.email(em(), pw(), false).catch(err);
+  $('#sync-new').onclick = () => RBTSync.email(em(), pw(), true).catch(err);
+  $('#sync-forgot').onclick = () => { if (!em()) return toast('Type your email first'); RBTSync.reset(em()).then(() => toast('Password reset email sent'), err); };
+}
+/** another device changed synced data: reload it into the app and redraw */
+function reloadFromStorage() {
+  S.inv = loadJSON(INV_KEY, { items: {} });
+  MD.decks = (loadJSON(MD_KEY, {}).decks) || [];
+  EV.events = (loadJSON(EV_KEY, {}).events) || [];
+  WL.items = (loadJSON(WL_KEY, {}).items) || {};
+  if (typeof MT !== 'undefined') MT.list = (loadJSON(MT_KEY, {}).list) || [];
+  if (!$('#sheet').classList.contains('hidden')) return; // don't yank an open card/deck screen
+  show(S.view);
+}
 async function renderBackupInfo() {
   const last = S.prefs.lastBackup;
   $('#bk-last').innerHTML = last ? `Last backup file saved ${new Date(last).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '<b>You haven\'t saved a backup file yet.</b>';
@@ -1126,6 +1194,8 @@ function wire() {
   $$('.tabs button').forEach((b) => b.onclick = () => show(b.dataset.view));
   $('#hdr-add').onclick = () => show('add');
   $('#hdr-more').onclick = () => show('more');
+  $('#pref-format').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.format = b.dataset.v; savePrefs(); renderPrefs(); toast(b.dataset.v === '2v2' ? 'Showing 2v2 bans and legality' : 'Showing Standard bans and legality'); };
+  $('#pref-text').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.text = b.dataset.v; savePrefs(); applyTextSize(); renderPrefs(); };
   wireDecks(); wireScore(); wireEvents();
   $('#col-filter').oninput = renderCollection;
   $('#col-top').onclick = (e) => { const b = e.target.closest('[data-c]'); if (!b) return; S.prefs.colView = b.dataset.c; savePrefs(); renderCollection(); };
@@ -1231,7 +1301,10 @@ function sectionOf(id, legendTags) {
 }
 
 /** Ownership of a list + suggested substitutes from cards you own (or cheap picks to buy). */
-function analyzeDeck(a) {
+/** banned (now or already announced) in the format you play — never suggest these, and replace them in "My version" */
+const bannedForMe = (name) => { const b = banInfo(name); return !!b && (b.fmt === (S.prefs.format === '2v2' ? '2v2' : 'standard') || (b.fmt === 'standard')); };
+function analyzeDeck(a, opts = {}) {
+  const legal = opts.legal;
   const owned = ownedCountByName();
   const used = new Map();
   const legend = D.rb[a.list.leader || a.leader] || D.rb[a.leader] || { d: a.colors, tg: [] };
@@ -1244,9 +1317,10 @@ function analyzeDeck(a) {
     let sec = sectionOf(id, legendTags);
     if (sec === 'Champion') { if (champTaken) sec = 'Unit'; else champTaken = true; } // one chosen champion copy; extras are units
     const n = normName(c.n);
-    const have = Math.max(0, Math.min(cnt, (owned.get(n) || 0) - (used.get(n) || 0)));
+    const banned = legal && sec !== 'Legend' && bannedForMe(c.n);
+    const have = banned ? 0 : Math.max(0, Math.min(cnt, (owned.get(n) || 0) - (used.get(n) || 0)));
     used.set(n, (used.get(n) || 0) + have);
-    lines.push({ id, c, cnt, have, miss: cnt - have, sec });
+    lines.push({ id, c, cnt, have, miss: cnt - have, sec, banned });
   }
   // a chosen champion line counts 1; any remaining copies of that card are listed as units
   for (const l of lines) if (l.sec === 'Champion' && l.cnt > 1) {
@@ -1275,7 +1349,7 @@ function analyzeDeck(a) {
     return s;
   };
   const okCand = (id, cand, miss) => {
-    if (!cand || cand.b || !cand.n || id === miss.id) return false;
+    if (!cand || cand.b || !cand.n || id === miss.id || bannedForMe(cand.n)) return false;
     if (miss.sec === 'Battlefield') return cand.t === 'Battlefield';
     if (miss.sec === 'Rune') return cand.t === 'Rune' && cand.d.some((d) => miss.c.d.includes(d));
     if (miss.sec === 'Champion') return cand.st === 'Champion' && (cand.tg || []).some((t) => legendTags.includes(t));
@@ -1314,7 +1388,7 @@ function analyzeDeck(a) {
   const mainHave = lines.filter((l) => !['Legend', 'Rune', 'Battlefield'].includes(l.sec)).reduce((t, l) => t + l.have, 0);
   const allLines = lines.concat(side);
   let cost = 0, costMain = 0;
-  for (const l of allLines) if (l.miss > 0) { const p = cardPrice(l.c.n); if (p) { cost += p.m * l.miss; if (l.sec !== 'Side') costMain += p.m * l.miss; } }
+  for (const l of allLines) if (l.miss > 0 && !l.banned) { const p = cardPrice(l.c.n); if (p) { cost += p.m * l.miss; if (l.sec !== 'Side') costMain += p.m * l.miss; } }
   const pct = lines.reduce((t, l) => t + l.have, 0) / Math.max(1, lines.reduce((t, l) => t + l.cnt, 0));
   return { lines, side, subs, mainTotal, mainHave, cost, costMain, pct, legendTags };
 }
@@ -1364,6 +1438,7 @@ async function renderDecks() {
   try { await loadDecks(); } catch { $('#dk-list').innerHTML = '<li class="empty">Deck data isn\'t available yet — check back after the next daily update.</li>'; return; }
   $('#dk-win').classList.toggle('hidden', D.tab === 'mine' && !deckQuery());
   if (deckQuery()) { renderDeckSearch(); return; }
+  if (D.tab === 'staples') { $('#dk-win').classList.remove('hidden'); renderStaples(); return; }
   if (D.tab === 'mine') { renderMyDecksList(); return; }
   const d = winData();
   const days = { '30d': '30', '14d': '14', '7d': '7' }[D.win] || '30';
@@ -1480,7 +1555,7 @@ function renderDeck(slug) {
       ${a.key && a.key.length ? `<div class="dsec">Key cards</div><ul class="dl">${a.key.map((k) => `<li><span class="cnt">${k.x || ''}×</span><span class="nm">${esc(k.n)}</span><span class="st">${Math.round((k.w || 0) * 100)}% of lists</span></li>`).join('')}</ul>` : ''}</div>`;
     $('#sheet-content').innerHTML = html; return;
   }
-  const an = analyzeDeck(a);
+  const an = analyzeDeck(a, { legal: (D.deckMode || 'list') === 'mine' });
   const mode = D.deckMode || 'list';
   const dbans = deckBans(a);
   if (dbans.length) html += `<div class="card-box banbox"><b>${dbans.every((x) => x.b.state === 'soon') ? '⚠ This list has cards being banned' : '⛔ This list has banned cards'}</b>
@@ -1502,14 +1577,14 @@ function renderDeck(slug) {
   } else if (mode === 'mine') {
     if (!an.subs.length) html += '<p class="sub">Nothing to swap — you own every card in this list.</p>';
     else {
-      html += '<p class="sub">Swaps from your own cards for what you\'re missing, chosen by how often they appear in winning lists of the same domains, then closest cost.</p><ul class="dl">';
+      html += '<p class="sub">Swaps from your own cards for what you\'re missing (and for any banned cards), chosen by how often they appear in winning lists of the same domains, then closest cost.</p><ul class="dl">';
       for (const sb of an.subs) {
         const m = sb.miss;
-        html += `<li><span class="cnt no">−${m.miss}</span><span class="nm">${esc(m.c.n)}<small>${esc(m.sec)}${m.c.c != null ? ' · ' + m.c.c + ' energy' : ''}</small></span><span class="st">${money(cardPrice(m.c.n)?.m)}</span></li>`;
+        html += `<li${m.banned ? ' class="banned"' : ''}><span class="cnt no">−${m.miss}</span><span class="nm">${esc(m.c.n)}${m.banned ? banTag(m.c.n) : ''}<small>${esc(m.sec)}${m.c.c != null ? ' · ' + m.c.c + ' energy' : ''}</small></span><span class="st">${m.banned ? '<span class="no">replace</span>' : money(cardPrice(m.c.n)?.m)}</span></li>`;
         for (const p of sb.picks) html += `<li class="sub-line">↳ play <b>${p.take}× ${esc(p.c.n)}</b> (you own it${p.c.c != null ? ' · ' + p.c.c + ' energy' : ''}${D.pop[p.id] ? ' · in ' + Math.round(D.pop[p.id] / D.nLists * 100) + '% of top lists' : ''})</li>`;
         if (sb.still > 0) html += sb.buy
           ? `<li class="sub-line">↳ still short ${sb.still} — budget pick: <b>${esc(sb.buy.c.n)}</b> ${money(sb.buy.p.m)}</li>`
-          : `<li class="sub-line">↳ still short ${sb.still} — no owned substitute; get the original</li>`;
+          : `<li class="sub-line">↳ still short ${sb.still} — ${m.banned ? 'no legal substitute found' : 'no owned substitute; get the original'}</li>`;
       }
       html += '</ul>';
     }
@@ -1518,7 +1593,7 @@ function renderDeck(slug) {
     if (!buy.length) html += '<p class="sub">Nothing to buy.</p>';
     else {
       html += '<ul class="dl">' + buy.map((l) => { const p = cardPrice(l.c.n), r = cardRef(l.c.n); return `<li data-card="${esc(r ? r.k : '')}"><span class="cnt">${l.miss}×</span><span class="nm">${esc(l.c.n)}<small>${l.sec === 'Side' ? 'Sideboard' : esc(l.sec)}</small></span><span class="st">${p ? money(p.m * l.miss) : '—'}</span></li>`; }).join('') + '</ul>';
-      html += `<div class="row"><button class="ghost" id="dk-copy">Copy list</button><button class="ghost" id="dk-wish">♡ Add all to wishlist</button></div><p class="sub">Copy list pastes straight into TCGplayer Mass Entry.</p>`;
+      html += `<div class="row"><button class="ghost" id="dk-copy">Copy list</button><button class="ghost" id="dk-wish">♡ Add all to wishlist</button></div><p class="sub">Copy list, then paste it into <a href="https://www.tcgplayer.com/massentry" target="_blank" rel="noopener">TCGplayer Mass Entry ↗</a> to buy everything at once.</p>`;
     }
   }
   html += `<button class="primary ghost" id="dk-save" style="width:100%;padding:13px;margin-top:14px">Save to My decks</button>
@@ -1610,9 +1685,10 @@ function renderMyDecksList() {
       <div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div>
       <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div></div></li>`;
   }).join('');
-  $('#dk-list').innerHTML = `<li><button class="primary ghost" id="md-new" style="width:100%;padding:13px;margin-bottom:10px">＋ New deck</button></li>` +
+  $('#dk-list').innerHTML = `<li class="row" style="list-style:none;margin-bottom:10px"><button class="primary ghost" id="md-new" style="flex:2;padding:13px">＋ New deck</button><button class="ghost" id="md-import" style="flex:1">Import list</button></li>` +
     (rows || '<li class="empty">No decks yet. Tap <b>New deck</b> and pick a legend to start.</li>');
   $('#md-new').onclick = () => pushSheet(renderLegendPicker);
+  $('#md-import').onclick = () => pushSheet(renderDeckImport);
 }
 
 function renderLegendPicker() {
@@ -1650,7 +1726,7 @@ function mdLine(dk, id, n, zone, an) {
 }
 function renderMyDeck(id) {
   const dk = mdGet(id); if (!dk) { closeSheet(); return; }
-  const a = mdArch(dk); const an = analyzeDeck(a); an.all = an.lines.concat(an.side);
+  const a = mdArch(dk); const an = analyzeDeck(a, { legal: true }); an.all = an.lines.concat(an.side);
   const c = mdCounts(dk); const probs = mdProblems(dk);
   const leg = cardRef(D.rb[dk.leader]?.n || '');
   const groups = {};
@@ -1746,8 +1822,17 @@ function renderMdAdd(id) {
   if (MDS.text && !TXT.byName) loadCardText().then(draw, () => {});
   $('#mda-list').onclick = (e) => { const b = e.target.closest('[data-md]'); if (!b) return; mdBump(id, b.dataset.id, MDS.zone, b.dataset.md === 'inc' ? 1 : -1); draw(); };
 }
-function saveMetaToMine(a) {
+async function saveMetaToMine(a) {
   const dk = { id: Date.now().toString(36), name: a.name.split(' - ')[0] + ' (from meta)', leader: a.list.leader || a.leader, main: { ...a.list.main }, side: { ...(a.list.side || {}) }, created: Date.now(), updated: Date.now() };
+  const banned = Object.keys(dk.main).filter((id) => D.rb[id] && D.rb[id].t !== 'Legend' && bannedForMe(D.rb[id].n));
+  if (banned.length && await confirmBox(`This list has ${banned.length} banned card${banned.length === 1 ? '' : 's'} (${banned.map((id) => D.rb[id].n).join(', ')}). Swap ${banned.length === 1 ? 'it' : 'them'} for the suggested replacements?`)) {
+    const an = analyzeDeck(a, { legal: true });
+    for (const sb of an.subs.filter((x) => x.miss.banned)) {
+      delete dk.main[sb.miss.id];
+      for (const p of sb.picks) dk.main[p.id] = (dk.main[p.id] || 0) + p.take;
+      if (sb.still > 0 && sb.buy) dk.main[sb.buy.id] = (dk.main[sb.buy.id] || 0) + sb.still;
+    }
+  }
   MD.decks.push(dk); saveMD(); toast('Saved to My decks — tweak away');
   pushSheet(() => renderMyDeck(dk.id));
 }
@@ -1775,6 +1860,7 @@ async function renderEvents() {
   if (EVS.tab === 'upcoming') return renderUpcoming();
   if (EVS.tab === 'news') return renderNews();
   const body = $('#ev-body'); const today = todayISO();
+  setTimeout(() => { if (EVS.tab === 'mine' && typeof MT !== 'undefined' && MT.list.length) body.insertAdjacentHTML('afterbegin', matchupHTML()); }, 0);
   const up = EV.events.filter((e) => (e.date || '9999') >= today).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   const past = EV.events.filter((e) => e.date && e.date < today).sort((a, b) => b.date.localeCompare(a.date));
   // overall stats
@@ -1829,6 +1915,8 @@ async function newsTopHTML() {
       <div class="row" style="justify-content:space-between;margin-top:8px"><a class="sub" href="${esc(a.url)}" target="_blank" rel="noopener">Read Riot's announcement ↗</a><button class="ghost sm" id="ban-all">Full ban list</button></div>
     </div>`;
   }
+  const pvN = typeof previewCards === 'function' ? previewCards().length : 0;
+  if (pvN) h += `<div class="card-box" style="display:flex;justify-content:space-between;align-items:center"><span>✨ <b>${pvN} new cards revealed</b> for upcoming sets</span><button class="ghost sm" id="news-prev">See them</button></div>`;
   const rel = (EVS.rel.releases || []).filter((r) => !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || r.date >= todayISO());
   if (rel.length) {
     h += '<h2>Upcoming releases</h2><ul class="list rel">' + rel.map((r) => {
@@ -1898,6 +1986,7 @@ async function renderNews() {
   html += `<p class="sub center">Results from tournament data (riftbound.gg / dotgg)${hl.length ? ' and playriftbound.com' : ''}. Updated ${N.updated ? unixDay(N.updated) : '—'}.</p>`;
   body.innerHTML = html;
   const ba = $('#ban-all'); if (ba) ba.onclick = () => pushSheet(renderBanList);
+  const np = $('#news-prev'); if (np) np.onclick = () => pushSheet(renderPreviews);
   $$('#ev-body .banc[data-k]').forEach((li) => li.onclick = () => openDetail(li.dataset.k));
   $('#news-f').onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; EVS.nf = b.dataset.f; renderNews(); };
   $$('#ev-body .nres[data-arch]').forEach((li) => li.onclick = (ev) => { if (ev.target.closest('a')) return; openDeck(li.dataset.arch); });
@@ -1988,7 +2077,7 @@ async function offerRoundLog(win, me, opp, oppName) {
   const e = EV.events.filter((x) => x.date && x.date <= t && (x.end || x.date) >= t).sort((a, b) => (b.mod || b.created) - (a.mod || a.created))[0];
   if (!e) return;
   if (!(await confirmBox(`Add this match (${win ? 'win' : 'loss'} ${me}–${opp} vs ${oppName}) to "${e.name || 'today\'s event'}" as round ${(e.rounds || []).length + 1}?`))) return;
-  e.rounds = e.rounds || []; e.rounds.push({ res: win ? 'W' : 'L', opp: oppName === 'Opponent' ? '' : oppName, leg: '', g: `${me}-${opp}`, notes: '' });
+  e.rounds = e.rounds || []; e.rounds.push({ res: win ? 'W' : 'L', opp: oppName === 'Opponent' ? '' : oppName, leg: SC.oppLeg || '', g: `${me}-${opp}`, notes: '' });
   saveEV(); toast('Round saved to ' + (e.name || 'event'));
 }
 function wireEvents() {
@@ -2069,6 +2158,7 @@ function shrinkPhoto(file) {
 }
 function saveScore() { try { localStorage.setItem(SC_KEY, JSON.stringify({ ...SC, undo: SC.undo.slice(-50) })); } catch {} }
 function renderScore() {
+  scoreExtras();
   $('#sc-me').textContent = SC.me; $('#sc-opp').textContent = SC.opp;
   $('#sc-target').textContent = SC.target;
   $('#sc-games').textContent = `Games ${SC.gamesMe}–${SC.gamesOpp}`;
@@ -2106,6 +2196,7 @@ function scoreBump(p, d) {
 function scoreUndo() { const u = SC.undo.pop(); if (!u) return; SC[u.p] = u.from; SC.done = false; saveScore(); renderScore(); }
 function finishGame(winner) {
   SC.hist.unshift({ t: Date.now(), win: winner === 'me', me: SC.me, os: SC.opp, opp: SC.oppName });
+  if (typeof logMatch === 'function') logMatch({ res: winner === 'me' ? 'W' : 'L', leg: SC.oppLeg || '', deck: (MD.decks.find((d) => d.id === SC.myDeck) || {}).name || '', opp: SC.oppName === 'Opponent' ? '' : SC.oppName, score: `${SC.me}-${SC.opp}` });
   SC.hist = SC.hist.slice(0, 200);
   if (winner === 'me') SC.gamesMe++; else SC.gamesOpp++;
   let msg = '';
@@ -2126,7 +2217,16 @@ async function keepAwake(on) {
     if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch { /* not supported */ }
 }
+function scoreExtras() {
+  const leg = $('#sc-oppleg'), dk = $('#sc-mydeck'); if (!leg) return;
+  if (document.activeElement !== leg) leg.value = SC.oppLeg || '';
+  const opts = '<option value="">My deck…</option>' + MD.decks.map((d) => `<option value="${esc(d.id)}" ${d.id === SC.myDeck ? 'selected' : ''}>${esc(d.name)}</option>`).join('');
+  if (dk.innerHTML !== opts) dk.innerHTML = opts;
+  const dl = $('#sc-leglist'); if (dl && !dl.children.length && D.rb) dl.innerHTML = legendNames().map((n) => `<option value="${esc(n)}">`).join('');
+}
 function wireScore() {
+  $('#sc-oppleg').onchange = (e) => { SC.oppLeg = e.target.value.trim(); saveScore(); };
+  $('#sc-mydeck').onchange = (e) => { SC.myDeck = e.target.value; saveScore(); };
   $$('#v-score [data-p]').forEach((b) => b.onclick = () => scoreBump(b.dataset.p, +b.dataset.d));
   $('#sc-undo').onclick = scoreUndo;
   $('#sc-new').onclick = newGame;
@@ -2151,9 +2251,15 @@ async function init() {
   wire();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  applyTextSize();
+  window.RBTSnapshot = (why) => takeSnapshot(why);
+  window.addEventListener('rbt-sync', reloadFromStorage);
+  window.addEventListener('rbt-sync-status', () => { if (S.view === 'more') renderSync(); });
+  if (window.RBTSync) RBTSync.start();
   try { await Promise.all([loadData(), loadBans()]); }
   catch { $('#col-empty').classList.remove('hidden'); $('#col-empty').innerHTML = '<p>Price data is still being prepared. Check back in a few minutes.</p>'; return; }
   checkStale();
+  if (typeof featuresReady === 'function') featuresReady();
   dailySnapshot().then(() => { if (!$('#v-more').classList.contains('hidden')) renderBackupInfo(); });
   setTimeout(() => { const n = wishAlert(); if (n) toast(`♥ ${n} wishlist card${n === 1 ? ' is' : 's are'} at or under your target price`, 4000); }, 1200);
   show(location.hash === '#scan' ? 'scan' : location.hash === '#score' ? 'score' : location.hash === '#events' ? 'events' : 'collection');

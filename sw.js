@@ -1,7 +1,7 @@
 // Offline support: app shell cached; price data always tries the network first.
-const SHELL = 'rbt-shell-v35';
+const SHELL = 'rbt-shell-v36';
 const IMG = 'rbt-img-v1';
-const FILES = ['fonts/marcellus-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', './', 'index.html', 'style.css', 'app.js', 'scanner.js', 'manifest.webmanifest', 'icons/icon-192.png'];
+const FILES = ['fonts/marcellus-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', './', 'index.html', 'style.css', 'app.js', 'scanner.js', 'features.js', 'sync.js', 'firebase-config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));

@@ -31,6 +31,7 @@
 <header class="top">
   <h1 id="title">Collection</h1>
   <span id="stale" class="pill warn hidden"></span>
+  <button class="hbtn" id="hdr-alerts" aria-label="Alerts"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="badge hidden"></span></button>
   <button class="hbtn" id="hdr-add" aria-label="Add cards"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
   <button class="hbtn" id="hdr-more" aria-label="Settings"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>
 </header>
@@ -47,6 +48,7 @@
         <div class="label" id="sum-label">Collection value</div>
         <div id="sum-value" class="big">$0.00</div>
         <div id="sum-change" class="chg"></div>
+        <button class="linkbtn sub" id="sum-history">Value history ›</button>
       </div>
       <div class="right">
         <div class="label">Cards</div>
@@ -54,7 +56,7 @@
       </div>
     </div>
     <div class="setstrip" id="col-sets"></div>
-    <div class="seg hidden" id="col-setmode"><button data-m="owned" class="on">Owned</button><button data-m="missing">Missing</button></div>
+    <div class="seg hidden" id="col-setmode"><button data-m="owned" class="on">Owned</button><button data-m="missing">Missing</button><button data-m="binder">Binder</button></div>
     <div class="toolbar">
       <input id="col-filter" type="search" placeholder="Filter my cards" autocomplete="off">
       <select id="col-sort" aria-label="Sort">
@@ -93,6 +95,7 @@
     <div class="scan-controls">
       <label class="toggle"><input type="checkbox" id="scan-foil"> Foil</label>
       <button id="btn-capture" class="primary round" aria-label="Scan or pause auto-scan">Scan</button>
+      <button class="ghost sm hidden" id="scan-session">This session (0)</button>
       <label class="photo-btn">Photo<input id="scan-file" type="file" accept="image/*" capture="environment" hidden></label>
     </div>
     <label class="toggle small" style="justify-content:center"><input type="checkbox" id="scan-autotoggle" checked> <span id="scan-mode">Auto-add</span></label>
@@ -109,6 +112,7 @@
     <div class="chips" id="add-sets"></div>
     <div class="row"><label class="toggle small"><input type="checkbox" id="add-text"> Search card text</label>
     <label class="toggle small"><input type="checkbox" id="add-sealed"> Include sealed products</label></div>
+    <div class="chips" id="add-everywhere"></div>
     <ul id="add-list" class="list"></ul>
   </section>
 
@@ -117,6 +121,7 @@
     <div class="seg" id="mv-scope">
       <button data-v="mine" class="on">My cards</button>
       <button data-v="all">All Riftbound</button>
+      <button data-v="sealed">Sealed</button>
     </div>
     <div class="seg" id="mv-metric">
       <button data-v="pct" class="on">By %</button>
@@ -139,6 +144,7 @@
       <button data-v="other">Others</button>
       <button data-v="ready">For me</button>
       <button data-v="mine">My decks</button>
+      <button data-v="staples">Staples</button>
     </div>
     <div class="dk-search">
       <input id="dk-q" type="search" placeholder="Find decks by legend or card…" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -197,6 +203,8 @@
       <div class="row" style="justify-content:space-between;align-items:center">
         <label class="toggle small"><input type="checkbox" id="sc-flip" checked> Flip opponent's side to face them</label>
       </div>
+      <div class="two" style="margin-top:10px"><input id="sc-oppleg" list="sc-leglist" placeholder="Their legend (for matchup stats)"><select id="sc-mydeck"><option value="">My deck…</option></select></div>
+      <datalist id="sc-leglist"></datalist>
       <div class="bgpick">
         <span class="sub">Opponent background</span>
         <div class="seg mini" id="sc-bg"><button data-bg="default">Default</button><button data-bg="photo">Photo</button></div>
@@ -214,6 +222,19 @@
 
   <!-- SETTINGS -->
   <section id="v-more" class="view hidden">
+    <div class="card-box" id="sync-box">
+      <h3>Account &amp; sync</h3>
+      <div id="sync-body"><p class="sub">Loading…</p></div>
+    </div>
+    <div class="card-box">
+      <h3>Preferences</h3>
+      <label class="sub">Format you play (for bans and deck legality)</label>
+      <div class="seg mini" id="pref-format"><button data-v="standard">Standard</button><button data-v="2v2">2v2 Constructed</button></div>
+      <label class="sub" style="display:block;margin-top:10px">Text size</label>
+      <div class="seg mini" id="pref-text"><button data-v="s">Small</button><button data-v="m">Normal</button><button data-v="l">Large</button><button data-v="xl">Extra large</button></div>
+      <button class="ghost" id="btn-tour" style="margin-top:12px">Show the quick tour again</button>
+      <button class="ghost" id="btn-gloss" style="margin-top:8px">Keyword glossary</button>
+    </div>
     <div class="card-box">
       <h3>Prices</h3>
       <p id="data-info" class="sub"></p>
@@ -282,7 +303,10 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<script src="firebase-config.js"></script>
+<script src="sync.js"></script>
 <script src="scanner.js"></script>
 <script src="app.js"></script>
+<script src="features.js"></script>
 </body>
 </html>
