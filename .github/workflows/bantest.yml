@@ -4,11 +4,13 @@ jobs:
   t:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests
       - run: |
-          curl -sL -A "riftbound-tracker" "https://playriftbound.com/en-us/news/announcements/radiance-ban-list-updates-effective-november-23-2026/" -o a.html
-          python3 - <<'PY'
-          import re
-          s=open('a.html').read()
-          for m in list(re.finditer(r'Riven', s))[:6]:
-              print('---', repr(s[max(0,m.start()-200):m.start()+120]))
+          python - <<'PY'
+          import json; b=json.load(open('data/bans.json')); b['announcements']=b['announcements'][1:]; json.dump(b,open('data/bans.json','w'))
           PY
+          python scripts/update_bans.py
+          python -c "import json;a=json.load(open('data/bans.json'))['announcements'][0];print('RESULT',a['effective'],a.get('incomplete'),a.get('review'),[c['name'] for c in a['cards']])"

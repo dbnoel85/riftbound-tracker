@@ -53,7 +53,7 @@ def main():
         m = re.search(r"Timing and Effective Date|Why |Explanation|Future Bans", page)
         if m:
             cut = page[:m.start()]
-        items = [html.unescape(re.sub(r"<[^>]+>", "", li)).strip() for li in re.findall(r"<li[^>]*>(.*?)</li>", cut, re.S)]
+        items = [html.unescape(re.sub(r"<[^>]+>", "", li)).strip() for li in re.findall(r"<li(?:\s[^>]*)?>(.*?)</li>", cut, re.S)]
         cards = []
         for it in items:
             k = norm(it)
