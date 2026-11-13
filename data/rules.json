@@ -1,0 +1,93 @@
+{
+ "docs": [
+  {
+   "title": "Core Rules",
+   "url": "https://cmsassets.rgpub.io/sanity/files/dsfx7636/news_live/5c7946f7c3b8c6e0faff85ab6dadc6d2e721ea94.pdf",
+   "changed": true,
+   "local": "assets/rules/core-rules.pdf",
+   "sha1": "5c7946f7c3b8c6e0faff85ab6dadc6d2e721ea94",
+   "kb": 1574
+  },
+  {
+   "title": "Tournament Rules",
+   "url": "https://cmsassets.rgpub.io/sanity/files/dsfx7636/news_live/861752822d217edf37d9febaeaf77a7d924c1bb6.pdf",
+   "changed": true,
+   "local": "assets/rules/tournament-rules.pdf",
+   "sha1": "861752822d217edf37d9febaeaf77a7d924c1bb6",
+   "kb": 17099
+  }
+ ],
+ "articles": [
+  {
+   "title": "Radiance Ban List Updates (Effective November 23, 2026)",
+   "url": "https://playriftbound.com/en-us/news/announcements/radiance-ban-list-updates-effective-november-23-2026",
+   "date": "2026-11-13"
+  },
+  {
+   "title": "October 2026 Tournament Rules Changelog",
+   "url": "https://playriftbound.com/en-us/news/announcements/october-2026-tournament-rules-changelog",
+   "date": "2026-10-09"
+  },
+  {
+   "title": "Radiance Errata Updates",
+   "url": "https://playriftbound.com/en-us/news/announcements/radiance-errata-updates",
+   "date": "2026-10-09"
+  },
+  {
+   "title": "Vendetta Rules FAQ and Clarifications",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/vendetta-rules-faq-and-clarifications",
+   "date": "2026-08-14"
+  },
+  {
+   "title": "Unleashed Rules FAQ and Clarifications",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-rules-faq-and-clarifications",
+   "date": "2026-04-29"
+  },
+  {
+   "title": "Unleashed Errata Updates",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates",
+   "date": "2026-04-03"
+  },
+  {
+   "title": "Riftbound Core Rules: Unleashed Patch Notes",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-core-rules-unleashed-patch-notes",
+   "date": "2026-03-30"
+  },
+  {
+   "title": "Tournament Rules, January Update",
+   "url": "https://playriftbound.com/en-us/news/announcements/tournament-rules-january-update",
+   "date": "2026-01-30"
+  },
+  {
+   "title": "Riftbound Spiritforged FAQ",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-spiritforged-faq",
+   "date": "2026-01-14"
+  },
+  {
+   "title": "Riftbound Spiritforged Errata",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-spiritforged-errata",
+   "date": "2026-01-14"
+  },
+  {
+   "title": "Riftbound Core Rules: Spiritforged Patch Notes",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-core-rules-spiritforged-patch-notes",
+   "date": "2025-12-05"
+  },
+  {
+   "title": "Riftbound: Origins Card Errata",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+   "date": "2025-10-28"
+  },
+  {
+   "title": "Riftbound Core Rules: Patch Notes",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-core-rules-patch-notes",
+   "date": "2025-10-24"
+  },
+  {
+   "title": "Riftbound Origins FAQ",
+   "url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-faq",
+   "date": "2025-10-16"
+  }
+ ],
+ "hub": "https://playriftbound.com/en-us/rules-hub/"
+}

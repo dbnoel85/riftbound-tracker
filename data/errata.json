@@ -1,0 +1,461 @@
+{
+"Astral Heron": [
+{
+"new": "When you play your first card each turn, if I'm at a battlefield, the next card you play this turn costs [2][A][A] less.",
+"old": "When you play your first card each turn, if I'm at a battlefield, your next card costs [2][A][A] less.",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Ava Achiever": [
+{
+"new": "When I attack, you may pay [C] to play a card with [Hidden] from your hand, ignoring its cost. If it’s a unit, play it here.",
+"old": "When I attack, you may pay [C] to play a card with [Hidden] from your hand here, ignoring its cost.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Baited Hook": [
+{
+"new": "[1][C], [E]: Kill a friendly unit. Look at the top 5 cards of your Main Deck. You may banish a unit from among them that has Might up to 1 more than the killed unit and play it, ignoring its cost. Then recycle the rest.",
+"old": "[1][C], [E]: Kill a friendly unit. Look at the top 5 cards of your Main Deck. You may play a unit from among them that has Might up to 1 more than the killed unit, ignoring its cost. Then recycle the rest.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Blind Fury": [
+{
+"new": "[Action] (Play on your turn or in showdowns.)\nEach opponent reveals the top card of their Main Deck. Choose one and banish it, then play it, ignoring its cost. Then recycle the rest.",
+"old": "[Action] (Play on your turn or in showdowns.)\nEach opponent reveals the top card of their Main Deck. Choose one and play it, ignoring its cost. Then recycle the rest.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Bone Skewer": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\nChoose a battlefield. An opponent reveals their hand. You may choose a unit from it. They play that unit to that battlefield, ignoring any and all costs. If they do, then do this: [Stun] it. (It doesn't deal combat damage this turn.)",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\nChoose a battlefield. An opponent reveals their hand. You may choose a unit from it. They play that unit to that battlefield, ignoring any and all costs. When they do, [Stun] it. (It doesn't deal combat damage this turn.)",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Clockwork Keeper": [
+{
+"new": "You may pay [C] as an additional cost to play me.\nWhen you play me, if you paid the additional cost, draw 1.",
+"old": "As you play me, you may pay [C] as an additional cost. If you do, draw 1.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Convergent Mutation": [
+{
+"new": "[Reaction] (Play any time, even before spells and abilities resolve.)\nChoose a friendly unit. This turn, increase its Might to the Might of another friendly unit.",
+"old": "[Reaction] (Play any time, even before spells and abilities resolve.)\nChoose a friendly unit. Increase its Might until it equals the Might of another friendly unit.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Dark Child - Starter": [
+{
+"new": "At the end of your turn, ready up to 2 runes.",
+"old": "At the end of your turn, ready 2 runes.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Dazzling Aurora": [
+{
+"new": "At the end of your turn, reveal cards from the top of your Main Deck until you reveal a unit and banish it. Play it, ignoring its cost, and recycle the rest.",
+"old": "At the end of your turn, reveal cards from the top of your Main Deck until you reveal a unit. Play it, ignoring its cost, and recycle the rest.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Death from Below": [
+{
+"new": "Kill a unit at a battlefield. Then, if it had 3 [M] or less, do this: You may play this from your trash for [A].",
+"old": "Kill a unit at a battlefield. Then, if it had 3 [M] or less, you may play this from your trash for [A].",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Diana - Lunari": [
+{
+"new": "When a showdown begins here, you may pay [1] to [Predict], then reveal the top card of your Main Deck. If it's a spell, draw it. (To Predict, look at the top card of your Main Deck. You may recycle it.)",
+"old": "When a showdown begins here, you may pay [1]. If you do, [Predict], then reveal the top card of your Main Deck. If it's a spell, draw it. (To Predict, look at the top card of your Main Deck. You may recycle it.)",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Disintegrate": [
+{
+"new": "Action (Play on your turn or in showdowns.)\nDeal 3 to a unit at a battlefield. If this kills it, do this: draw 1.",
+"old": "[Action] (Play on your turn or in showdowns.)\nDeal 3 to a unit at a battlefield. If this kills it, draw 1.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Dragon's Rage": [
+{
+"new": "Move an enemy unit. Then do this: Choose another enemy unit at its destination. They deal damage equal to their Mights to each other.",
+"old": "Move an enemy unit. Then choose another enemy unit at its destination. They deal damage equal to their Mights to each other.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Draven - Vanquisher": [
+{
+"new": "When I win a combat, play a Gold gear token exhausted.\nWhen I attack or defend, you may pay [C] to give me +2 [M] this turn.",
+"old": "When I win a combat, play a Gold gear token exhausted.\nWhen I attack or defend, you may pay [C]. If you do, give me +2 [M] this turn.",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Dune Drake": [
+{
+"new": "When I attack, give me +2 [M] this turn if there is a ready enemy unit here.",
+"old": "When I attack, give me +2 [M] if there is a ready enemy unit here.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Elnuk Herd": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\nWhen you play me, give a friendly unit +3 [M] this turn, then recycle me if I was played from face down.",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\nWhen you play me, give another friendly unit +3 [M] this turn, then recycle me if I was played from face down.",
+"title": "/en-us/news/announcements/radiance-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/radiance-errata-updates/",
+"date": "2026-10-09"
+}
+],
+"Emperor’s Dais": [
+{
+"new": "When you conquer here, you may pay [1] and return a unit you control here to its owner's hand to play a 2 [M] Sand Soldier unit token here.",
+"old": "When you conquer here, you may pay [1] and return a unit you control here to its owner's hand. If you do, play a 2 [M] Sand Soldier unit token here.",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Fizz - Trickster": [
+{
+"new": "When you play me, you may play a spell from your trash with Energy cost no more than [3], ignoring its Energy cost. Then recycle it. (You must still pay its Power cost.)",
+"old": "When you play me, you may play a spell from your trash with Energy cost no more than [3], ignoring its Energy cost. Recycle that spell after you play it. (You must still pay its Power cost.)",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Forbidden Technique": [
+{
+"new": "Ready a unit.\nWhen you play a card with Energy cost [7] or more, you may play this from your trash for [1][C][C]. Then banish this.",
+"old": "Ready a unit.\nWhen you play a card with Energy cost [7] or more, you may play this from your trash for [1][C][C]. Banish this.",
+"title": "/en-us/news/announcements/radiance-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/radiance-errata-updates/",
+"date": "2026-10-09"
+}
+],
+"Gangplank - Naval": [
+{
+"new": "[Empower] [C][C] ([C][C]: Empower me. Use only if not Empowered.)\n[Empowered][>] If a spell or ability that chooses me would stun me, give me -[M], or return me to hand, give me +3 [M] this turn instead.",
+"old": "[Empower] [C][C] ([C][C]: Empower me. Use only if not Empowered.)\n[Empowered][>] If a spell or ability that chooses me would stun me, give me -[M], or return me to hand, give me +3 [M] instead.",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Guards!": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\nPlay a 2 [M] Sand Soldier unit token. Then do this: You may pay [C] to ready it.",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\nPlay a 2 [M] Sand Soldier unit token. You may pay [C] to ready it.",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Highlander": [
+{
+"new": "[Reaction] (Play any time, even before spells and abilities resolve.)\nChoose a friendly unit. The next time it would die this turn, heal it, exhaust it, and recall it instead. (Send it to base. This isn't a move.)",
+"old": "[Reaction] (Play any time, even before spells and abilities resolve.)\nChoose a friendly unit. The next time it dies this turn, recall it exhausted instead. (Send it to base. This isn't a move.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Karma - Channeler": [
+{
+"new": "[Vision] (When you play me, look at the top card of your Main Deck. You may recycle it.)\nWhen you recycle one or more cards to your Main Deck, buff a friendly unit. (If it doesn't have a buff, it gets a +1 [M] buff. Runes aren't cards.)",
+"old": "[Vision] (When you play me, look at the top card of your Main Deck. You may recycle it.)\nWhen you recycle one or more cards, buff a friendly unit. (If it doesn't have a buff, it gets a +1 [M] buff. Runes aren't cards.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Keeper of Masks": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\n[Temporary] (Kill me at the start of my controller's Beginning Phase, before scoring.)\nWhen you play me, play two Reflection unit tokens here. Then do this: They become copies of me.",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\n[Temporary] (Kill me at the start of my controller's Beginning Phase, before scoring.)\nWhen you play me, play two Reflection unit tokens here. They become copies of me.",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Kinkou Monk": [
+{
+"new": "When you play me, buff up to two other friendly units. (Each one that doesn't have a buff gets a +1 [M] buff.)",
+"old": "When you play me, buff two other friendly units. (Each one that doesn't have a buff gets a +1 [M] buff.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Last Caress": [
+{
+"new": "[Reaction] (Play any time, even before spells and abilities resolve.)\nThe next unit you play this turn, even from face down, can be played to any battlefield. When you play it, [Buff] it. (Give it a +1 [M] buff if it doesn't have one.)",
+"old": "[Reaction] (Play any time, even before spells and abilities resolve.)\nThe next unit you play this turn (even from face down) can be played to any battlefield. When you play it, [Buff] it. (Give it a +1 [M] buff if it doesn't have one.)",
+"title": "/en-us/news/announcements/radiance-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/radiance-errata-updates/",
+"date": "2026-10-09"
+}
+],
+"Leblanc - Deceiver": [
+{
+"new": "When you conquer or hold, you may discard 1 and exhaust me to play a ready Reflection unit token there. Then do this: It becomes a copy of another unit there. Give it [Temporary].",
+"old": "When you conquer or hold, you may discard 1 and exhaust me to play a ready Reflection unit token there. It becomes a copy of another unit there. Give it [Temporary].",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Mirror Image": [
+{
+"new": "Choose a unit. Play a ready Reflection unit token to your base. Then do this: It becomes a copy of that unit. Give it [Temporary]. (Kill it at the start of its controller's Beginning Phase, before scoring.)",
+"old": "Choose a unit. Play a ready Reflection unit token to your base. It becomes a copy of that unit. Give it [Temporary]. (Kill it at the start of its controller's Beginning Phase, before scoring.)",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Neeko - Blending In": [
+{
+"new": "(Neutral cards can go in decks of any Domain.)\nIf Neeko is in your deck, choose up to 3 different legends in addition to your starting legend. (Different means none match names.)\nWhen you play me, choose one of those Legends and add it to your Legend Zone while I'm on the board.",
+"old": "(Neutral cards can go in decks of any Domain.)\nIf Neeko is in your deck, choose 3 different legends in addition to your starting legend. (Different means none match names.)\nWhen you play me, choose one of those Legends and add it to your Legend Zone while I'm on the board.",
+"title": "/en-us/news/announcements/radiance-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/radiance-errata-updates/",
+"date": "2026-10-09"
+}
+],
+"Nocturne - Horrifying": [
+{
+"new": "[Ganking] (I can move from battlefield to battlefield.)\nAs you look at or reveal me from the top of your deck, you may banish me. If you do, you may play me for [A].",
+"old": "[Ganking] (I can move from battlefield to battlefield.)\nWhen you look at cards from the top of your deck (and don't draw them) and see me, you may play me for [A].",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Pack of Wonders": [
+{
+"new": "[E]: Return another friendly gear, unit, or facedown card to its owner's hand.",
+"old": "[E]: Return another friendly gear, unit, or [Hidden] card to its owner's hand.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Portal Rescue": [
+{
+"new": "[Action] (Play on your turn or in showdowns.)\nBanish a friendly unit, then its owner plays it to their base, ignoring its cost.",
+"old": "[Action] (Play on your turn or in showdowns.)\nBanish a friendly unit, then play it to base, ignoring its cost.\nNote: Text only differs for English version of the card",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Promising Future": [
+{
+"new": "Each player looks at the top 5 cards of their Main Deck, banishes one of them, then recycles the rest. Starting with the next player, each player plays those cards, ignoring Energy costs. (They must still pay Power costs.)",
+"old": "Each player looks at the top 5 cards of their Main Deck, chooses one, then recycles the rest. Starting with the next player, each player plays those cards, ignoring Energy costs. (They must still pay Power costs.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Ravenborn Tome": [
+{
+"new": "[E]: The next spell you play this turn deals 1 Bonus Damage. (Each instance of damage the spell deals is increased by 1.)",
+"old": "[E]: The next spell you play deals 1 Bonus Damage. (Each instance of damage the spell deals is increased by 1.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Relentless Pursuit": [
+{
+"new": "[Action] (Play on your turn or in showdowns.)\nMove a friendly unit. You may attach up to one Equipment with the same controller to it. This turn, that unit has \"When I conquer, you may move me to my base.\"",
+"old": "[Action] (Play on your turn or in showdowns.)\nMove a friendly unit. You may attach an Equipment with the same controller to it. This turn, that unit has \"When I conquer, you may move me to my base.\"",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Rengar - Trophy Hunter": [
+{
+"new": "[Ambush] (You may play me as a [Reaction] to a battlefield where you have units.)\nI can [Ambush] to a battlefield where there are enemy units, even if you don't have units there.",
+"old": "[Ambush] (You may play me as a [Reaction] to a battlefield where you have units.)\nI can be played to a battlefield where there are enemy units (even if you don't have units there).",
+"title": "/en-us/news/rules-and-releases/unleashed-errata-updates",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/unleashed-errata-updates/",
+"date": "2026-04-03"
+}
+],
+"Resonating Strike": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\n[Reaction] (Play any time, even before spells and abilities resolve.)\nChoose a battlefield you control and a unit you control at a different location. Move that unit to that battlefield and give it +2 [S] this turn.",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\n[Reaction] (Play on your turn or in showdowns.)\nChoose a battlefield you control and a unit you control at a different location. Move that unit to that battlefield and give it +2 [S] this turn.",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Salvage": [
+{
+"new": "[Action] (Play on your turn or in showdowns.)\nYou may kill up to one gear. Draw 1.",
+"old": "[Action] (Play on your turn or in showdowns.)\nYou may kill a gear. Draw 1.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Sigil of the Storm": [
+{
+"new": "When you conquer here, you must recycle one of your runes. (This doesn’t choose anything.)",
+"old": "When you conquer here, recycle one of your runes.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Sona - Harmonious": [
+{
+"new": "At the end of your turn, if I'm at a battlefield, ready up to 4 friendly runes.",
+"old": "While I'm at a battlefield, ready 4 friendly runes at the end of your turn.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Stalking Wolf": [
+{
+"new": "[Ambush] (You may play me as a [Reaction] to a battlefield where you have units.)\nAs an additional cost to play me, kill a Bird, Cat, Dog, or Poro you control. You may [Ambush] me to its battlefield, even if you don't have other units there.",
+"old": "[Ambush] (You may play me as a [Reaction] to a battlefield where you have units.)\nAs an additional cost to play me, kill a Bird, Cat, Dog, or Poro you control. You may play me to its battlefield (even if you don't have other units there).",
+"title": "/en-us/news/announcements/vendetta-errata-updates",
+"url": "https://playriftbound.com/en-us/news/announcements/vendetta-errata-updates/",
+"date": "2026-07-23"
+}
+],
+"Targon's Peak": [
+{
+"new": "When you conquer here, ready up to 2 runes at the end of this turn.",
+"old": "When you conquer here, ready 2 runes at the end of this turn.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Teemo - Strategist": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\nWhen I defend, choose an enemy unit here and reveal the top 5 cards of your Main Deck. Deal 1 to that unit for each card with [Hidden] revealed this way, then recycle the revealed cards.",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\nWhen I defend or I'm played from [Hidden], reveal the top 5 cards of your Main Deck. Deal 1 to an enemy unit here for each card with [Hidden], then recycle them.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"The Boss": [
+{
+"new": "If a buffed unit you control would die, you may pay [C], exhaust me, and spend its buff to heal it, exhaust it, and recall it instead. (Send it to base. This isn't a move.)\nWhen you conquer, ready me.",
+"old": "When a buffed unit you control would die, you may pay [C] and exhaust me to spend its buff and recall it exhausted instead. (Send it to base. This isn't a move.)\nWhen you conquer, ready me.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"The Dreaming Tree": [
+{
+"new": "When a player chooses a friendly unit here with a spell for the first time each turn, they draw 1.",
+"old": "The first time you choose a friendly unit with a spell here each turn, draw 1.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"The Syren": [
+{
+"new": "[1], [E]: Move a friendly unit at a battlefield to its base.",
+"old": "[1], [E]: Move a friendly unit at a battlefield to your base.\nNote: Text only differs for English version of the card",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Tideturner": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\nWhen you play me, you may choose a unit you control at another location. Move me to its location and it to my original location.",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\nWhen you play me, you may choose a friendly unit. Move me to its location and it to my original location.",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Unforgiven": [
+{
+"new": "[2], [E]: Move a friendly unit to or from its base.",
+"old": "[2], [E]: Move a friendly unit to or from your base.\nNote: Text only differs for English version of the card",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Unlicensed Armory": [
+{
+"new": "Discard 1, [E]: Choose a friendly unit. The next time it would die this turn, you may pay [C] to heal it, exhaust it, and recall it instead. (Send it to base. This isn't a move.)",
+"old": "Discard 1, [E]: Choose a friendly unit. The next time it dies this turn, you may pay [C] to recall it exhausted instead. (Send it to base. This isn't a move.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Void Gate": [
+{
+"new": "Spells and abilities deal 1 Bonus Damage to units here. (Each instance of damage the spell deals to a unit here is increased by 1.)",
+"old": "Spells and abilities affecting units here each deal 1 Bonus Damage. (Each instance of damage the spell deals is increased by 1.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+],
+"Zhonya's Hourglass": [
+{
+"new": "[Hidden] (Hide now for [A] to react with later for [0].)\nIf a friendly unit would die, kill this instead. Heal that unit, exhaust it, and recall it. (Send it to base. This isn't a move.)",
+"old": "[Hidden] (Hide now for [A] to react with later for [0].)\nThe next time a friendly unit would die, kill this instead. Recall that unit exhausted. (Send it to base. This isn't a move.)",
+"title": "/en-us/news/rules-and-releases/riftbound-origins-card-errata",
+"url": "https://playriftbound.com/en-us/news/rules-and-releases/riftbound-origins-card-errata/",
+"date": "2025-10-28"
+}
+]
+}
