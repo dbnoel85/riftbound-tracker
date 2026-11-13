@@ -226,12 +226,16 @@
     </div>
     <div class="card-box">
       <h3>Backup</h3>
-      <p class="sub">Your collection is saved on this phone only. Make a backup now and then, or before changing phones.</p>
+      <p class="sub">Everything you've entered — cards, decks, wishlist, events, scores and settings — is saved on this device. A backup file contains all of it; keep one in Files or iCloud Drive.</p>
+      <p class="sub" id="bk-last"></p>
       <div class="row">
         <button id="btn-export" class="ghost">Save backup</button>
         <label class="ghost btnlike">Restore backup<input id="import-file" type="file" accept=".json,application/json" hidden></label>
       </div>
       <button id="btn-csv" class="ghost">Export spreadsheet (CSV)</button>
+      <h3 style="margin-top:14px">Automatic snapshots</h3>
+      <p class="sub">The app also keeps its own copy of your data on this device once a day and before any restore or app update — the last 14 are kept.</p>
+      <ul class="list" id="snap-list"></ul>
     </div>
     <div class="card-box">
       <h3>Install on your phone</h3>

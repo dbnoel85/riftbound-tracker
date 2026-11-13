@@ -1,6 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
+const SHELL_VERSION = 'v35';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -429,6 +430,7 @@ function fmtDate(s) { if (!s) return '—'; const [y, m, d] = s.split('-').map(N
 
 /* ----- more / settings */
 function renderMore() {
+  renderBackupInfo();
   if (!S.cards) return;
   const cardsCount = new Set(S.cards.items.filter((i) => !i.sealed).map((i) => i.p)).size;
   $('#data-info').innerHTML = `Last updated <b>${fmtDate(S.cards.updated)}</b> · ${cardsCount.toLocaleString()} cards & variants across ${S.cards.groups.length} sets/promo groups.`;
@@ -1044,10 +1046,54 @@ function download(name, text, type) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+/* ---------------------------------------------------------------- backups + automatic snapshots
+   Everything the app saves lives under localStorage keys starting with "rbt.". A backup (and a snapshot)
+   is a copy of all of them, so new features that add new keys are covered automatically. */
+const allStored = (skipBig) => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('rbt.') && !(skipBig && k === 'rbt.oppbg.v1')) o[k] = localStorage.getItem(k); } } catch {} return o; };
 function exportBackup() {
   const items = {};
   for (const [k, e] of Object.entries(S.inv.items)) { const it = S.byKey.get(k); items[k] = { ...e, name: it ? it.n : e.name, number: it ? it.num : '' }; }
-  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 4, items, decks: MD.decks, events: EV.events, wishlist: WL.items }, null, 1), 'application/json');
+  download(`riftbound-collection-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'riftbound-tracker', version: 5, saved: new Date().toISOString(), items, decks: MD.decks, events: EV.events, wishlist: WL.items, store: allStored(false) }, null, 1), 'application/json');
+  S.prefs.lastBackup = Date.now(); savePrefs(); renderBackupInfo();
+}
+const SNAP = { db: null };
+function snapDB() {
+  if (SNAP.db) return SNAP.db;
+  SNAP.db = new Promise((res, rej) => { const r = indexedDB.open('rbt-snapshots', 1); r.onupgradeneeded = () => r.result.createObjectStore('snaps', { keyPath: 't' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  return SNAP.db;
+}
+async function snapAll() { const db = await snapDB(); return new Promise((res) => { const q = db.transaction('snaps').objectStore('snaps').getAll(); q.onsuccess = () => res(q.result.sort((a, b) => b.t - a.t)); q.onerror = () => res([]); }); }
+/** copy every saved key into IndexedDB (separate from localStorage, so a broken save can't take the copies with it) */
+async function takeSnapshot(why) {
+  try {
+    const data = allStored(true); if (!Object.keys(data).length) return;
+    const db = await snapDB(); const list = await snapAll();
+    const counts = { cards: Object.values(S.inv.items).reduce((t, e) => t + (e.qty || 0), 0), decks: MD.decks.length, wish: Object.keys(WL.items || {}).length, events: EV.events.length };
+    await new Promise((res) => { const tx = db.transaction('snaps', 'readwrite'); const st = tx.objectStore('snaps');
+      st.put({ t: Date.now(), why, data, counts, app: SHELL_VERSION }); for (const old of list.slice(13)) st.delete(old.t); tx.oncomplete = res; tx.onerror = res; });
+  } catch (e) { console.warn('snapshot', e); }
+}
+async function dailySnapshot() {
+  const list = await snapAll().catch(() => []);
+  const last = list[0];
+  const today = new Date().toDateString();
+  if (!last || new Date(last.t).toDateString() !== today) await takeSnapshot('Daily');
+  else if (last.app !== SHELL_VERSION) await takeSnapshot('Before app update');
+}
+async function restoreSnapshot(t) {
+  const s = (await snapAll()).find((x) => x.t === t); if (!s) return;
+  if (!(await confirmBox(`Restore your data as it was on ${new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}? (${s.counts.cards} cards, ${s.counts.decks} decks). Your current data is snapshotted first, so this can be undone.`))) return;
+  await takeSnapshot('Before restore');
+  for (const [k, v] of Object.entries(s.data)) { try { localStorage.setItem(k, v); } catch {} }
+  location.reload();
+}
+async function renderBackupInfo() {
+  const last = S.prefs.lastBackup;
+  $('#bk-last').innerHTML = last ? `Last backup file saved ${new Date(last).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '<b>You haven\'t saved a backup file yet.</b>';
+  const list = await snapAll().catch(() => []);
+  $('#snap-list').innerHTML = list.map((s) => `<li class="item" style="padding:9px 12px"><div class="info"><div class="nm">${esc(new Date(s.t).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</div>
+    <div class="meta">${esc(s.why)} · ${s.counts.cards} cards · ${s.counts.decks} decks · ${s.counts.wish} wishlist</div></div><button class="ghost sm" data-snap="${s.t}">Restore</button></li>`).join('') || '<li class="sub">None yet.</li>';
+  $$('#snap-list [data-snap]').forEach((b) => b.onclick = () => restoreSnapshot(+b.dataset.snap));
 }
 function exportCSV() {
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
@@ -1060,7 +1106,12 @@ async function importBackup(file) {
     const data = JSON.parse(await file.text());
     if (!data.items) throw new Error();
     const n = Object.keys(data.items).length;
-    if (!(await confirmBox(`Replace your current collection with the ${n} entries in this backup?`))) return;
+    if (!(await confirmBox(`Replace your current data with this backup (${n} collection entries)? A snapshot of what you have now is kept under Settings → Automatic snapshots.`))) return;
+    await takeSnapshot('Before restoring a backup file');
+    if (data.store && typeof data.store === 'object') { // version 5+: every saved setting, deck, score...
+      for (const [k, v] of Object.entries(data.store)) if (k.startsWith('rbt.')) { try { localStorage.setItem(k, v); } catch {} }
+      toast('Backup restored'); setTimeout(() => location.reload(), 600); return;
+    }
     S.inv = { items: {} };
     for (const [k, e] of Object.entries(data.items)) S.inv.items[k] = { qty: +e.qty || 1, added: e.added || Date.now(), cost: e.cost ?? null, name: e.name };
     if (Array.isArray(data.decks)) { MD.decks = data.decks; saveMD(); }
@@ -2103,6 +2154,7 @@ async function init() {
   try { await Promise.all([loadData(), loadBans()]); }
   catch { $('#col-empty').classList.remove('hidden'); $('#col-empty').innerHTML = '<p>Price data is still being prepared. Check back in a few minutes.</p>'; return; }
   checkStale();
+  dailySnapshot().then(() => { if (!$('#v-more').classList.contains('hidden')) renderBackupInfo(); });
   setTimeout(() => { const n = wishAlert(); if (n) toast(`♥ ${n} wishlist card${n === 1 ? ' is' : 's are'} at or under your target price`, 4000); }, 1200);
   show(location.hash === '#scan' ? 'scan' : location.hash === '#score' ? 'score' : location.hash === '#events' ? 'events' : 'collection');
 }
