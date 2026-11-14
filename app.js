@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v40';
+const SHELL_VERSION = 'v41';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -2289,18 +2289,59 @@ function shrinkPhoto(file) {
 function saveScore() { try { localStorage.setItem(SC_KEY, JSON.stringify({ ...SC, undo: SC.undo.slice(-50) })); } catch {} }
 const MYBG_KEY = 'rbt.mybg.v1';
 let MY_BG = (() => { try { return localStorage.getItem(MYBG_KEY) || ''; } catch { return ''; } })();
-/** background for one side of the score screen: default, the legend's art, or a photo picked on this device */
+/** background for one side of the score screen: default, a legend artwork (any printing, or the champion's other cards), or a photo */
 function legendArt(name) { const r = name && cardRef(name); return r && r.img ? bigImg(r.img) : ''; }
-function myLegend() { const dk = MD.decks.find((d) => d.id === SC.myDeck); return dk && D.rb && D.rb[dk.leader] ? D.rb[dk.leader].n : ''; }
+function myLegend() {
+  if (SC.myLeg != null) return SC.myLeg;
+  const dk = MD.decks.find((d) => d.id === SC.myDeck); return dk && D.rb && D.rb[dk.leader] ? D.rb[dk.leader].n : '';
+}
+const champOf = (n) => normName(String(n || '').split(/\s*,\s*|\s+-\s+/)[0]);
+/** every artwork we can show for a legend: its printings first (standard, overnumbered, signature, metal, promos), then the champion's other cards */
+function artOptions(name) {
+  if (!name || !D.byName || !S.cards) return [];
+  const seen = new Set(), out = [];
+  const push = (it, label) => { if (!it || !it.img || seen.has(it.p)) return; seen.add(it.p); out.push({ k: it.k, img: it.img, label }); };
+  const tag = (it) => { const m = it.n.match(/\(([^)]*)\)/g), g = setName(it.g); return m ? m.map((x) => x.slice(1, -1)).join(' · ') : /K\/DA/.test(g) ? 'K/DA' : /Promo/i.test(g) ? 'Promo' : 'Standard'; };
+  const odd = (it) => (/\(/.test(it.n) ? 1 : 0) + (/K\/DA|Promo/i.test(setName(it.g)) ? 2 : 0);
+  const leg = (D.byName.get(normName(name)) || []).slice().sort((a, b) => odd(a) - odd(b));
+  for (const it of leg) push(it, tag(it));
+  const ch = champOf(name);
+  for (const it of S.cards.items) if (!it.sealed && champOf(it.n) === ch && !leg.includes(it)) push(it, it.n.split(/\s*,\s*|\s+-\s+/).slice(1).join(' ') || it.n);
+  const seenL = new Map(); for (const o of out) { const n = (seenL.get(o.label) || 0) + 1; seenL.set(o.label, n); if (n > 1) o.label += ' ' + n; }
+  return out.slice(0, 18);
+}
+function pickArt(side) {
+  const opp = side === 'opp', opts = artOptions(opp ? SC.oppLeg : myLegend()); if (!opts.length) return null;
+  const want = opp ? SC.oppArt : SC.myArt;
+  if (want === 'random') { const n = (SC.gamesMe + SC.gamesOpp + (SC.roll || 0)) * (opp ? 7 : 13); return opts[n % opts.length]; }
+  return opts.find((o) => o.k === want) || opts[0];
+}
 function sideBg(side) {
   const opp = side === 'opp', mode = (opp ? SC.bg : SC.bgMe) || 'default', photo = opp ? OPP_BG : MY_BG;
-  const url = mode === 'photo' ? photo : mode === 'legend' ? legendArt(opp ? SC.oppLeg : myLegend()) : '';
+  let urls = [];
+  if (mode === 'photo' && photo) urls = [photo];
+  if (mode === 'legend') { const a = pickArt(side); if (a) urls = [bigImg(a.img), a.img]; }
   const el = $(opp ? '#pl-opp' : '#pl-me'), id = opp ? 'sc-bg' : 'sc-mybg';
-  el.classList.toggle('photo', !!url);
-  el.style.backgroundImage = url ? `linear-gradient(180deg,rgba(8,10,24,.4),rgba(8,10,24,.62)),url("${url}")` : '';
-  $$(`#${id} button`).forEach((b) => b.classList.toggle('on', b.dataset.bg === (url ? mode : 'default')));
+  const fit = mode === 'photo' ? 'fill' : (SC.fit || 'card');
+  el.classList.toggle('photo', !!urls.length);
+  el.dataset.fit = fit;
+  el.style.backgroundImage = '';
+  const bg = urls.map((u) => `url("${u}")`).join(',');
+  const [blur, main] = el.querySelectorAll('.pl-bg i, .pl-bg b');
+  if (blur) blur.style.backgroundImage = bg; if (main) main.style.backgroundImage = bg;
+  $$(`#${id} button`).forEach((b) => b.classList.toggle('on', b.dataset.bg === (urls.length ? mode : 'default')));
   $(`#${id}choose`).textContent = photo ? 'Change photo…' : 'Choose photo…';
   $(`#${id}del`).classList.toggle('hidden', !photo);
+  $(`#${id}row`).classList.toggle('hidden', mode !== 'photo');
+  // the art strip: tap a printing or another card of that champion; 🎲 changes art every game
+  const strip = $(opp ? '#sc-oppart' : '#sc-myart');
+  if (mode === 'legend') {
+    const opts = artOptions(opp ? SC.oppLeg : myLegend()), want = opp ? SC.oppArt : SC.myArt, cur = pickArt(side);
+    strip.innerHTML = opts.length ? `<button class="art rnd ${want === 'random' ? 'on' : ''}" data-art="random" title="Different art every game"><span>🎲</span><small>Every game</small></button>` +
+      opts.map((o) => `<button class="art ${want !== 'random' && cur && cur.k === o.k ? 'on' : ''}" data-art="${esc(o.k)}" title="${esc(o.label)}"><img loading="lazy" src="${esc(o.img)}" alt=""><small>${esc(o.label)}</small></button>`).join('')
+      : `<p class="sub">Choose ${opp ? 'their' : 'your'} legend above to pick artwork.</p>`;
+    strip.classList.remove('hidden');
+  } else { strip.innerHTML = ''; strip.classList.add('hidden'); }
 }
 function renderScore() {
   scoreExtras();
@@ -2336,7 +2377,7 @@ function scoreBump(p, d) {
 function scoreUndo() { const u = SC.undo.pop(); if (!u) return; SC[u.p] = u.from; SC.done = false; saveScore(); renderScore(); }
 function finishGame(winner) {
   SC.hist.unshift({ t: Date.now(), win: winner === 'me', me: SC.me, os: SC.opp, opp: SC.oppName });
-  if (typeof logMatch === 'function') logMatch({ res: winner === 'me' ? 'W' : 'L', leg: SC.oppLeg || '', deck: (MD.decks.find((d) => d.id === SC.myDeck) || {}).name || '', opp: SC.oppName === 'Opponent' ? '' : SC.oppName, score: `${SC.me}-${SC.opp}` });
+  if (typeof logMatch === 'function') logMatch({ res: winner === 'me' ? 'W' : 'L', leg: SC.oppLeg || '', deck: myLegend() || (MD.decks.find((d) => d.id === SC.myDeck) || {}).name || '', opp: SC.oppName === 'Opponent' ? '' : SC.oppName, score: `${SC.me}-${SC.opp}` });
   SC.hist = SC.hist.slice(0, 200);
   if (winner === 'me') SC.gamesMe++; else SC.gamesOpp++;
   let msg = '';
@@ -2358,15 +2399,18 @@ async function keepAwake(on) {
   } catch { /* not supported */ }
 }
 function scoreExtras() {
-  const leg = $('#sc-oppleg'), dk = $('#sc-mydeck'); if (!leg) return;
-  if (document.activeElement !== leg) leg.value = SC.oppLeg || '';
-  const opts = '<option value="">My deck…</option>' + MD.decks.map((d) => `<option value="${esc(d.id)}" ${d.id === SC.myDeck ? 'selected' : ''}>${esc(d.name)}</option>`).join('');
-  if (dk.innerHTML !== opts) dk.innerHTML = opts;
-  const dl = $('#sc-leglist'); if (dl && !dl.children.length && D.rb) dl.innerHTML = legendNames().map((n) => `<option value="${esc(n)}">`).join('');
+  const leg = $('#sc-oppleg'), my = $('#sc-myleg'); if (!leg) return;
+  if (!D.rb) { if (!scoreExtras.loading) scoreExtras.loading = loadDecks().then(() => { if (S.view === 'score') renderScore(); }, () => {}); return; }
+  const names = legendNames(), fill = (sel, cur, ph) => { const o = `<option value="">${ph}</option>` + names.map((n) => `<option ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join(''); if (sel.dataset.sig !== cur + '|' + names.length) { sel.innerHTML = o; sel.dataset.sig = cur + '|' + names.length; } sel.value = cur || ''; };
+  fill(leg, SC.oppLeg || '', 'Choose their legend…'); fill(my, myLegend() || '', 'Choose my legend…');
+  $$('#sc-fit button').forEach((b) => b.classList.toggle('on', b.dataset.f === (SC.fit || 'card')));
 }
 function wireScore() {
-  $('#sc-oppleg').onchange = (e) => { SC.oppLeg = e.target.value.trim(); saveScore(); renderScore(); };
-  $('#sc-mydeck').onchange = (e) => { SC.myDeck = e.target.value; saveScore(); renderScore(); };
+  $('#sc-oppleg').onchange = (e) => { SC.oppLeg = e.target.value; SC.oppArt = ''; if (SC.oppLeg && (!SC.bg || SC.bg === 'default')) SC.bg = 'legend'; saveScore(); renderScore(); };
+  $('#sc-myleg').onchange = (e) => { SC.myLeg = e.target.value; SC.myArt = ''; if (SC.myLeg && (!SC.bgMe || SC.bgMe === 'default')) SC.bgMe = 'legend'; saveScore(); renderScore(); };
+  $('#sc-fit').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; SC.fit = b.dataset.f; saveScore(); renderScore(); };
+  const artPick = (side) => (e) => { const b = e.target.closest('[data-art]'); if (!b) return; if (side === 'opp') SC.oppArt = b.dataset.art; else SC.myArt = b.dataset.art; if (b.dataset.art === 'random') SC.roll = (SC.roll || 0) + 1; saveScore(); renderScore(); };
+  $('#sc-oppart').onclick = artPick('opp'); $('#sc-myart').onclick = artPick('me');
   $$('#v-score [data-p]').forEach((b) => b.onclick = () => scoreBump(b.dataset.p, +b.dataset.d));
   $('#sc-undo').onclick = scoreUndo;
   $('#sc-new').onclick = newGame;
@@ -2375,11 +2419,11 @@ function wireScore() {
   $('#sc-oppname').onchange = (e) => { SC.oppName = e.target.value.trim() || 'Opponent'; saveScore(); };
   $('#sc-bg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.bg === 'photo' && !OPP_BG) { $('#sc-bgfile').click(); return; }
-    if (b.dataset.bg === 'legend' && !legendArt(SC.oppLeg)) toast('Type their legend above first');
+    if (b.dataset.bg === 'legend' && !SC.oppLeg) toast('Choose their legend above first');
     SC.bg = b.dataset.bg; saveScore(); renderScore(); };
   $('#sc-mybg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.bg === 'photo' && !MY_BG) { $('#sc-mybgfile').click(); return; }
-    if (b.dataset.bg === 'legend' && !legendArt(myLegend())) toast('Pick your deck above first');
+    if (b.dataset.bg === 'legend' && !myLegend()) toast('Choose your legend above first');
     SC.bgMe = b.dataset.bg; saveScore(); renderScore(); };
   $('#sc-mybgfile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     try { const d = await shrinkPhoto(f); localStorage.setItem(MYBG_KEY, d); MY_BG = d; SC.bgMe = 'photo'; saveScore(); renderScore(); toast('Your background set'); }

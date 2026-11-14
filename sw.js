@@ -1,5 +1,5 @@
 // Offline support: app shell cached; price data always tries the network first.
-const SHELL = 'rbt-shell-v40';
+const SHELL = 'rbt-shell-v41';
 const IMG = 'rbt-img-v1';
 const FILES = ['fonts/marcellus-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', './', 'index.html', 'style.css', 'app.js', 'scanner.js', 'features.js', 'sync.js', 'firebase-config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 

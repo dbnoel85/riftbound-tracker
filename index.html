@@ -189,7 +189,7 @@
   <!-- SCORE -->
   <section id="v-score" class="view hidden">
     <div class="score-wrap">
-      <div class="pl opp" id="pl-opp">
+      <div class="pl opp" id="pl-opp"><div class="pl-bg" aria-hidden="true"><i></i><b></b></div>
         <input class="pname" id="sc-oppname" value="Opponent" aria-label="Opponent name" maxlength="20">
         <div class="srow">
           <button class="sbtn" data-p="opp" data-d="-1" aria-label="Opponent minus one">−</button>
@@ -205,7 +205,7 @@
         <div class="sgames" id="sc-games">Games 0–0</div>
         <button class="ghost sm" id="sc-new">New game</button>
       </div>
-      <div class="pl me" id="pl-me">
+      <div class="pl me" id="pl-me"><div class="pl-bg" aria-hidden="true"><i></i><b></b></div>
         <div class="srow">
           <button class="sbtn" data-p="me" data-d="-1" aria-label="My score minus one">−</button>
           <div class="snum" id="sc-me">0</div>
@@ -219,26 +219,32 @@
       <div class="row" style="justify-content:space-between;align-items:center">
         <label class="toggle small"><input type="checkbox" id="sc-flip" checked> Flip opponent's side to face them</label>
       </div>
-      <div class="two" style="margin-top:10px"><input type="text" id="sc-oppleg" list="sc-leglist" placeholder="Their legend (for matchup stats)"><select id="sc-mydeck"><option value="">My deck…</option></select></div>
-      <datalist id="sc-leglist"></datalist>
-      <div class="bgpick">
-        <span class="sub">Opponent background</span>
-        <div class="seg mini" id="sc-bg"><button data-bg="default">Default</button><button data-bg="legend">Legend art</button><button data-bg="photo">Photo</button></div>
-        <div class="row" style="gap:8px;margin-top:8px">
-          <label class="ghost sm filebtn" for="sc-bgfile" id="sc-bgchoose">Choose photo…</label>
-          <input type="file" id="sc-bgfile" accept="image/*" hidden>
-          <button class="ghost sm hidden" id="sc-bgdel">Remove photo</button>
+      <div class="legpick">
+        <div class="lp-side">
+          <label class="sub" for="sc-oppleg">Their legend</label>
+          <select id="sc-oppleg"><option value="">Choose their legend…</option></select>
+          <div class="seg mini" id="sc-bg"><button data-bg="default">Default</button><button data-bg="legend">Legend art</button><button data-bg="photo">Photo</button></div>
+          <div class="artstrip" id="sc-oppart"></div>
+          <div class="row lp-photo" id="sc-bgrow">
+            <label class="ghost sm filebtn" for="sc-bgfile" id="sc-bgchoose">Choose photo…</label>
+            <input type="file" id="sc-bgfile" accept="image/*" hidden>
+            <button class="ghost sm hidden" id="sc-bgdel">Remove photo</button>
+          </div>
+        </div>
+        <div class="lp-side">
+          <label class="sub" for="sc-myleg">My legend</label>
+          <select id="sc-myleg"><option value="">Choose my legend…</option></select>
+          <div class="seg mini" id="sc-mybg"><button data-bg="default">Default</button><button data-bg="legend">Legend art</button><button data-bg="photo">Photo</button></div>
+          <div class="artstrip" id="sc-myart"></div>
+          <div class="row lp-photo" id="sc-mybgrow">
+            <label class="ghost sm filebtn" for="sc-mybgfile" id="sc-mybgchoose">Choose photo…</label>
+            <input type="file" id="sc-mybgfile" accept="image/*" hidden>
+            <button class="ghost sm hidden" id="sc-mybgdel">Remove photo</button>
+          </div>
         </div>
       </div>
-      <div class="bgpick">
-        <span class="sub">My background</span>
-        <div class="seg mini" id="sc-mybg"><button data-bg="default">Default</button><button data-bg="legend">Legend art</button><button data-bg="photo">Photo</button></div>
-        <div class="row" style="gap:8px;margin-top:8px">
-          <label class="ghost sm filebtn" for="sc-mybgfile" id="sc-mybgchoose">Choose photo…</label>
-          <input type="file" id="sc-mybgfile" accept="image/*" hidden>
-          <button class="ghost sm hidden" id="sc-mybgdel">Remove photo</button>
-        </div>
-        <p class="sub" style="margin:6px 0 0">Legend art uses the legend typed above for them and your deck's legend for you.</p>
+      <div class="lp-fit"><span class="sub">Art fit</span>
+        <div class="seg mini" id="sc-fit"><button data-f="card">Whole card</button><button data-f="fill">Fill</button><button data-f="art">Zoom on art</button></div>
       </div>
       <h3>Record <span id="sc-record" class="sub"></span></h3>
       <ul id="sc-hist" class="sets"></ul>
