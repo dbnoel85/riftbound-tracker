@@ -43,6 +43,9 @@ jobs:
         env:
           TOPDECK_KEY: ${{ secrets.TOPDECK_KEY }}
         run: python scripts/update_matrix.py
+      - name: Other-language card pictures (official gallery)
+        continue-on-error: true
+        run: python scripts/update_langart.py
       - name: Keyword glossary
         continue-on-error: true
         run: python scripts/build_glossary.py
