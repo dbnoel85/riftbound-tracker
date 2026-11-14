@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v38';
+const SHELL_VERSION = 'v39';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -147,7 +147,10 @@ function show(view) {
   $('#v-' + view).classList.remove('hidden');
   $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
   $('#title').textContent = { collection: 'Collection', scan: 'Scan cards', add: 'Add cards', movers: 'Top movers', decks: 'Meta decks', events: 'Events & News', score: 'Score', more: 'Settings' }[view];
-  $('#hdr-add').classList.toggle('hidden', view === 'add' || view === 'score');
+  // Settings and Search-by-name aren't bottom tabs: give them a back arrow like the sheets have
+  const sub = view === 'add' || view === 'more';
+  if (!sub) S.tabView = view;
+  $('#hdr-back').classList.toggle('hidden', !sub);
   $('#hdr-more').classList.toggle('hidden', view === 'more' || view === 'score');
   if (view === 'score') { renderScore(); keepAwake(true); } else keepAwake(false);
   if (view === 'decks') renderDecks();
@@ -209,6 +212,15 @@ function renderSetStrip() {
     S.cards.groups.filter((g) => st.get(g.id)?.total).map((g) => tile(String(g.id), shortSet(g.name), st.get(g.id), g.abbr)).join('');
   const on = $('#col-sets .settile.on'); if (on && !renderSetStrip.scrolled) { on.scrollIntoView({ inline: 'center', block: 'nearest' }); renderSetStrip.scrolled = true; }
 }
+/** under a set's value: the whole collection, so the total is always on screen */
+function sumAllLine(cur) {
+  let el = $('#sum-all'); if (!el) { el = document.createElement('div'); el.id = 'sum-all'; el.className = 'sumall'; $('#sum-change').after(el); }
+  if (cur === 'all') { el.innerHTML = ''; el.classList.add('hidden'); return; }
+  let v = 0, n = 0; for (const r of ownedRows()) { v += r.value; n += r.e.qty; }
+  el.innerHTML = `Whole collection <b>${money(v)}</b> · ${n.toLocaleString()} cards <button class="linkbtn" id="sum-allbtn">Show all</button>`;
+  el.classList.remove('hidden');
+  $('#sum-allbtn').onclick = () => { S.prefs.colSet = 'all'; savePrefs(); renderCollection(); };
+}
 function renderCollection() {
   if (!S.cards) return;
   const wish = S.prefs.colView === 'wish';
@@ -239,6 +251,7 @@ function renderCollection() {
   }
   $('#sum-value').textContent = money(total);
   $('#sum-count').textContent = count;
+  sumAllLine(cur);
   const d = total - totalPrev;
   $('#sum-change').innerHTML = rows.length ? chg(d, totalPrev ? (d / totalPrev) * 100 : null) + ' <span class="flat">this week</span>' : '';
 
@@ -309,7 +322,7 @@ function renderMissing(gid) {
   let cost = 0; for (const items of miss) { const m = Math.min(...items.map((v) => v.m ?? Infinity)); if (isFinite(m)) cost += m; }
   const rows = ownedRows().filter((r) => r.it.g === gid);
   let total = 0; for (const r of rows) total += r.value;
-  $('#sum-value').textContent = money(total); $('#sum-count').textContent = rows.reduce((t, r) => t + r.e.qty, 0); $('#sum-change').innerHTML = '';
+  $('#sum-value').textContent = money(total); $('#sum-count').textContent = rows.reduce((t, r) => t + r.e.qty, 0); $('#sum-change').innerHTML = ''; sumAllLine(String(gid));
   $('#col-empty').classList.add('hidden');
   $('#col-list').classList.add('missing');
   $('#col-list').innerHTML = miss.length
@@ -424,9 +437,17 @@ function renderMovers() {
   $('#mv-min').value = S.prefs.mvMin;
   $('#mv-period').textContent = S.cards.refDate ? `Change from ${fmtDate(S.cards.refDate)} to ${fmtDate(S.cards.updated)}` : 'Weekly change will appear after the first week of prices.';
   $('#mv-metric').classList.toggle('hidden', scope === 'sealed');
+  const q = normName($('#mv-q').value || '');
+  const hitQ = (it) => !q || normName(it.n + ' ' + setName(it.g)).includes(q);
+  $('#mv-kind').classList.toggle('hidden', scope !== 'sealed'); $('#mv-ssort-wrap').classList.toggle('hidden', scope !== 'sealed');
+  $('#mv-min-wrap').classList.toggle('hidden', scope === 'sealed');
   if (scope === 'sealed') {
-    const rows = sealedRows();
-    $('#mv-up').innerHTML = (typeof boxEvHTML === 'function' ? boxEvHTML() : '') + rows.map((it) => `<li class="item" data-k="${esc(it.k)}">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}</div><div class="meta">${esc(setName(it.g))}</div></div><div class="px"><b>${money(it.m)}</b><small>${chg(it.d, it.pc)}</small></div></li>`).join('') || '<li class="empty">No sealed products yet.</li>';
+    const kind = S.prefs.mvKind || 'all', ss = S.prefs.mvSort || 'price';
+    $$('#mv-kind button').forEach((b) => b.classList.toggle('on', b.dataset.k === kind)); $('#mv-ssort').value = ss;
+    const rows = sealedRows().filter((it) => (kind === 'all' || sealedKind(it.n) === kind) && hitQ(it));
+    const pc = (it) => it.pc == null ? (ss === 'down' ? Infinity : -Infinity) : it.pc;
+    if (ss === 'up') rows.sort((a, b) => pc(b) - pc(a)); else if (ss === 'down') rows.sort((a, b) => pc(a) - pc(b)); else if (ss === 'name') rows.sort((a, b) => a.n.localeCompare(b.n));
+    $('#mv-up').innerHTML = (typeof boxEvHTML === 'function' && kind === 'all' && !q ? boxEvHTML() : '') + rows.map((it) => `<li class="item" data-k="${esc(it.k)}">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}</div><div class="meta">${esc(setName(it.g))}</div></div><div class="px"><b>${money(it.m)}</b><small>${chg(it.d, it.pc)}</small></div></li>`).join('') || '<li class="empty">No sealed products yet.</li>';
     $('#mv-down').innerHTML = '';
     $$('#v-movers h2, #v-movers .mvh').forEach((h, i) => { h.dataset.orig = h.dataset.orig || h.textContent; h.textContent = i === 0 ? 'Sealed product prices' : ''; });
     return;
@@ -435,7 +456,7 @@ function renderMovers() {
   let pool;
   if (scope === 'mine') pool = ownedRows().map((r) => ({ it: r.it, qty: r.e.qty }));
   else pool = S.cards.items.filter((it) => !it.sealed).map((it) => ({ it, qty: 0 }));
-  pool = pool.filter((x) => x.it.d != null && x.it.m != null && Math.max(x.it.m, x.it.w || 0) >= min);
+  pool = pool.filter((x) => x.it.d != null && x.it.m != null && Math.max(x.it.m, x.it.w || 0) >= min && hitQ(x.it));
   const val = (x) => metric === 'pct' ? x.it.pc : (scope === 'mine' ? x.it.d * x.qty : x.it.d);
   const up = pool.filter((x) => val(x) > 0).sort((a, b) => val(b) - val(a)).slice(0, 15);
   const down = pool.filter((x) => val(x) < 0).sort((a, b) => val(a) - val(b)).slice(0, 15);
@@ -447,6 +468,12 @@ function renderMovers() {
   const none = scope === 'mine' && !Object.keys(S.inv.items).length ? 'Add cards to see your movers.' : 'Nothing here this week.';
   $('#mv-up').innerHTML = up.map(row).join('') || `<li class="empty">${none}</li>`;
   $('#mv-down').innerHTML = down.map(row).join('') || `<li class="empty">${none}</li>`;
+}
+function sealedKind(n) {
+  if (/\bcase\b/i.test(n)) return 'case';
+  if (/pack/i.test(n)) return 'pack';
+  if (/display|\bbox\b/i.test(n)) return 'box';
+  return 'other';
 }
 function fmtDate(s) { if (!s) return '—'; const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
 
@@ -644,6 +671,7 @@ async function startCamera() {
     try { const tr = stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : {}; if ((caps.focusMode || []).includes('continuous')) await tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch {}
     await Promise.all([getOCR(), loadHashes(), window.CardScan ? CardScan.load().catch(() => { SCAN.legacy = true; }) : null]).catch(() => {});
     setAuto(SCAN.auto);
+    camPaint();
   } catch (e) {
     msg.textContent = 'Camera blocked — allow camera access in settings, or use Photo.';
   }
@@ -672,29 +700,64 @@ function getOCR() {
   return ocrLoading;
 }
 
+/* ---- manual camera rotation: some devices (iPhone Duo opened flat) hand the browser a picture turned 90° */
+const camRot = () => (+S.prefs.camRot || 0) % 360;
+let ROT = null;
+function camSource() {
+  const v = $('#video'); if (!v || !v.videoWidth) return null;
+  const r = camRot(); if (!r) return { src: v, w: v.videoWidth, h: v.videoHeight };
+  const k = Math.min(1, 1600 / Math.max(v.videoWidth, v.videoHeight));
+  const vw = Math.round(v.videoWidth * k), vh = Math.round(v.videoHeight * k);
+  const sw = r % 180 ? vh : vw, sh = r % 180 ? vw : vh;
+  if (!ROT) ROT = document.createElement('canvas');
+  if (ROT.width !== sw || ROT.height !== sh) { ROT.width = sw; ROT.height = sh; }
+  const x = ROT.getContext('2d', { willReadFrequently: true });
+  x.setTransform(1, 0, 0, 1, 0, 0); x.translate(sw / 2, sh / 2); x.rotate(r * Math.PI / 180); x.drawImage(v, -vw / 2, -vh / 2, vw, vh);
+  return { src: ROT, w: sw, h: sh };
+}
+function camPaint() {
+  const c = $('#cam-rot'), r = camRot(); if (!c) return;
+  c.classList.toggle('hidden', !r); $('#video').style.opacity = r ? '0' : '';
+  if (!r || S.view !== 'scan' || !stream) { camPaint.on = false; return; }
+  camPaint.on = true;
+  const cs = camSource();
+  if (cs) {
+    const wr = $('.cam-wrap').getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = Math.round(wr.width * dpr), H = Math.round(wr.height * dpr);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const sc = Math.max(W / cs.w, H / cs.h), dw = cs.w * sc, dh = cs.h * sc;
+    c.getContext('2d').drawImage(cs.src, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  }
+  requestAnimationFrame(camPaint);
+}
+function rotateCam() {
+  S.prefs.camRot = (camRot() + 90) % 360; savePrefs();
+  if (!camPaint.on) camPaint();
+  toast(S.prefs.camRot ? `Camera view turned ${S.prefs.camRot}° — tap ⟳ again until the card looks right` : 'Camera view back to normal');
+}
 /** Crop the card from the live video using the on-screen guide box. */
 function grabFromVideo() {
-  const v = $('#video'); if (!v.videoWidth) return null;
+  const cs = camSource(); if (!cs) return null;
   const wrap = $('.cam-wrap').getBoundingClientRect(), box = $('.guide-box').getBoundingClientRect();
   // object-fit: cover mapping from screen to video pixels
-  const scale = Math.max(wrap.width / v.videoWidth, wrap.height / v.videoHeight);
-  const offX = (v.videoWidth * scale - wrap.width) / 2, offY = (v.videoHeight * scale - wrap.height) / 2;
+  const scale = Math.max(wrap.width / cs.w, wrap.height / cs.h);
+  const offX = (cs.w * scale - wrap.width) / 2, offY = (cs.h * scale - wrap.height) / 2;
   const sx = (box.left - wrap.left + offX) / scale, sy = (box.top - wrap.top + offY) / scale;
   const sw = box.width / scale, sh = box.height / scale;
   const c = document.createElement('canvas'); c.width = 945; c.height = 1320;
-  c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  c.getContext('2d').drawImage(cs.src, sx, sy, sw, sh, 0, 0, c.width, c.height);
   return c;
 }
 /** The whole visible camera area at full resolution, plus where the on-screen guide sits in it. */
 function grabFrame() {
-  const v = $('#video'); if (!v.videoWidth) return null;
+  const cs = camSource(); if (!cs) return null;
   const wrap = $('.cam-wrap').getBoundingClientRect(), box = $('.guide-box').getBoundingClientRect();
-  const scale = Math.max(wrap.width / v.videoWidth, wrap.height / v.videoHeight);
-  const offX = (v.videoWidth * scale - wrap.width) / 2, offY = (v.videoHeight * scale - wrap.height) / 2;
+  const scale = Math.max(wrap.width / cs.w, wrap.height / cs.h);
+  const offX = (cs.w * scale - wrap.width) / 2, offY = (cs.h * scale - wrap.height) / 2;
   const sx = offX / scale, sy = offY / scale, sw = wrap.width / scale, sh = wrap.height / scale;
   const k = Math.min(1, 1600 / Math.max(sw, sh));
   const c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
-  c.getContext('2d', { willReadFrequently: true }).drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  c.getContext('2d', { willReadFrequently: true }).drawImage(cs.src, sx, sy, sw, sh, 0, 0, c.width, c.height);
   const f = c.width / wrap.width; // screen px -> frame px
   const gx = (box.left - wrap.left) * f, gy = (box.top - wrap.top) * f, gw = box.width * f, gh = box.height * f;
   c.guide = [[gx, gy], [gx + gw, gy], [gx + gw, gy + gh], [gx, gy + gh]];
@@ -948,20 +1011,20 @@ function pickFinish(items) {
 function showAdded(it, product, cands) {
   const others = cands.filter((c) => c.pid !== product.pid).slice(0, 3);
   const finishes = product.items.filter((v) => v.k !== it.k);
+  const e = SCAN.last && sessGet(SCAN.last.id), dup = SCAN.last && SCAN.last.dup;
   $('#scan-status').innerHTML = '';
-  $('#scan-results').innerHTML = `<li class="item scan-hit">
+  $('#scan-results').innerHTML = `<li class="item scan-hit ${dup ? 'dup' : ''}">
       ${img(it.img)}
       <div class="info">
-        <div class="nm"><span class="ok">✓</span> ${esc(it.n)}${variantTags(it)}</div>
+        <div class="nm"><span class="${dup ? 'part' : 'ok'}">${dup ? '↺' : '✓'}</span> ${esc(it.n)}${variantTags(it)}</div>
         <div class="meta">${metaLine(it)}</div>
-        <div class="meta">${money(it.m)} · ${S.inv.items[it.k]?.qty || 1} owned</div>
+        <div class="meta">${money(it.m)} · ${dup ? 'already scanned — skipped' : e && !e.done ? `${e.qty} in review list` : `${S.inv.items[it.k]?.qty || 1} owned`}</div>
       </div>
       <div class="addbtns">
-        <button data-scan="undo">Undo</button>
-        <button data-scan="more">+1 copy</button>
-        ${finishes.map((v) => `<button data-scan="swap" data-k="${esc(v.k)}">${esc(v.s)} instead</button>`).join('')}
+        ${dup ? '<button data-scan="more">+1 copy anyway</button>' : '<button data-scan="undo">Undo</button><button data-scan="more">+1 copy</button>'}
+        ${dup ? '' : finishes.map((v) => `<button data-scan="swap" data-k="${esc(v.k)}">${esc(v.s)} instead</button>`).join('')}
       </div></li>
-    ${others.length ? `<li class="sub" style="padding:6px 2px">Different version? Tap to switch:</li>` + others.map((c) => {
+    ${others.length && !dup ? `<li class="sub" style="padding:6px 2px">Different version? Tap to switch:</li>` + others.map((c) => {
       const v = pickFinish(c.items);
       return `<li class="item" data-scan="swap" data-k="${esc(v.k)}">${img(v.img)}<div class="info"><div class="nm">${esc(v.n)}</div><div class="meta">${metaLine(v)}</div></div><div class="px"><b>${money(v.m)}</b></div></li>`;
     }).join('') : ''}`;
@@ -1006,19 +1069,21 @@ async function runScan(canvas, manual) {
     }
     if (res.sure && res.best) {
       const it = pickFinish(res.best.items);
-      addCard(it.k);
-      if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-      SCAN.last = { k: it.k, res }; if (typeof sessionAdd === 'function') sessionAdd(it.k);
+      const { e, dup } = sessionAdd(it.k);
+      if (navigator.vibrate) navigator.vibrate(dup ? 15 : [20, 40, 20]);
+      SCAN.last = { id: e.id, k: e.k, res, dup };
       if (res.group) { SCAN.holdGroup = res.group; SCAN.holdMiss = 0; SCAN.prevGroup = null; SCAN.lastAdd = { group: res.group, t: Date.now(), gap: false }; } else SCAN.holdHash = res.hash;
-      showAdded(it, res.best, res.cands);
-      msg.textContent = `Added ✓ ${it.n}`;
+      const shown = S.byKey.get(e.k) || it;
+      scanFlash(shown, dup ? 'dup' : e.done ? 'added' : 'review');
+      showAdded(shown, res.best, res.cands);
+      msg.textContent = dup ? `Already scanned: ${it.n}` : e.done ? `Added ✓ ${it.n}` : `✓ ${it.n} — in review list`;
     } else if (res.cands.length) {
       const changed = res.group ? res.group !== SCAN.shownFor : (SCAN.shownFor === null || hamming(res.hash, SCAN.shownFor) > 46);
       if (manual || changed) { showMaybe(res); SCAN.shownFor = res.hash; }
       msg.textContent = 'Not sure which version — pick below, or hold steady';
     } else {
       msg.textContent = manual ? 'Couldn\'t recognize that card — try more light or less glare' : 'Looking for a card…';
-      if (manual) $('#scan-status').textContent = 'Couldn\'t read the number or name. Fill the frame with the card, avoid glare, or use ＋ to search.';
+      if (manual) $('#scan-status').textContent = 'Couldn\'t read the number or name. Fill the frame with the card, avoid glare, or tap Search by name.';
     }
   } finally { SCAN.busy = false; }
 }
@@ -1046,17 +1111,18 @@ function wireScan() {
     SCAN.holdHash = null; SCAN.holdGroup = null; runScan(c, true);
   };
   $('#scan-autotoggle').onchange = (e) => setAuto(e.target.checked);
+  $('#cam-rotbtn').onclick = rotateCam;
   $('#scan-results').addEventListener('click', (e) => {
     const b = e.target.closest('[data-scan]'); if (!b) return;
     e.stopPropagation();
     const act = b.dataset.scan, last = SCAN.last;
     if (!last) return;
-    if (act === 'undo') { const q = S.inv.items[last.k]?.qty || 0; setQty(last.k, q - 1); toast('Removed'); $('#scan-results').innerHTML = ''; SCAN.last = null; }
-    if (act === 'more') { addCard(last.k); showAdded(S.byKey.get(last.k), last.res.cands.find((c) => c.items.some((v) => v.k === last.k)) || last.res.best, last.res.cands); }
+    const prodOf = (k) => last.res.cands.find((c) => c.items.some((v) => v.k === k)) || last.res.best || { pid: S.byKey.get(k).p, items: S.byPid.get(S.byKey.get(k).p) };
+    if (act === 'undo') { const e = sessGet(last.id); if (e) sessSetQty(e.id, e.qty - 1); toast('Removed'); $('#scan-results').innerHTML = ''; SCAN.last = null; }
+    if (act === 'more') { const { e } = sessionAdd(last.k, { force: true }); SCAN.last = { ...last, id: e.id, k: e.k, dup: false }; scanFlash(S.byKey.get(e.k), e.done ? 'added' : 'review'); showAdded(S.byKey.get(e.k), prodOf(e.k), last.res.cands); }
     if (act === 'swap') {
-      const q = S.inv.items[last.k]?.qty || 0; setQty(last.k, q - 1);
-      const k = b.dataset.k; addCard(k); SCAN.last.k = k;
-      const prod = last.res.cands.find((c) => c.items.some((v) => v.k === k)) || { pid: S.byKey.get(k).p, items: S.byPid.get(S.byKey.get(k).p) };
+      const k = b.dataset.k; const e = sessSwap(last.id, k) || sessionAdd(k, { force: true }).e; SCAN.last = { ...last, id: e.id, k };
+      const prod = prodOf(k);
       showAdded(S.byKey.get(k), prod, last.res.cands);
     }
   }, true);
@@ -1073,7 +1139,7 @@ function download(name, text, type) {
 /* ---------------------------------------------------------------- backups + automatic snapshots
    Everything the app saves lives under localStorage keys starting with "rbt.". A backup (and a snapshot)
    is a copy of all of them, so new features that add new keys are covered automatically. */
-const allStored = (skipBig) => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('rbt.') && !(skipBig && k === 'rbt.oppbg.v1')) o[k] = localStorage.getItem(k); } } catch {} return o; };
+const allStored = (skipBig) => { const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('rbt.') && !(skipBig && (k === 'rbt.oppbg.v1' || k === 'rbt.mybg.v1'))) o[k] = localStorage.getItem(k); } } catch {} return o; };
 function exportBackup() {
   const items = {};
   for (const [k, e] of Object.entries(S.inv.items)) { const it = S.byKey.get(k); items[k] = { ...e, name: it ? it.n : e.name, number: it ? it.num : '' }; }
@@ -1112,11 +1178,14 @@ async function restoreSnapshot(t) {
   location.reload();
 }
 /* ---- settings: sync, format, text size */
+function applyCamGap() { document.documentElement.classList.toggle('camgap', !!S.prefs.camGap); }
 function renderPrefs() {
+  const cg = $('#pref-camgap'); if (cg) { cg.checked = !!S.prefs.camGap; cg.onchange = () => { S.prefs.camGap = cg.checked; savePrefs(); applyCamGap(); }; }
+  const ib = $('#btn-import'); if (ib) ib.onclick = () => openImport();
   $$('#pref-format button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.format || 'standard')));
   $$('#pref-text button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.text || 'm')));
 }
-function applyTextSize() { document.documentElement.dataset.text = S.prefs.text || 'm'; }
+function applyTextSize() { document.documentElement.dataset.text = S.prefs.text || 'm'; applyCamGap(); }
 function renderSync() {
   const box = $('#sync-body'); if (!box) return;
   const st = window.RBTSync ? RBTSync.state() : { configured: false };
@@ -1192,7 +1261,13 @@ async function importBackup(file) {
 /* ---------------------------------------------------------------- wiring */
 function wire() {
   $$('.tabs button').forEach((b) => b.onclick = () => show(b.dataset.view));
-  $('#hdr-add').onclick = () => show('add');
+  $('#hdr-back').onclick = () => show(S.tabView || 'collection');
+  document.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (!g) return; e.preventDefault(); if (g.dataset.go === 'import') openImport(); else show(g.dataset.go); });
+  // stop double-taps zooming the page (fast taps on −/+ and the score buttons)
+  let lastTouch = 0;
+  document.addEventListener('touchend', (e) => { const t = Date.now(); if (t - lastTouch < 350 && e.target.closest('button, .sbtn, .snum, [data-undo], [data-qty]')) e.preventDefault(); lastTouch = t; }, { passive: false });
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturestart', (e) => { if (S.view === 'score' || S.view === 'scan') e.preventDefault(); }, { passive: false });
   $('#hdr-more').onclick = () => show('more');
   $('#pref-format').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.format = b.dataset.v; savePrefs(); renderPrefs(); toast(b.dataset.v === '2v2' ? 'Showing 2v2 bans and legality' : 'Showing Standard bans and legality'); };
   $('#pref-text').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.text = b.dataset.v; savePrefs(); applyTextSize(); renderPrefs(); };
@@ -1212,10 +1287,17 @@ function wire() {
   $('#mv-scope').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mvScope = b.dataset.v; savePrefs(); renderMovers(); };
   $('#mv-metric').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mvMetric = b.dataset.v; savePrefs(); renderMovers(); };
   $('#mv-min').onchange = (e) => { S.prefs.mvMin = e.target.value; savePrefs(); renderMovers(); };
+  $('#mv-q').oninput = () => renderMovers();
+  $('#mv-kind').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mvKind = b.dataset.k; savePrefs(); renderMovers(); };
+  $('#mv-ssort').onchange = (e) => { S.prefs.mvSort = e.target.value; savePrefs(); renderMovers(); };
   // list clicks: add buttons or open detail
   document.body.addEventListener('click', (e) => {
     const add = e.target.closest('[data-add]');
-    if (add) { e.stopPropagation(); addCard(add.dataset.add); return; }
+    if (add) {
+      e.stopPropagation();
+      if (S.view === 'scan') { const r = sessionAdd(add.dataset.add, { force: true }); const it = S.byKey.get(r.e.k); scanFlash(it, r.e.done ? 'added' : 'review'); toast(r.e.done ? `Added <b>${esc(it.n)}</b>` : `<b>${esc(it.n)}</b> is in your review list`); return; }
+      addCard(add.dataset.add); return;
+    }
     const row = e.target.closest('.list .item[data-k]');
     if (row) openDetail(row.dataset.k);
     const cl = e.target.closest('[data-close]');
@@ -1546,6 +1628,8 @@ function renderDeckSearch() {
   $('#dk-list').innerHTML = html || '<li class="empty">Nothing matches yet.</li>';
 }
 
+/** YouTube search for guides on this legend's deck (no hand-curated links to go stale) */
+function guideURL(a) { const champ = a.name.split(' - ')[0]; return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(`Riftbound ${champ} deck guide`); }
 function openDeck(slug) { pushSheet(() => renderDeck(slug)); }
 function renderDeck(slug) {
   const a = findArch(slug); if (!a) return;
@@ -1577,6 +1661,7 @@ function renderDeck(slug) {
       <b>You own ${an.mainHave} of ${an.mainTotal} main-deck cards</b> (${Math.round(an.pct * 100)}% of the whole list)
       <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>
       <div class="sub" style="margin-top:6px">${an.costMain > 0 ? `Missing cards cost about <b>${money(an.costMain)}</b> (cheapest printings)${an.cost > an.costMain ? `, ${money(an.cost)} with sideboard` : ''}.` : 'You have everything for the main deck. 🎉'}</div>
+      <div class="row" style="margin-top:10px;gap:8px">${an.cost > 0 ? '<button class="ghost sm" id="dk-wish2">♡ Wishlist what I\'m missing</button>' : ''}<a class="ghost sm btnlink" href="${esc(guideURL(a))}" target="_blank" rel="noopener">▶ Video guides</a></div>
     </div>
     <div class="seg" id="dk-mode"><button data-m="list" class="${mode === 'list' ? 'on' : ''}">Tournament list</button><button data-m="mine" class="${mode === 'mine' ? 'on' : ''}">My version</button><button data-m="buy" class="${mode === 'buy' ? 'on' : ''}">Buy list</button></div>`;
 
@@ -1618,10 +1703,12 @@ function renderDeck(slug) {
   $('#sheet-content').innerHTML = html;
   $$('#dk-mode button').forEach((x) => x.onclick = () => { D.deckMode = x.dataset.m; renderDeck(slug); });
   const sv = $('#dk-save'); if (sv) sv.onclick = () => saveMetaToMine(a);
-  const wb = $('#dk-wish'); if (wb) wb.onclick = () => {
+  const wishMissing = () => {
     let n = 0; for (const l of an.lines.concat(an.side)) { if (l.miss <= 0) continue; const r = cardRef(l.c.n); if (!r) continue; const w = WL.items[r.k] || { qty: 0, added: Date.now() }; w.qty = Math.max(w.qty, l.miss); w.note = w.note || a.name.split(' - ')[0] + ' deck'; WL.items[r.k] = w; n++; }
     saveWL(); toast(`${n} card${n === 1 ? '' : 's'} added to your wishlist`);
   };
+  const wb = $('#dk-wish'); if (wb) wb.onclick = wishMissing;
+  const wb2 = $('#dk-wish2'); if (wb2) wb2.onclick = wishMissing;
   const ex = $('#dk-export');
   if (ex) ex.onclick = async () => {
     const lines = []; for (const [id, n] of Object.entries(a.list.main)) lines.push(`${n} ${D.rb[id]?.n || id}`);
@@ -1913,6 +2000,7 @@ async function renderEvents() {
       ${byDeck.size ? `<p class="sub" style="margin:6px 0 0">By deck: ${[...byDeck].sort((a, b) => (b[1].W + b[1].L) - (a[1].W + a[1].L)).slice(0, 3).map(([k, r]) => `${esc(k)} <b>${recTxt(r)}</b> (${pctW(r)})`).join(' · ')}</p>` : ''}
       ${byLeg.size ? `<p class="sub" style="margin:6px 0 0">Vs. legends: ${[...byLeg].sort((a, b) => (b[1].W + b[1].L + b[1].D) - (a[1].W + a[1].L + a[1].D)).slice(0, 4).map(([k, r]) => `${esc(k.split(' - ')[0])} <b>${recTxt(r)}</b>`).join(' · ')}</p>` : ''}
     </div>` : ''}
+    <p class="sub howto">To fill in your record: open an event below and tap <b>＋ Add round</b> for each match (win, loss or draw, and their legend). Finishing a game on the <b>Score</b> screen also offers to add it to today's event.</p>
     <h2>Coming up</h2>
     <ul class="list">${up.map(row).join('') || '<li class="empty">Nothing scheduled. Add an event, or pick one from <b>Upcoming</b>.</li>'}</ul>
     <h2>Results</h2>
@@ -2025,8 +2113,8 @@ async function renderUpcoming() {
   const today = todayISO();
   const list = EVS.up.events.filter((e) => (e.end || e.start) >= today);
   let month = '', html = `<div class="card-box"><h3>Local events near you</h3>
-    <p class="sub">Nexus Nights, Summoner Skirmishes and store tournaments are listed on the official Riftbound Event Locator. Find one, then tap <b>＋ Add event</b> under My events to track it.</p>
-    <a class="ghost" style="display:inline-block;text-decoration:none" href="https://locator.riftbound.uvsgames.com/events" target="_blank" rel="noopener">Open the Event Locator ↗</a></div>
+    <p class="sub">Nexus Nights, Summoner Skirmishes, Pre-Rifts and store tournaments are now listed and registered for on PlayRiftbound.com (sign in with your Riot account). Find one, then tap <b>＋ Add event</b> under My events to track it.</p>
+    <a class="ghost" style="display:inline-block;text-decoration:none" href="https://playriftbound.com/en-us/events" target="_blank" rel="noopener">Find events on PlayRiftbound.com ↗</a></div>
     <p class="sub">Major events from Riot's official schedule (updated ${fmtDate(EVS.up.updated)}).</p><ul class="list">`;
   for (const e of list) {
     const [y, m] = e.start.split('-').map(Number); const mo = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -2181,6 +2269,21 @@ function shrinkPhoto(file) {
   });
 }
 function saveScore() { try { localStorage.setItem(SC_KEY, JSON.stringify({ ...SC, undo: SC.undo.slice(-50) })); } catch {} }
+const MYBG_KEY = 'rbt.mybg.v1';
+let MY_BG = (() => { try { return localStorage.getItem(MYBG_KEY) || ''; } catch { return ''; } })();
+/** background for one side of the score screen: default, the legend's art, or a photo picked on this device */
+function legendArt(name) { const r = name && cardRef(name); return r && r.img ? bigImg(r.img) : ''; }
+function myLegend() { const dk = MD.decks.find((d) => d.id === SC.myDeck); return dk && D.rb && D.rb[dk.leader] ? D.rb[dk.leader].n : ''; }
+function sideBg(side) {
+  const opp = side === 'opp', mode = (opp ? SC.bg : SC.bgMe) || 'default', photo = opp ? OPP_BG : MY_BG;
+  const url = mode === 'photo' ? photo : mode === 'legend' ? legendArt(opp ? SC.oppLeg : myLegend()) : '';
+  const el = $(opp ? '#pl-opp' : '#pl-me'), id = opp ? 'sc-bg' : 'sc-mybg';
+  el.classList.toggle('photo', !!url);
+  el.style.backgroundImage = url ? `linear-gradient(180deg,rgba(8,10,24,.4),rgba(8,10,24,.62)),url("${url}")` : '';
+  $$(`#${id} button`).forEach((b) => b.classList.toggle('on', b.dataset.bg === (url ? mode : 'default')));
+  $(`#${id}choose`).textContent = photo ? 'Change photo…' : 'Choose photo…';
+  $(`#${id}del`).classList.toggle('hidden', !photo);
+}
 function renderScore() {
   scoreExtras();
   $('#sc-me').textContent = SC.me; $('#sc-opp').textContent = SC.opp;
@@ -2189,12 +2292,7 @@ function renderScore() {
   $('#sc-oppname').value = SC.oppName;
   $('#sc-flip').checked = SC.flip;
   $('#pl-opp').classList.toggle('flipped', SC.flip);
-  const usePhoto = SC.bg === 'photo' && OPP_BG;
-  $('#pl-opp').classList.toggle('photo', !!usePhoto);
-  $('#pl-opp').style.backgroundImage = usePhoto ? `linear-gradient(180deg,rgba(8,10,24,.35),rgba(8,10,24,.6)),url("${OPP_BG}")` : '';
-  $$('#sc-bg button').forEach((b) => b.classList.toggle('on', b.dataset.bg === (usePhoto ? 'photo' : 'default')));
-  $('#sc-bgchoose').textContent = OPP_BG ? 'Change photo…' : 'Choose photo…';
-  $('#sc-bgdel').classList.toggle('hidden', !OPP_BG);
+  sideBg('opp'); sideBg('me');
   $('#pl-me').classList.toggle('won', SC.me >= SC.target);
   $('#pl-opp').classList.toggle('won', SC.opp >= SC.target);
   const w = $('#sc-win');
@@ -2249,8 +2347,8 @@ function scoreExtras() {
   const dl = $('#sc-leglist'); if (dl && !dl.children.length && D.rb) dl.innerHTML = legendNames().map((n) => `<option value="${esc(n)}">`).join('');
 }
 function wireScore() {
-  $('#sc-oppleg').onchange = (e) => { SC.oppLeg = e.target.value.trim(); saveScore(); };
-  $('#sc-mydeck').onchange = (e) => { SC.myDeck = e.target.value; saveScore(); };
+  $('#sc-oppleg').onchange = (e) => { SC.oppLeg = e.target.value.trim(); saveScore(); renderScore(); };
+  $('#sc-mydeck').onchange = (e) => { SC.myDeck = e.target.value; saveScore(); renderScore(); };
   $$('#v-score [data-p]').forEach((b) => b.onclick = () => scoreBump(b.dataset.p, +b.dataset.d));
   $('#sc-undo').onclick = scoreUndo;
   $('#sc-new').onclick = newGame;
@@ -2259,7 +2357,16 @@ function wireScore() {
   $('#sc-oppname').onchange = (e) => { SC.oppName = e.target.value.trim() || 'Opponent'; saveScore(); };
   $('#sc-bg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.bg === 'photo' && !OPP_BG) { $('#sc-bgfile').click(); return; }
+    if (b.dataset.bg === 'legend' && !legendArt(SC.oppLeg)) toast('Type their legend above first');
     SC.bg = b.dataset.bg; saveScore(); renderScore(); };
+  $('#sc-mybg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.bg === 'photo' && !MY_BG) { $('#sc-mybgfile').click(); return; }
+    if (b.dataset.bg === 'legend' && !legendArt(myLegend())) toast('Pick your deck above first');
+    SC.bgMe = b.dataset.bg; saveScore(); renderScore(); };
+  $('#sc-mybgfile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { const d = await shrinkPhoto(f); localStorage.setItem(MYBG_KEY, d); MY_BG = d; SC.bgMe = 'photo'; saveScore(); renderScore(); toast('Your background set'); }
+    catch { toast('Could not use that photo'); } };
+  $('#sc-mybgdel').onclick = () => { try { localStorage.removeItem(MYBG_KEY); } catch {} MY_BG = ''; SC.bgMe = 'default'; saveScore(); renderScore(); };
   $('#sc-bgfile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     try { const d = await shrinkPhoto(f); localStorage.setItem(BG_KEY, d); OPP_BG = d; SC.bg = 'photo'; saveScore(); renderScore(); toast('Opponent background set'); }
     catch { toast('Could not use that photo'); } };

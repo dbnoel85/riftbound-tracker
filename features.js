@@ -21,6 +21,11 @@ function computeAlerts() {
     const it = r.it; if (it.pc == null || it.m == null || Math.abs(it.pc) < 20 || Math.max(it.m, it.w || 0) < 2) continue;
     out.push({ id: `mv:${it.k}:${S.cards.updated}`, icon: it.pc > 0 ? '📈' : '📉', title: `${it.n} ${it.pc > 0 ? 'up' : 'down'} ${Math.abs(Math.round(it.pc))}% this week`, body: `${money(it.w)} → ${money(it.m)} · you own ${r.e.qty}`, go: () => openDetail(it.k), when: S.cards.updated });
   }
+  // Riot sign-ups: product drawings, registrations, pre-orders — flag them so they aren't missed
+  for (const h of (typeof EVS !== 'undefined' && EVS.news && EVS.news.headlines) || []) {
+    if ((h.date || '') < recent || !/drawing|raffle|lottery|sign[- ]?up|register|registration|pre-?order|apply|giveaway|ticket/i.test(h.title)) continue;
+    out.push({ id: 'news:' + h.url, icon: '📝', title: h.title, body: 'Sign-up or drawing announced — tap to read the details before it closes.', go: () => window.open(h.url, '_blank', 'noopener'), when: h.date });
+  }
   const pv = previewCards();
   if (pv.length) out.push({ id: 'prev:' + pv.length, icon: '✨', title: `${pv.length} new card${pv.length === 1 ? '' : 's'} revealed`, body: 'Cards announced for upcoming sets that aren\'t on TCGplayer yet.', go: () => pushSheet(renderPreviews), when: S.cards.updated });
   for (const g of S.cards.newGroups || []) out.push({ id: 'set:' + g.id, icon: '🆕', title: `New on TCGplayer: ${g.name}`, body: 'Prices for this set are now tracked.', go: () => { closeSheet(); show('add'); }, when: S.cards.updated });
@@ -37,7 +42,7 @@ function updateBell() {
 function renderAlerts() {
   const seen = alertsSeen();
   $('#sheet-content').innerHTML = `<div class="detail"><h2>Alerts</h2>
-    <ul class="list">${AL.list.map((a, i) => `<li class="item alert ${seen.has(a.id) ? 'read' : ''}" data-al="${i}"><span class="alicon">${a.icon}</span><div class="info"><div class="nm" style="white-space:normal">${esc(a.title)}</div><div class="meta wrap">${esc(a.body)}</div></div></li>`).join('') || '<li class="empty">Nothing new. Alerts show new bans, wishlist price hits, big moves on cards you own and newly revealed cards.</li>'}</ul>
+    <ul class="list">${AL.list.map((a, i) => `<li class="item alert ${seen.has(a.id) ? 'read' : ''}" data-al="${i}"><span class="alicon">${a.icon}</span><div class="info"><div class="nm" style="white-space:normal">${esc(a.title)}</div><div class="meta wrap">${esc(a.body)}</div></div></li>`).join('') || '<li class="empty">Nothing new. Alerts show new bans, sign-ups and product drawings, wishlist price hits, big moves on cards you own and newly revealed cards.</li>'}</ul>
     <div class="row" style="margin-top:10px"><button class="ghost" id="al-read">Mark all read</button>${'Notification' in window ? `<button class="ghost" id="al-notify">${Notification.permission === 'granted' ? '🔔 Phone notifications on' : 'Turn on phone notifications'}</button>` : ''}</div>
     <p class="sub">Phone notifications appear when the app opens and finds something new. (Alerts that arrive while the app is closed would need a notification server — not set up yet.)</p></div>`;
   $$('#sheet-content [data-al]').forEach((li) => li.onclick = () => { const a = AL.list[+li.dataset.al]; markSeen([a.id]); a.go(); });
@@ -302,27 +307,102 @@ function renderDeckImport() {
   };
 }
 
-/* ---------------------------------------------------------------- scan session list (with undo) */
-const SESS = { list: [] };
-function sessionAdd(k) { SESS.list.push({ k, t: Date.now() }); const b = $('#scan-session'); if (b) { b.textContent = `This session (${SESS.list.length})`; b.classList.remove('hidden'); } }
+/* ---------------------------------------------------------------- scan session: review list, repeats, commit */
+// Entries are kept on this device (not synced) so a half-reviewed batch survives closing the app.
+// e = { id, k, qty, done }  — done: already counted in the collection (instant mode or committed)
+const SESS_KEY = 'rbt.session.v1';
+const SESS = Object.assign({ list: [] }, loadJSON(SESS_KEY, {}));
+const saveSess = () => { try { localStorage.setItem(SESS_KEY, JSON.stringify(SESS)); } catch {} updateSessBtn(); };
+const scanReview = () => S.prefs.scanReview !== false;
+const scanNoRepeat = () => S.prefs.scanNoRepeat !== false;
+const sessProd = (k) => (S.byKey.get(k) || {}).p;
+const sessGet = (id) => SESS.list.find((e) => e.id === id);
+function sessCount() { return SESS.list.reduce((t, e) => t + e.qty, 0); }
+function sessPending() { return SESS.list.filter((e) => !e.done).reduce((t, e) => t + e.qty, 0); }
+function updateSessBtn() {
+  const b = $('#scan-session'); if (!b) return;
+  const n = sessCount(), p = sessPending();
+  b.textContent = p ? `Review (${p})` : `This session (${n})`;
+  b.classList.toggle('hidden', !n); b.classList.toggle('pending', !!p);
+}
+function invBump(k, d) { // quiet inventory change (no toast)
+  if (!d) return; const e = S.inv.items[k] || { qty: 0, added: Date.now() };
+  e.qty += d; e.added = Date.now(); if (e.qty <= 0) delete S.inv.items[k]; else S.inv.items[k] = e; saveInv();
+}
+/** a scanned card: returns { e, dup } — dup when the same card (any finish) is already in this session */
+function sessionAdd(k, { force = false } = {}) {
+  const p = sessProd(k);
+  const seen = SESS.list.find((x) => sessProd(x.k) === p);
+  if (seen && !force && scanNoRepeat()) return { e: seen, dup: true };
+  const review = scanReview();
+  let e = SESS.list.find((x) => x.k === k && x.done === !review);
+  if (e) e.qty += 1; else { e = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), k, qty: 1, done: !review }; SESS.list.push(e); }
+  if (e.done) invBump(k, 1);
+  saveSess(); if (S.view === 'collection') renderCollection();
+  return { e, dup: false };
+}
+function sessSetQty(id, q) {
+  const e = sessGet(id); if (!e) return; q = Math.max(0, Math.min(999, Math.round(q) || 0));
+  if (e.done) invBump(e.k, q - e.qty);
+  if (q === 0) SESS.list = SESS.list.filter((x) => x !== e); else e.qty = q;
+  saveSess();
+}
+function sessSwap(id, k) {
+  const e = sessGet(id); if (!e || e.k === k) return e;
+  if (e.done) { invBump(e.k, -e.qty); invBump(k, e.qty); }
+  const twin = SESS.list.find((x) => x !== e && x.k === k && x.done === e.done);
+  if (twin) { twin.qty += e.qty; SESS.list = SESS.list.filter((x) => x !== e); saveSess(); return twin; }
+  e.k = k; saveSess(); return e;
+}
+function sessCommit() {
+  const todo = SESS.list.filter((e) => !e.done); if (!todo.length) return 0;
+  let n = 0; for (const e of todo) { invBump(e.k, e.qty); e.done = true; n += e.qty; }
+  // merge rows that are now the same card
+  const m = new Map(); for (const e of SESS.list) { const o = m.get(e.k); if (o) o.qty += e.qty; else m.set(e.k, e); } SESS.list = [...m.values()];
+  saveSess(); return n;
+}
+async function sessClear() {
+  const p = sessPending();
+  if (p && !(await confirmBox(`${p} card${p === 1 ? ' hasn\'t' : 's haven\'t'} been added to your collection yet. Clear the list anyway?`))) return false;
+  SESS.list = []; saveSess(); return true;
+}
 function renderSession() {
-  const counts = new Map(); for (const s of SESS.list) counts.set(s.k, (counts.get(s.k) || 0) + 1);
-  const total = [...counts.entries()].reduce((t, [k, n]) => t + n * ((S.byKey.get(k) || {}).m || 0), 0);
-  $('#sheet-content').innerHTML = `<div class="detail"><h2>Scanned this session</h2><p class="sub">${SESS.list.length} cards · about ${money(total)}. Tap − to undo one.</p>
-    <ul class="list">${[...counts.entries()].reverse().map(([k, n]) => { const it = S.byKey.get(k); return it ? `<li class="item">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}${variantTags(it)}</div><div class="meta">${metaLine(it)} · ×${n} added · ${money(it.m)}</div></div><button class="ghost sm" data-undo="${esc(k)}">−</button></li>` : ''; }).join('')}</ul></div>`;
-  $$('#sheet-content [data-undo]').forEach((b) => b.onclick = () => {
-    const k = b.dataset.undo, e = S.inv.items[k]; if (!e) return;
-    e.qty -= 1; if (e.qty <= 0) delete S.inv.items[k]; saveInv();
-    const i = SESS.list.map((x) => x.k).lastIndexOf(k); if (i >= 0) SESS.list.splice(i, 1);
-    const sb = $('#scan-session'); if (sb) sb.textContent = `This session (${SESS.list.length})`;
-    renderSession();
-  });
+  const rows = SESS.list.slice().reverse();
+  const val = (e) => e.qty * ((S.byKey.get(e.k) || {}).m || 0);
+  const total = rows.reduce((t, e) => t + val(e), 0), pend = sessPending();
+  const finishes = (k) => { const it = S.byKey.get(k); return it ? (S.byPid.get(it.p) || [it]) : []; };
+  $('#sheet-content').innerHTML = `<div class="detail sess"><h2>Scanned this session</h2>
+    <p class="sub">${sessCount()} cards · about ${money(total)}.${pend ? ` <b class="part">${pend} waiting for review</b> — check each one, fix the finish or count, then add them all.` : ' Everything here is already in your collection; changes you make here update it.'}</p>
+    ${pend ? '<button class="primary" id="ss-commit" style="width:100%;padding:13px">Add ' + pend + ' card' + (pend === 1 ? '' : 's') + ' to my collection</button>' : ''}
+    <ul class="list sesslist">${rows.map((e) => { const it = S.byKey.get(e.k); if (!it) return ''; const fs = finishes(e.k);
+      return `<li class="item ${e.done ? '' : 'pending'}">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}</div>
+        <div class="meta">${metaLine(it)} · ${money(it.m)}${e.done ? ' · <span class="ok">in collection</span>' : ' · <span class="part">to review</span>'}</div>
+        ${fs.length > 1 ? `<div class="finrow">${fs.map((v) => `<button class="${v.k === e.k ? 'on' : ''}" data-fin="${esc(e.id)}|${esc(v.k)}">${esc(v.s)}</button>`).join('')}</div>` : ''}
+        <div class="qtyrow"><button data-qty="${esc(e.id)}|-1" aria-label="One fewer">−</button><input type="number" inputmode="numeric" min="0" max="999" value="${e.qty}" data-qin="${esc(e.id)}" aria-label="Copies"><button data-qty="${esc(e.id)}|1" aria-label="One more">+</button><button class="rm" data-qty="${esc(e.id)}|x" aria-label="Remove">Remove</button></div>
+      </div></li>`; }).join('') || '<li class="empty">Nothing scanned yet.</li>'}</ul>
+    <div class="row" style="margin-top:12px">${rows.length ? '<button class="ghost" id="ss-clear">Clear list &amp; start a new batch</button>' : ''}</div>
+    <p class="sub">Tip: with <b>Review before adding</b> on, scans wait here until you add them. With <b>Ignore repeats</b> on, showing the same card again is skipped — use + here for real extra copies.</p></div>`;
+  const re = () => renderSession();
+  $$('#sheet-content [data-qty]').forEach((b) => b.onclick = () => { const [id, d] = b.dataset.qty.split('|'); const e = sessGet(id); if (!e) return; sessSetQty(id, d === 'x' ? 0 : e.qty + +d); re(); });
+  $$('#sheet-content [data-qin]').forEach((i) => i.onchange = () => { sessSetQty(i.dataset.qin, +i.value); re(); });
+  $$('#sheet-content [data-fin]').forEach((b) => b.onclick = () => { const [id, k] = b.dataset.fin.split('|'); sessSwap(id, k); re(); });
+  const c = $('#ss-commit'); if (c) c.onclick = () => { const n = sessCommit(); toast(`Added ${n} card${n === 1 ? '' : 's'} to your collection`); if (S.view === 'collection') renderCollection(); re(); };
+  const cl = $('#ss-clear'); if (cl) cl.onclick = async () => { if (await sessClear()) { closeSheet(); toast('Ready for the next batch'); } };
+}
+/** the big "got it" moment over the camera */
+function scanFlash(it, kind) {
+  const f = $('#scan-flash'); if (!f || !it) return;
+  const txt = { added: 'Added to collection', review: 'Added to review list', dup: 'Already scanned — skipped' }[kind];
+  f.className = 'scan-flash show ' + kind;
+  f.innerHTML = `<div class="sf-card">${it.img ? `<img src="${esc(it.img)}" alt="">` : ''}<div class="sf-txt"><b>${kind === 'dup' ? '↺' : '✓'} ${esc(it.n)}</b><span>${esc(it.s !== 'Normal' ? it.s + ' · ' : '')}${money(it.m)}</span><small>${txt}</small></div></div>`;
+  $('.cam-wrap')?.classList.remove('hit', 'hitdup', 'hitrev'); void f.offsetWidth; $('.cam-wrap')?.classList.add(kind === 'dup' ? 'hitdup' : kind === 'review' ? 'hitrev' : 'hit');
+  clearTimeout(scanFlash.t); scanFlash.t = setTimeout(() => { f.classList.remove('show'); $('.cam-wrap')?.classList.remove('hit', 'hitdup', 'hitrev'); }, kind === 'dup' ? 1100 : 1500);
 }
 
 /* ---------------------------------------------------------------- quick tour */
 const TOUR = [
   ['Welcome to Riftbound Tracker', 'Your collection, prices, decks and events in one place. Here\'s a 30-second tour.'],
-  ['Add cards', 'Tap <b>Scan</b> and hold a card in the frame — it\'s added automatically. Or tap <b>＋</b> to search by name or card text.'],
+  ['Add cards', 'Tap <b>Scan</b> and hold a card in the frame. Scans wait in a review list until you add them. You can also search by name, or import a list from another app in Settings.'],
   ['Collection', 'See what your cards are worth at TCGplayer market price, filter by set, open the binder view, and track your wishlist.'],
   ['Decks', 'Top meta decks, which ones you can build with what you own, swaps for missing or banned cards, and your own decks. Search by legend or card.'],
   ['Events & News', 'Ban list, upcoming sets, big tournament results, and your own event log with matchup stats.'],
@@ -347,12 +427,17 @@ function showTour(i = 0) {
   const gb = $('#btn-gloss'); if (gb) gb.onclick = async () => { await loadGlossary(); GLQ = ''; pushSheet(renderGlossary); };
   const vh = $('#sum-history'); if (vh) vh.onclick = () => pushSheet(renderValueHistory);
   const sb = $('#scan-session'); if (sb) sb.onclick = () => pushSheet(renderSession);
+  const rv = $('#scan-review'); if (rv) { rv.checked = scanReview(); rv.onchange = () => { S.prefs.scanReview = rv.checked; savePrefs(); toast(rv.checked ? 'Scans wait in the review list until you add them' : 'Scans go straight into your collection'); }; }
+  const nr = $('#scan-norepeat'); if (nr) { nr.checked = scanNoRepeat(); nr.onchange = () => { S.prefs.scanNoRepeat = nr.checked; savePrefs(); }; }
+  const bn = $('#scan-byname'); if (bn) bn.onclick = () => show('add');
+  updateSessBtn();
   window.addEventListener('rbt-sync', () => { MT.list = (loadJSON(MT_KEY, {}).list) || []; });
 })();
 /** called by app.js once data is loaded */
 async function featuresReady() {
   try { if (!D.rb) await loadDecks(); } catch {}
   loadGlossary();
+  if (!EVS.news) { try { EVS.news = await (await fetch('data/news.json')).json(); } catch {} }
   updateBell(); notifyNew();
   if (!S.prefs.tourDone && !Object.keys(S.inv.items).length) setTimeout(() => showTour(0), 800);
 }
@@ -527,4 +612,103 @@ async function renderMatrix() {
     e.stopPropagation(); const [r, c] = el.dataset.mxc.split('|'), x = M.get(r, c);
     toast(`${short(r)} vs ${short(c)}: ${Math.round(pc(x) * 100)}% (${x.w}-${x.l}${x.d ? '-' + x.d : ''}, ${x.n} games)`);
   }));
+}
+
+/* ---------------------------------------------------------------- import a collection from another app */
+// Accepts CSV exports (TCGplayer app/collection, Collectr, ManaBox-style, spreadsheets) or plain lines
+// like "3 Jinx, Loose Cannon", "2x OGN-251 foil", "OGN-066". Matching order: TCGplayer product ID,
+// set code + number, then name (preferring the set if one is given). Nothing is added until you confirm.
+const impKey = (s) => String(s || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9()]+/g, ' ').replace(/\s+/g, ' ').trim();
+let IMPIDX = null;
+function impIndex() {
+  if (IMPIDX) return IMPIDX;
+  const byName = new Map(), byCode = new Map(), abbr = new Map(S.cards.groups.map((g) => [g.id, (g.abbr || '').toUpperCase()]));
+  for (const items of S.byPid.values()) {
+    const it = items[0]; if (it.sealed) continue;
+    const add = (m, k) => { if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(items); };
+    add(byName, impKey(it.n)); add(byName, impKey(it.n.replace(/\s*\([^)]*\)\s*$/, '')) + ' §base');
+    const m = String(it.num || '').match(/^0*(\d{1,3})([a-z*]?)/i), ab = abbr.get(it.g);
+    if (m && ab) add(byCode, `${ab}-${+m[1]}${(m[2] || '').toLowerCase()}`);
+  }
+  return (IMPIDX = { byName, byCode });
+}
+function splitCSV(line, sep) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) { const ch = line[i];
+    if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === sep) { out.push(cur); cur = ''; } else cur += ch; }
+  out.push(cur); return out.map((x) => x.trim());
+}
+function parseImport(text) {
+  const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return [];
+  const sep = (lines[0].match(/\t/g) || []).length > (lines[0].match(/,/g) || []).length ? '\t' : lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
+  const head = splitCSV(lines[0], sep).map((h) => h.toLowerCase());
+  const col = (...names) => head.findIndex((h) => names.some((n) => h === n || h.replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, '')));
+  const ci = { qty: col('quantity', 'qty', 'count', 'total quantity', 'add to quantity', 'amount', 'owned'), name: col('name', 'card name', 'product name', 'card', 'title', 'simple name'),
+    set: col('set', 'set name', 'edition', 'expansion', 'group'), code: col('set code', 'setcode'), num: col('card number', 'number', 'collector number', 'no', '#'),
+    foil: col('printing', 'foil', 'finish', 'variant', 'treatment'), pid: col('product id', 'tcgplayer id', 'tcgplayer product id', 'productid') };
+  const rows = [];
+  if (ci.name >= 0 || ci.pid >= 0 || ci.num >= 0) {
+    for (const l of lines.slice(1)) { const c = splitCSV(l, sep), g = (i) => (i >= 0 ? c[i] || '' : '');
+      const f = g(ci.foil); rows.push({ raw: l, qty: parseInt(g(ci.qty), 10) || (ci.qty >= 0 ? 0 : 1), name: g(ci.name), set: g(ci.set), code: g(ci.code), num: g(ci.num), pid: g(ci.pid), foil: /foil|holo/i.test(f) && !/non/i.test(f) ? true : f && /normal|non/i.test(f) ? false : null }); }
+  } else {
+    for (const l of lines) { let t = l.trim(); let qty = 1; const m = t.match(/^(\d+)\s*x?\s+(.*)$/i) || t.match(/^(.*?)\s+x\s*(\d+)$/i);
+      if (m) { if (/^\d/.test(m[1])) { qty = +m[1]; t = m[2]; } else { t = m[1]; qty = +m[2]; } }
+      const foil = /\b(foil|holo)\b/i.test(t) ? true : null; t = t.replace(/\s*[\[(]?\b(foil|holo|normal|non-foil)\b[\])]?/ig, '').trim();
+      const cm = t.match(/^([A-Z]{2,4})[-\s]?0*(\d{1,3}[a-z*]?)\b\s*(.*)$/i);
+      rows.push({ raw: l, qty, name: cm ? cm[3] : t, code: cm ? cm[1] : '', num: cm ? cm[2] : '', set: '', pid: '', foil }); }
+  }
+  return rows.filter((r) => r.qty > 0 && (r.name || r.pid || r.num));
+}
+function matchImport(r) {
+  const X = impIndex();
+  let items = null;
+  if (r.pid && S.byPid.get(+r.pid)) items = S.byPid.get(+r.pid);
+  if (!items && r.num) {
+    const n = String(r.num).match(/0*(\d{1,3})([a-z*]?)/i);
+    const code = (r.code || (S.cards.groups.find((g) => impKey(g.name) === impKey(r.set)) || {}).abbr || '').toUpperCase();
+    if (n && code) { const l = X.byCode.get(`${code}-${+n[1]}${(n[2] || '').toLowerCase()}`); if (l && l.length === 1) items = l[0]; }
+  }
+  if (!items && r.name) {
+    const k = impKey(r.name); let l = X.byName.get(k) || X.byName.get(impKey(r.name.replace(/\s*\([^)]*\)\s*$/, '')) + ' §base') || [];
+    if (l.length > 1 && r.set) { const want = impKey(r.set); const f = l.filter((x) => impKey(setName(x[0].g)).includes(want) || want.includes(impKey(setName(x[0].g)))); if (f.length) l = f; }
+    if (l.length > 1) { // standard art first, then the main sets over promo/bundle groups, then the cheaper printing
+      const gs = impGroupSize();
+      l = l.slice().sort((a, b) => /\(/.test(a[0].n) - /\(/.test(b[0].n) || (gs.get(b[0].g) || 0) - (gs.get(a[0].g) || 0) || (a[0].m ?? 1e9) - (b[0].m ?? 1e9));
+    }
+    items = l[0] || null;
+  }
+  if (!items) return null;
+  const pick = r.foil === true ? items.find((v) => v.s !== 'Normal') : r.foil === false ? items.find((v) => v.s === 'Normal') : items.find((v) => v.s === 'Normal');
+  return pick || items[0];
+}
+let IMPGS = null;
+function impGroupSize() { if (!IMPGS) { IMPGS = new Map(); for (const it of S.cards.items) if (!it.sealed) IMPGS.set(it.g, (IMPGS.get(it.g) || 0) + 1); } return IMPGS; }
+function openImport() { pushSheet(renderImport); }
+let IMP = { text: '', rows: null };
+function renderImport() {
+  const res = IMP.rows;
+  const ok = res ? res.filter((x) => x.it) : [], bad = res ? res.filter((x) => !x.it) : [];
+  const n = ok.reduce((t, x) => t + x.r.qty, 0), val = ok.reduce((t, x) => t + x.r.qty * (x.it.m || 0), 0);
+  $('#sheet-content').innerHTML = `<div class="detail form"><h2>Import cards</h2>
+    <p class="sub">Export your collection from the other app as a CSV or text list, then pick the file or paste it here. Works with TCGplayer exports and most collection apps (columns like Quantity, Name, Set, Number, Printing/Foil). Plain lists work too: <i>3 Jinx, Loose Cannon</i>, <i>2x OGN-251 foil</i>.</p>
+    <label class="ghost filebtn" for="imp-file" style="display:block;text-align:center">Choose a file…</label><input type="file" id="imp-file" accept=".csv,.txt,.tsv,text/*" hidden>
+    <textarea id="imp-text" rows="6" placeholder="…or paste the list here" style="width:100%;margin-top:8px">${esc(IMP.text)}</textarea>
+    <button class="ghost" id="imp-check" style="width:100%;margin-top:8px">Check the list</button>
+    ${res ? `<div class="card-box" style="margin-top:12px"><b>${ok.length} of ${res.length} lines matched</b> · ${n.toLocaleString()} cards · about ${money(val)}
+        ${bad.length ? `<p class="sub" style="margin:6px 0 0">${bad.length} not recognised (listed below) — fix the name or number in the box and check again, or add them by hand later.</p>` : ''}
+        <button class="primary" id="imp-go" style="width:100%;margin-top:10px" ${ok.length ? '' : 'disabled'}>Add ${n.toLocaleString()} cards to my collection</button>
+        <p class="sub" style="margin:6px 0 0">Adds to what you already have. A backup snapshot is saved first, so you can undo from Settings → Backup.</p></div>
+      ${bad.length ? `<div class="dsec">Not recognised</div><ul class="dl">${bad.slice(0, 40).map((x) => `<li><span class="nm">${esc(x.r.raw)}</span></li>`).join('')}</ul>` : ''}
+      <div class="dsec">Matched</div><ul class="dl">${ok.slice(0, 150).map((x) => `<li><span class="cnt">${x.r.qty}×</span><span class="nm">${esc(x.it.n)}<small>${esc(setName(x.it.g))} · ${esc(x.it.num || '')} · ${esc(x.it.s)}</small></span><span class="st">${money(x.it.m)}</span></li>`).join('')}${ok.length > 150 ? `<li class="sub">…and ${ok.length - 150} more</li>` : ''}</ul>` : ''}</div>`;
+  $('#imp-file').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; IMP.text = await f.text(); check(); };
+  const check = () => { IMP.text = IMP.text || $('#imp-text').value; IMP.rows = parseImport(IMP.text).map((r) => ({ r, it: matchImport(r) })); renderImport(); };
+  $('#imp-check').onclick = () => { IMP.text = $('#imp-text').value; check(); };
+  const go = $('#imp-go'); if (go) go.onclick = async () => {
+    if (!(await confirmBox(`Add ${n.toLocaleString()} cards (${ok.length} different) to your collection?`))) return;
+    try { await takeSnapshot('before import'); } catch {}
+    for (const x of ok) invBump(x.it.k, x.r.qty);
+    IMP = { text: '', rows: null }; closeSheet(); show('collection'); toast(`Imported ${n.toLocaleString()} cards`);
+  };
 }

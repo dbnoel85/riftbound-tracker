@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1124">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -29,11 +29,11 @@
     <path class="glow" stroke="#bff7f0" stroke-width=".8" opacity=".6" d="M304 166 270 150 252 158M244 258 214 262M176 352 150 340 132 346M104 436 80 452"/>
   </g></svg></div>
 <header class="top">
+  <button class="hbtn back hidden" id="hdr-back" aria-label="Back"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
   <h1 id="title">Collection</h1>
   <span id="stale" class="pill warn hidden"></span>
   <button class="hbtn" id="hdr-learn" aria-label="Rules and guide"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 11h5"/></svg></button>
   <button class="hbtn" id="hdr-alerts" aria-label="Alerts"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="badge hidden"></span></button>
-  <button class="hbtn" id="hdr-add" aria-label="Add cards"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
   <button class="hbtn" id="hdr-more" aria-label="Settings"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>
 </header>
 
@@ -80,7 +80,7 @@
     <ul id="col-list" class="list"></ul>
     <div id="col-empty" class="empty hidden">
       <p>No cards yet.</p>
-      <p>Tap <b>Scan</b> to use the camera, or <b>＋</b> at the top to search by name or card number.</p>
+      <p>Tap <b>Scan</b> to use the camera, <button class="linkbtn" data-go="add">search by name or number</button>, or <button class="linkbtn" data-go="import">import a list from another app</button>.</p>
     </div>
     </div>
   </section>
@@ -90,7 +90,10 @@
     <div class="cam-wrap">
       <video id="video" playsinline muted autoplay></video>
       <div class="guide"><div class="guide-box"></div></div>
+      <canvas id="cam-rot" class="cam-rot hidden"></canvas>
       <canvas id="scan-overlay" class="scan-overlay"></canvas>
+      <div id="scan-flash" class="scan-flash" aria-live="polite"></div>
+      <button class="cam-rotbtn" id="cam-rotbtn" aria-label="Rotate camera view" title="Camera picture sideways? Tap to rotate it">⟳</button>
       <div id="cam-msg" class="cam-msg">Starting camera…</div>
     </div>
     <div class="scan-controls">
@@ -98,6 +101,11 @@
       <button id="btn-capture" class="primary round" aria-label="Scan or pause auto-scan">Scan</button>
       <button class="ghost sm hidden" id="scan-session">This session (0)</button>
       <label class="photo-btn">Photo<input id="scan-file" type="file" accept="image/*" capture="environment" hidden></label>
+    </div>
+    <div class="scan-opts">
+      <label class="toggle small"><input type="checkbox" id="scan-review"> Review before adding</label>
+      <label class="toggle small"><input type="checkbox" id="scan-norepeat"> Ignore repeats</label>
+      <button class="ghost sm" id="scan-byname">Search by name</button>
     </div>
     <label class="toggle small" style="justify-content:center"><input type="checkbox" id="scan-autotoggle" checked> <span id="scan-mode">Auto-add</span></label>
     <p class="hint">Hold one card inside the frame — it can be a little tilted. The outline turns green when it's recognized. Cards that only exist in one finish are added in that finish; for cards made in both, set Normal or Foil first.</p>
@@ -128,6 +136,9 @@
       <button data-v="pct" class="on">By %</button>
       <button data-v="usd">By $</button>
     </div>
+    <input id="mv-q" type="search" placeholder="Search movers, e.g. Jinx or booster box" autocomplete="off" style="width:100%;margin-bottom:8px">
+    <div class="chips hidden" id="mv-kind"><button data-k="all" class="on">All sealed</button><button data-k="pack">Booster packs</button><button data-k="box">Boxes / displays</button><button data-k="case">Cases</button><button data-k="other">Decks &amp; bundles</button></div>
+    <label class="toggle small hidden" id="mv-ssort-wrap">Sort by <select id="mv-ssort"><option value="price">Price, high to low</option><option value="up">Biggest % rise</option><option value="down">Biggest % drop</option><option value="name">Name A–Z</option></select></label>
     <label class="toggle small" id="mv-min-wrap">Only cards worth at least
       <select id="mv-min"><option value="0">$0</option><option value="1" selected>$1</option><option value="5">$5</option><option value="20">$20</option></select>
     </label>
@@ -206,16 +217,26 @@
       <div class="row" style="justify-content:space-between;align-items:center">
         <label class="toggle small"><input type="checkbox" id="sc-flip" checked> Flip opponent's side to face them</label>
       </div>
-      <div class="two" style="margin-top:10px"><input id="sc-oppleg" list="sc-leglist" placeholder="Their legend (for matchup stats)"><select id="sc-mydeck"><option value="">My deck…</option></select></div>
+      <div class="two" style="margin-top:10px"><input type="text" id="sc-oppleg" list="sc-leglist" placeholder="Their legend (for matchup stats)"><select id="sc-mydeck"><option value="">My deck…</option></select></div>
       <datalist id="sc-leglist"></datalist>
       <div class="bgpick">
         <span class="sub">Opponent background</span>
-        <div class="seg mini" id="sc-bg"><button data-bg="default">Default</button><button data-bg="photo">Photo</button></div>
+        <div class="seg mini" id="sc-bg"><button data-bg="default">Default</button><button data-bg="legend">Legend art</button><button data-bg="photo">Photo</button></div>
         <div class="row" style="gap:8px;margin-top:8px">
           <label class="ghost sm filebtn" for="sc-bgfile" id="sc-bgchoose">Choose photo…</label>
           <input type="file" id="sc-bgfile" accept="image/*" hidden>
           <button class="ghost sm hidden" id="sc-bgdel">Remove photo</button>
         </div>
+      </div>
+      <div class="bgpick">
+        <span class="sub">My background</span>
+        <div class="seg mini" id="sc-mybg"><button data-bg="default">Default</button><button data-bg="legend">Legend art</button><button data-bg="photo">Photo</button></div>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <label class="ghost sm filebtn" for="sc-mybgfile" id="sc-mybgchoose">Choose photo…</label>
+          <input type="file" id="sc-mybgfile" accept="image/*" hidden>
+          <button class="ghost sm hidden" id="sc-mybgdel">Remove photo</button>
+        </div>
+        <p class="sub" style="margin:6px 0 0">Legend art uses the legend typed above for them and your deck's legend for you.</p>
       </div>
       <h3>Record <span id="sc-record" class="sub"></span></h3>
       <ul id="sc-hist" class="sets"></ul>
@@ -235,7 +256,9 @@
       <div class="seg mini" id="pref-format"><button data-v="standard">Standard</button><button data-v="2v2">2v2 Constructed</button></div>
       <label class="sub" style="display:block;margin-top:10px">Text size</label>
       <div class="seg mini" id="pref-text"><button data-v="s">Small</button><button data-v="m">Normal</button><button data-v="l">Large</button><button data-v="xl">Extra large</button></div>
-      <button class="ghost" id="btn-tour" style="margin-top:12px">Show the quick tour again</button>
+      <label class="toggle small" style="margin-top:12px"><input type="checkbox" id="pref-camgap"> Keep top buttons clear of a front camera (iPhone Duo front screen)</label>
+      <button class="ghost" id="btn-import" style="margin-top:12px">Import cards from another app</button>
+      <button class="ghost" id="btn-tour" style="margin-top:8px">Show the quick tour again</button>
       <button class="ghost" id="btn-gloss" style="margin-top:8px">Keyword glossary</button>
     </div>
     <div class="card-box">
