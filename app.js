@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v42';
+const SHELL_VERSION = 'v43';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -20,10 +20,21 @@ class LangMap extends Map {
     const v = super.get(k); if (v !== undefined || typeof k !== 'string' || !k.includes('~')) return v;
     const b = super.get(baseKey(k)); if (!b) return undefined;
     const it = { ...b, k, bk: b.k, lang: langOf(k) };
+    const la = langArt(b, it.lang);
+    if (la) { if (la[0]) { it.img = LA.base + la[0] + '?accountingTag=RB&auto=format&w=300'; it.limg = true; } if (la[1]) it.ln = la[1]; }
     if (S.prefs.langValue === 'none') { it.m = null; it.w = null; it.d = null; it.pc = null; }
     return it;
   }
 }
+/* official other-language pictures and names (data/langart.json, from Riot's card gallery) */
+const LA = { base: '', cards: null };
+function loadLangArt() { return fetch('data/langart.json').then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { LA.base = j.base; LA.cards = j.cards; } }).catch(() => {}); }
+function cardCode(it) {
+  const g = S.groups.get(it.g), ab = g && g.abbr ? g.abbr.toUpperCase() : '', m = String(it.num || '').match(/^0*(\d+)([a-z*]?)/i);
+  return ab && m ? `${ab}-${+m[1]}${(m[2] || '').toLowerCase()}` : '';
+}
+function langArt(it, lang) { if (!LA.cards || !lang || lang === 'en') return null; const c = LA.cards[cardCode(it)]; return c && c[lang] || null; }
+const LANG_ART = ['zh', 'zh-tw', 'ko'];   // languages with their own printed pictures in the official gallery
 /** key to store when adding from the Scan or Search screens: the language picked there */
 function addKey(k) { return String(k).includes('~') || !['scan', 'add'].includes(S.view) ? k : withLang(k, S.prefs.cardLang || 'en'); }
 
@@ -67,7 +78,7 @@ function chg(d, pc) {
   return `<span class="${cls}">${sign}${money(Math.abs(d))}${pcs}</span>`;
 }
 function img(u, cls = '') { return u ? `<img loading="lazy" decoding="async" class="${cls}" src="${esc(u)}" alt="">` : `<div class="thumb ${cls}"></div>`; }
-function bigImg(u) { return u ? u.replace(/_\d+w\.jpg$/, '_in_1000x1000.jpg') : ''; }
+function bigImg(u) { return u ? (u.includes('rgpub.io') ? u.replace(/([?&])w=\d+/, '$1w=744') : u.replace(/_\d+w\.jpg$/, '_in_1000x1000.jpg')) : ''; }
 function setAbbr(g) { const gr = S.groups.get(g); return gr ? (gr.abbr || gr.name) : ''; }
 function setName(g) { const gr = S.groups.get(g); return gr ? gr.name : ''; }
 function toast(msg, ms = 2200) {
@@ -134,6 +145,7 @@ async function loadData(force) {
   const cards = await r.json();
   // pictures for printings TCGplayer has no photo of yet
   try { const fix = await (await fetch('data/imgfix.json', { cache: force ? 'reload' : 'default' })).json(); for (const it of cards.items) if (fix[it.p]) it.img = fix[it.p]; } catch { /* optional */ }
+  await loadLangArt();
   S.cards = cards; S.byKey.clear(); S.byPid.clear(); S.groups.clear();
   for (const g of cards.groups) S.groups.set(g.id, g);
   for (const it of cards.items) {
@@ -373,8 +385,12 @@ function renderMissing(gid) {
 }
 /* ----- manual add */
 function productRow(items, extra = '') {
+  const L = S.view === 'add' || S.view === 'scan' ? (S.prefs.cardLang || 'en') : 'en';
+  if (L !== 'en') items = items.map((v) => S.byKey.get(withLang(v.k, L)) || v);
   const it = items[0];
-  const btns = items.map((v) => `<button data-add="${esc(v.k)}">+ ${esc(v.s)} <b>${money(v.m)}</b></button>`).join('');
+  const btns = items.map((v) => `<button data-add="${esc(v.k)}">+ ${esc(v.s)}${L !== 'en' ? ' ' + esc(langTag(L)) : ''} <b>${money(v.m)}</b></button>`).join('')
+    + (S.view === 'add' ? `<button class="langbtn" data-langs="${esc(it.k)}">🌐 Languages</button>` : '');
+  if (it.ln) extra = `<div class="ln">${esc(it.ln)}</div>` + extra;
   return `<li class="item" data-k="${esc(it.k)}">
       ${img(it.img)}
       <div class="info">
@@ -540,13 +556,19 @@ function checkStale() {
 
 /* ----- detail sheet */
 function openDetail(k) { if (S.byKey.get(k)) pushSheet(() => renderDetail(k)); }
-/** which languages you own this printing in, and a way to open (and count) another language */
+/** every language this printing comes in, with the real picture where Riot publishes one; tap to view or count it */
 function langRowHTML(it) {
-  const b = baseKey(it.k), all = poolAndView();
-  const have = LANGS.filter(([l]) => l === 'en' || all[withLang(b, l)] || l === it.lang);
-  return `<div class="langrow"><span class="label">Language</span><div class="chips">${have.map(([l, , t]) => { const q = (all[withLang(b, l)] || {}).qty || 0;
-      return `<button class="${l === (it.lang || 'en') ? 'on' : ''}" data-open="${esc(withLang(b, l))}">${esc(t)}${q ? ` <b>×${q}</b>` : ''}</button>`; }).join('')}
-    <select data-langadd="${esc(b)}" aria-label="Another language"><option value="">＋ Other language…</option>${LANGS.filter(([l]) => !have.some((h) => h[0] === l)).map(([l, n]) => `<option value="${esc(l)}">${esc(n)}</option>`).join('')}</select></div></div>`;
+  const b = baseKey(it.k), all = poolAndView(), base = S.byKey.get(b);
+  const owned = (l) => (all[withLang(b, l)] || {}).qty || 0;
+  const show = LANGS.filter(([l]) => l === 'en' || LANG_ART.includes(l) || owned(l) || l === it.lang);
+  const tile = ([l, n, t]) => { const v = l === 'en' ? base : S.byKey.get(withLang(b, l)); const own = langArt(base, l), q = owned(l);
+    return `<button class="lt ${l === (it.lang || 'en') ? 'on' : ''}" data-open="${esc(withLang(b, l))}" title="${esc(n)}">
+      <img loading="lazy" src="${esc(v.img)}" alt="">
+      <span class="lt-t">${esc(t)}${q ? ` <b>×${q}</b>` : ''}</span>
+      <small>${l === 'en' ? 'English' : own && own[0] ? esc(own[1] || n) : 'English art'}</small></button>`; };
+  return `<div class="langrow" id="langrow"><div class="row" style="justify-content:space-between;align-items:baseline"><span class="label">Languages</span><span class="sub" style="font-size:12px">Tap one to view and count it</span></div>
+    <div class="ltiles">${show.map(tile).join('')}</div>
+    <select data-langadd="${esc(b)}" aria-label="Another language"><option value="">＋ Other language…</option>${LANGS.filter(([l]) => !show.some((h) => h[0] === l)).map(([l, n]) => `<option value="${esc(l)}">${esc(n)}</option>`).join('')}</select></div>`;
 }
 function poolAndView() { return { ...poolItems(), ...S.inv.items }; }
 function renderDetail(k) {
@@ -555,9 +577,10 @@ function renderDetail(k) {
   const siblings = (S.byPid.get(it.p) || []).filter((v) => v.k !== baseKey(k));
   const html = `<div class="detail">
     <img class="detail-img" src="${esc(bigImg(it.img))}" onerror="this.onerror=null;this.src='${esc(it.img)}'" alt="">
-    <h2>${esc(it.n)}${variantTags(it)}</h2>
+    <h2>${esc(it.n)}${variantTags(it)}</h2>${it.ln ? `<div class="ln">${esc(it.ln)}</div>` : ''}
     <div class="sub">${esc(setName(it.g))}${it.num ? ' · ' + esc(it.num) : ''}${it.r ? ' · ' + esc(it.r) : ''}</div>
     ${banBox(it.n)}
+    ${langRowHTML(it)}
     <div id="detail-text"></div>
     <div class="card-box mkt">
       <span class="label">${it.lang && it.lang !== 'en' ? `English TCGplayer price — used for ${esc(langName(it.lang))} copies` : 'TCGplayer market price'}${it.s !== 'Normal' ? ' · ' + esc(it.s) : ''}</span>
@@ -589,7 +612,6 @@ function renderDetail(k) {
     </div>
     <div class="card-box wishbox" id="wishbox"></div>
     ${siblings.length ? `<div class="row">${siblings.map((v) => `<button class="ghost" data-open="${esc(withLang(v.k, it.lang))}">${esc(v.s)} · ${money(v.m)}</button>`).join('')}</div>` : ''}
-    ${langRowHTML(it)}
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
   $('#sheet-content').innerHTML = html;
@@ -1348,6 +1370,8 @@ function wire() {
   // list clicks: add buttons or open detail
   document.body.addEventListener('click', (e) => {
     const add = e.target.closest('[data-add]');
+    const lb = e.target.closest('[data-langs]');
+    if (lb) { e.stopPropagation(); openDetail(lb.dataset.langs); setTimeout(() => $('#langrow')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120); return; }
     if (add) {
       e.stopPropagation();
       if (S.view === 'scan') { const r = sessionAdd(add.dataset.add, { force: true }); const it = S.byKey.get(r.e.k); scanFlash(it, r.e.done ? 'added' : 'review'); toast(r.e.done ? `Added <b>${esc(it.n)}</b>` : `<b>${esc(it.n)}</b> is in your review list`); return; }

@@ -434,7 +434,7 @@ function showTour(i = 0) {
   const bn = $('#scan-byname'); if (bn) bn.onclick = () => show('add');
   for (const id of ['#scan-lang', '#add-lang']) { const sel = $(id); if (!sel) continue;
     sel.innerHTML = LANGS.map(([l, n]) => `<option value="${l}">${esc(n)}</option>`).join(''); sel.value = S.prefs.cardLang || 'en';
-    sel.onchange = () => { S.prefs.cardLang = sel.value; savePrefs(); $$('#scan-lang, #add-lang').forEach((x) => { x.value = sel.value; x.closest('label')?.classList.toggle('langon', sel.value !== 'en'); }); toast(sel.value === 'en' ? 'Adding English cards' : `Adding <b>${esc(langName(sel.value))}</b> cards — switch back to English when you're done`); };
+    sel.onchange = () => { S.prefs.cardLang = sel.value; savePrefs(); $$('#scan-lang, #add-lang').forEach((x) => { x.value = sel.value; x.closest('label')?.classList.toggle('langon', sel.value !== 'en'); }); toast(sel.value === 'en' ? 'Adding English cards' : `Adding <b>${esc(langName(sel.value))}</b> cards — switch back to English when you're done`); if (S.view === 'add') renderAdd(); };
     sel.closest('label')?.classList.toggle('langon', (S.prefs.cardLang || 'en') !== 'en'); }
   const cl = $('#col-lang'); if (cl) cl.onchange = () => { S.prefs.colLang = cl.value; savePrefs(); renderCollection(); };
   updateSessBtn();

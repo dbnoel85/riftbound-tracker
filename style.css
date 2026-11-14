@@ -580,3 +580,15 @@ a.btnlink{text-decoration:none;color:var(--text)}
 .toolbar:has(#col-lang:not(.hidden)){flex-wrap:wrap}
 .toolbar:has(#col-lang:not(.hidden)) #col-filter{flex:1 1 100%}
 .toolbar:has(#col-lang:not(.hidden)) #col-lang,.toolbar:has(#col-lang:not(.hidden)) #col-sort{flex:1 1 40%;max-width:none}
+.ln{font-size:14px;color:#ffb3a6;margin:2px 0 4px;font-weight:600}
+.item .ln{font-size:12.5px;margin:1px 0}
+.ltiles{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 8px;scroll-snap-type:x proximity}
+.ltiles .lt{flex:none;width:92px;display:flex;flex-direction:column;gap:3px;align-items:center;background:none;border:0;padding:0;color:var(--sub);scroll-snap-align:start}
+.ltiles .lt img{width:92px;height:128px;object-fit:cover;border-radius:5px;border:2px solid var(--line);background:var(--deep)}
+.ltiles .lt.on img{border-color:var(--gold);box-shadow:0 0 14px rgba(241,212,142,.45)}
+.ltiles .lt-t{font-weight:700;color:var(--text);font-size:13px}
+.ltiles .lt-t b{color:var(--rift)}
+.ltiles .lt small{font-size:10.5px;line-height:1.2;text-align:center;max-width:92px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ltiles .lt.on .lt-t{color:var(--gold)}
+.langrow select{margin-top:4px}
+.addbtns .langbtn{background:none;border:1px dashed var(--line2);color:var(--sub);font-size:12px}
