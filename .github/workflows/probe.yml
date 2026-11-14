@@ -1,0 +1,33 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for L in en-us zh-cn zh-tw; do
+            curl -sL -A "Mozilla/5.0" "https://playriftbound.com/$L/card-gallery/" -o $L.html
+            echo "== $L $(wc -c < $L.html)"
+          done
+          python3 - <<'PY'
+          import re,json
+          for L in ['en-us','zh-cn','zh-tw']:
+              h=open(L+'.html',encoding='utf-8',errors='ignore').read()
+              m=re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',h,re.S)
+              print('==',L,'nextdata',bool(m))
+              if not m: print(h[:500]); continue
+              d=json.loads(m.group(1))
+              def walk(o,path='',depth=0):
+                  if depth>9: return
+                  if isinstance(o,dict):
+                      if 'collectorNumber' in o or 'publicCode' in o:
+                          print('CARD at',path); print(json.dumps(o,ensure_ascii=False)[:1500]); raise StopIteration
+                      for k,v in o.items(): walk(v,path+'/'+k,depth+1)
+                  elif isinstance(o,list):
+                      for i,v in enumerate(o[:3]): walk(v,path+f'[{i}]',depth+1)
+              try: walk(d)
+              except StopIteration: pass
+              s=json.dumps(d,ensure_ascii=False)
+              print('len',len(s),'imgs',len(re.findall(r'cmsassets\.rgpub\.io[^"]+',s)))
+              print(re.findall(r'https://cmsassets\.rgpub\.io[^"]+',s)[:3])
+          PY
