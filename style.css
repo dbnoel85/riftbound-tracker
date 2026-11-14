@@ -521,3 +521,14 @@ html.camgap .top h1{font-size:20px}
 /* movers: sealed product type chips */
 #mv-kind{margin-bottom:8px}
 a.btnlink{text-decoration:none;color:var(--text)}
+
+/* collections picker */
+.colbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.colbar select{flex:1;font:400 17px/1.2 var(--display);color:var(--gold);padding:9px 12px}
+#scan-colwrap select{padding:6px 8px;margin-left:6px}
+.colman .item{align-items:flex-start}
+.colman .info input[data-cname]{width:100%;font-weight:600;margin-bottom:6px}
+.colman select{padding:6px 8px;font-size:13px}
+.ghost.danger{color:var(--ember);border-color:rgba(255,106,87,.45)}
+.colman label.toggle,.form label.toggle{display:flex;flex-direction:row;align-items:center;gap:8px;margin:6px 0 0}
+.colman label.toggle input,.form label.toggle input{width:auto;margin:0}

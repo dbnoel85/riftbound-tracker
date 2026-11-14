@@ -325,9 +325,9 @@ function updateSessBtn() {
   b.textContent = p ? `Review (${p})` : `This session (${n})`;
   b.classList.toggle('hidden', !n); b.classList.toggle('pending', !!p);
 }
-function invBump(k, d) { // quiet inventory change (no toast)
-  if (!d) return; const e = S.inv.items[k] || { qty: 0, added: Date.now() };
-  e.qty += d; e.added = Date.now(); if (e.qty <= 0) delete S.inv.items[k]; else S.inv.items[k] = e; saveInv();
+function invBump(k, d, col) { // quiet inventory change (no toast); col = collection id, default the one in view
+  if (!d) return; const items = colItems(col ?? curCol()); const e = items[k] || { qty: 0, added: Date.now() };
+  e.qty += d; e.added = Date.now(); if (e.qty <= 0) delete items[k]; else items[k] = e; saveInv();
 }
 /** a scanned card: returns { e, dup } — dup when the same card (any finish) is already in this session */
 function sessionAdd(k, { force = false } = {}) {
@@ -335,30 +335,31 @@ function sessionAdd(k, { force = false } = {}) {
   const seen = SESS.list.find((x) => sessProd(x.k) === p);
   if (seen && !force && scanNoRepeat()) return { e: seen, dup: true };
   const review = scanReview();
-  let e = SESS.list.find((x) => x.k === k && x.done === !review);
-  if (e) e.qty += 1; else { e = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), k, qty: 1, done: !review }; SESS.list.push(e); }
-  if (e.done) invBump(k, 1);
+  const col = curCol();
+  let e = SESS.list.find((x) => x.k === k && x.done === !review && (x.col || '') === col);
+  if (e) e.qty += 1; else { e = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), k, qty: 1, done: !review, col }; SESS.list.push(e); }
+  if (e.done) invBump(k, 1, col);
   saveSess(); if (S.view === 'collection') renderCollection();
   return { e, dup: false };
 }
 function sessSetQty(id, q) {
   const e = sessGet(id); if (!e) return; q = Math.max(0, Math.min(999, Math.round(q) || 0));
-  if (e.done) invBump(e.k, q - e.qty);
+  if (e.done) invBump(e.k, q - e.qty, e.col || '');
   if (q === 0) SESS.list = SESS.list.filter((x) => x !== e); else e.qty = q;
   saveSess();
 }
 function sessSwap(id, k) {
   const e = sessGet(id); if (!e || e.k === k) return e;
-  if (e.done) { invBump(e.k, -e.qty); invBump(k, e.qty); }
-  const twin = SESS.list.find((x) => x !== e && x.k === k && x.done === e.done);
+  if (e.done) { invBump(e.k, -e.qty, e.col || ''); invBump(k, e.qty, e.col || ''); }
+  const twin = SESS.list.find((x) => x !== e && x.k === k && x.done === e.done && (x.col || '') === (e.col || ''));
   if (twin) { twin.qty += e.qty; SESS.list = SESS.list.filter((x) => x !== e); saveSess(); return twin; }
   e.k = k; saveSess(); return e;
 }
 function sessCommit() {
   const todo = SESS.list.filter((e) => !e.done); if (!todo.length) return 0;
-  let n = 0; for (const e of todo) { invBump(e.k, e.qty); e.done = true; n += e.qty; }
-  // merge rows that are now the same card
-  const m = new Map(); for (const e of SESS.list) { const o = m.get(e.k); if (o) o.qty += e.qty; else m.set(e.k, e); } SESS.list = [...m.values()];
+  let n = 0; for (const e of todo) { invBump(e.k, e.qty, e.col || ''); e.done = true; n += e.qty; }
+  // merge rows that are now the same card in the same collection
+  const m = new Map(); for (const e of SESS.list) { const id = e.k + '@' + (e.col || ''); const o = m.get(id); if (o) o.qty += e.qty; else m.set(id, e); } SESS.list = [...m.values()];
   saveSess(); return n;
 }
 async function sessClear() {
@@ -376,7 +377,7 @@ function renderSession() {
     ${pend ? '<button class="primary" id="ss-commit" style="width:100%;padding:13px">Add ' + pend + ' card' + (pend === 1 ? '' : 's') + ' to my collection</button>' : ''}
     <ul class="list sesslist">${rows.map((e) => { const it = S.byKey.get(e.k); if (!it) return ''; const fs = finishes(e.k);
       return `<li class="item ${e.done ? '' : 'pending'}">${img(it.img)}<div class="info"><div class="nm">${esc(it.n)}</div>
-        <div class="meta">${metaLine(it)} · ${money(it.m)}${e.done ? ' · <span class="ok">in collection</span>' : ' · <span class="part">to review</span>'}</div>
+        <div class="meta">${metaLine(it)} · ${money(it.m)}${e.done ? ' · <span class="ok">in collection</span>' : ' · <span class="part">to review</span>'}${colList().length > 1 ? ` · → ${esc(colName(e.col || ''))}` : ''}</div>
         ${fs.length > 1 ? `<div class="finrow">${fs.map((v) => `<button class="${v.k === e.k ? 'on' : ''}" data-fin="${esc(e.id)}|${esc(v.k)}">${esc(v.s)}</button>`).join('')}</div>` : ''}
         <div class="qtyrow"><button data-qty="${esc(e.id)}|-1" aria-label="One fewer">−</button><input type="number" inputmode="numeric" min="0" max="999" value="${e.qty}" data-qin="${esc(e.id)}" aria-label="Copies"><button data-qty="${esc(e.id)}|1" aria-label="One more">+</button><button class="rm" data-qty="${esc(e.id)}|x" aria-label="Remove">Remove</button></div>
       </div></li>`; }).join('') || '<li class="empty">Nothing scanned yet.</li>'}</ul>
@@ -692,6 +693,7 @@ function renderImport() {
   const ok = res ? res.filter((x) => x.it) : [], bad = res ? res.filter((x) => !x.it) : [];
   const n = ok.reduce((t, x) => t + x.r.qty, 0), val = ok.reduce((t, x) => t + x.r.qty * (x.it.m || 0), 0);
   $('#sheet-content').innerHTML = `<div class="detail form"><h2>Import cards</h2>
+    ${colList().length > 1 ? `<label>Import into</label><select id="imp-col">${colList().map((c) => `<option value="${esc(c.id)}" ${c.id === (IMP.col ?? curCol()) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>` : ''}
     <p class="sub">Export your collection from the other app as a CSV or text list, then pick the file or paste it here. Works with TCGplayer exports and most collection apps (columns like Quantity, Name, Set, Number, Printing/Foil). Plain lists work too: <i>3 Jinx, Loose Cannon</i>, <i>2x OGN-251 foil</i>.</p>
     <label class="ghost filebtn" for="imp-file" style="display:block;text-align:center">Choose a file…</label><input type="file" id="imp-file" accept=".csv,.txt,.tsv,text/*" hidden>
     <textarea id="imp-text" rows="6" placeholder="…or paste the list here" style="width:100%;margin-top:8px">${esc(IMP.text)}</textarea>
@@ -702,13 +704,79 @@ function renderImport() {
         <p class="sub" style="margin:6px 0 0">Adds to what you already have. A backup snapshot is saved first, so you can undo from Settings → Backup.</p></div>
       ${bad.length ? `<div class="dsec">Not recognised</div><ul class="dl">${bad.slice(0, 40).map((x) => `<li><span class="nm">${esc(x.r.raw)}</span></li>`).join('')}</ul>` : ''}
       <div class="dsec">Matched</div><ul class="dl">${ok.slice(0, 150).map((x) => `<li><span class="cnt">${x.r.qty}×</span><span class="nm">${esc(x.it.n)}<small>${esc(setName(x.it.g))} · ${esc(x.it.num || '')} · ${esc(x.it.s)}</small></span><span class="st">${money(x.it.m)}</span></li>`).join('')}${ok.length > 150 ? `<li class="sub">…and ${ok.length - 150} more</li>` : ''}</ul>` : ''}</div>`;
+  const ic = $('#imp-col'); if (ic) ic.onchange = () => { IMP.col = ic.value; };
   $('#imp-file').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; IMP.text = await f.text(); check(); };
   const check = () => { IMP.text = IMP.text || $('#imp-text').value; IMP.rows = parseImport(IMP.text).map((r) => ({ r, it: matchImport(r) })); renderImport(); };
   $('#imp-check').onclick = () => { IMP.text = $('#imp-text').value; check(); };
   const go = $('#imp-go'); if (go) go.onclick = async () => {
-    if (!(await confirmBox(`Add ${n.toLocaleString()} cards (${ok.length} different) to your collection?`))) return;
+    if (!(await confirmBox(`Add ${n.toLocaleString()} cards (${ok.length} different) to "${colName(IMP.col ?? curCol())}"?`))) return;
     try { await takeSnapshot('before import'); } catch {}
-    for (const x of ok) invBump(x.it.k, x.r.qty);
-    IMP = { text: '', rows: null }; closeSheet(); show('collection'); toast(`Imported ${n.toLocaleString()} cards`);
+    const col = IMP.col ?? curCol();
+    for (const x of ok) invBump(x.it.k, x.r.qty, col);
+    IMP = { text: '', rows: null }; S.prefs.colId = col; savePrefs(); closeSheet(); show('collection'); toast(`Imported ${n.toLocaleString()} cards into ${esc(colName(col))}`);
   };
 }
+
+/* ---------------------------------------------------------------- several collections (e.g. Chinese cards kept apart) */
+function newColId() { return 'c' + Date.now().toString(36); }
+function switchCol(id) { S.prefs.colId = id; S.prefs.colSet = 'all'; savePrefs(); renderColPickers(); if (S.view === 'collection') renderCollection(); }
+function renderColPickers() {
+  const list = colList(), cur = curCol();
+  const opts = list.map((c) => `<option value="${esc(c.id)}" ${c.id === cur ? 'selected' : ''}>${esc(c.name)}</option>`).join('') + '<option value="__new">＋ New collection…</option>';
+  for (const sel of $$('#col-pick, #scan-col')) if (sel.innerHTML !== opts) sel.innerHTML = opts;
+  const sw = $('#scan-colwrap'); if (sw) sw.classList.toggle('hidden', list.length < 2);
+}
+function newColSheet(back) {
+  pushSheet(() => {
+    $('#sheet-content').innerHTML = `<div class="detail form"><h2>New collection</h2>
+      <p class="sub">Keep a separate set of cards — for example Chinese-language cards, a trade binder, or cards you're selling. Pick which collection to look at from the top of Collection, and which one scans go into on the Scan screen.</p>
+      <label>Name</label><input id="nc-name" maxlength="40" placeholder="e.g. Chinese cards">
+      <label class="toggle small" style="margin-top:10px"><input type="checkbox" id="nc-decks"> Count these cards for deck building and the wishlist</label>
+      <button class="primary" id="nc-go" style="width:100%;margin-top:14px">Create collection</button></div>`;
+    setTimeout(() => $('#nc-name').focus(), 50);
+    $('#nc-go').onclick = () => {
+      const name = $('#nc-name').value.trim(); if (!name) { toast('Give it a name'); return; }
+      const id = newColId(); INV.cols = INV.cols || {}; INV.cols[id] = { name, items: {}, decks: $('#nc-decks').checked, created: Date.now() }; saveInv();
+      closeSheet(); switchCol(id); toast(`Now showing "${esc(name)}" — scans go here too`);
+    };
+  });
+}
+function renderManageCols() {
+  const list = colList(), counts = (id) => Object.values(colItems(id)).reduce((t, e) => t + (e.qty || 0), 0);
+  const val = (id) => Object.entries(colItems(id)).reduce((t, [k, e]) => t + (e.qty || 0) * ((S.byKey.get(k) || {}).m || 0), 0);
+  $('#sheet-content').innerHTML = `<div class="detail form"><h2>Collections</h2>
+    <p class="sub">Each collection has its own cards and value. Deck building and the wishlist count the collections ticked below.</p>
+    <ul class="list colman">${list.map((c) => `<li class="item"><div class="info">
+      <input data-cname="${esc(c.id)}" value="${esc(c.name)}" maxlength="40" aria-label="Collection name">
+      <div class="meta">${counts(c.id).toLocaleString()} cards · ${money(val(c.id))}${c.id === curCol() ? ' · <span class="ok">showing now</span>' : ''}</div>
+      <label class="toggle small"><input type="checkbox" data-cdecks="${esc(c.id)}" ${c.decks ? 'checked' : ''} ${c.id ? '' : 'disabled'}> Count for decks &amp; wishlist</label>
+      <div class="row" style="gap:6px;margin-top:6px">${c.id === curCol() ? '' : `<button class="ghost sm" data-cshow="${esc(c.id)}">Show</button>`}
+        ${list.length > 1 && counts(c.id) ? `<select data-cmove="${esc(c.id)}"><option value="">Move all cards to…</option>${list.filter((o) => o.id !== c.id).map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('')}</select>` : ''}
+        ${c.id ? `<button class="ghost sm danger" data-cdel="${esc(c.id)}">Delete</button>` : ''}</div>
+    </div></li>`).join('')}</ul>
+    <button class="primary ghost" id="cm-new" style="width:100%;padding:13px;margin-top:10px">＋ New collection</button></div>`;
+  const re = () => { renderManageCols(); renderColPickers(); if (S.view === 'collection') renderCollection(); };
+  $$('#sheet-content [data-cname]').forEach((i) => i.onchange = () => { const v = i.value.trim(); if (!v) return; if (i.dataset.cname) INV.cols[i.dataset.cname].name = v; else INV.name = v; saveInv(); re(); });
+  $$('#sheet-content [data-cdecks]').forEach((i) => i.onchange = () => { INV.cols[i.dataset.cdecks].decks = i.checked; saveInv(); re(); });
+  $$('#sheet-content [data-cshow]').forEach((b) => b.onclick = () => { switchCol(b.dataset.cshow); re(); });
+  $$('#sheet-content [data-cmove]').forEach((sel) => sel.onchange = async () => {
+    const from = sel.dataset.cmove, to = sel.value; if (!to && to !== '') return; if (sel.selectedIndex === 0) return;
+    if (!(await confirmBox(`Move every card from "${colName(from)}" into "${colName(to)}"?`))) { sel.selectedIndex = 0; return; }
+    try { await takeSnapshot('before moving cards'); } catch {}
+    const src = colItems(from), dst = colItems(to);
+    for (const [k, e] of Object.entries(src)) { const o = dst[k]; dst[k] = o ? { ...o, qty: (o.qty || 0) + (e.qty || 0) } : e; delete src[k]; }
+    saveInv(); toast('Cards moved'); re();
+  });
+  $$('#sheet-content [data-cdel]').forEach((b) => b.onclick = async () => {
+    const id = b.dataset.cdel, n = counts(id);
+    if (!(await confirmBox(`Delete "${colName(id)}"${n ? ` and its ${n} cards` : ''}? A snapshot is kept under Settings → Backup.`))) return;
+    try { await takeSnapshot('before deleting a collection'); } catch {}
+    delete INV.cols[id]; if (S.prefs.colId === id) { S.prefs.colId = ''; savePrefs(); } saveInv(); re();
+  });
+  $('#cm-new').onclick = () => newColSheet();
+}
+(function wireCols() {
+  const onPick = (sel) => sel && (sel.onchange = () => { if (sel.value === '__new') { renderColPickers(); newColSheet(); return; } switchCol(sel.value); toast(`Showing "${esc(colName())}"`); });
+  onPick($('#col-pick')); onPick($('#scan-col'));
+  const m = $('#col-manage'); if (m) m.onclick = () => pushSheet(renderManageCols);
+})();

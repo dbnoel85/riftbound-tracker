@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v39';
+const SHELL_VERSION = 'v40';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -14,14 +14,28 @@ const S = {
   groups: new Map(),    // groupId -> group
   history: null,        // data/history.json (lazy)
   hashes: null,         // data/hashes.json (lazy, for scanner)
-  inv: loadJSON(INV_KEY, { items: {} }),
+  inv: null,            // view of the collection being looked at (see colItems)
   prefs: Object.assign({ addSet: 'all', mvScope: 'mine', mvMetric: 'pct', mvMin: '1', sort: 'value', seenNew: [] }, loadJSON(PREF_KEY, {})),
   view: 'collection',
 };
 
 /* ---------------------------------------------------------------- utils */
 function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } }
-function saveInv() { try { localStorage.setItem(INV_KEY, JSON.stringify(S.inv)); } catch { toast('Could not save on this device'); } }
+/* ---- collections. rbt.inventory.v1 = { items: main collection, name, cols: { id: { name, items, decks, created } } }
+   S.inv.items always points at the collection being viewed, so the rest of the app doesn't need to know. */
+let INV = loadJSON(INV_KEY, { items: {} });
+function colList() { return [{ id: '', name: INV.name || 'My collection', decks: true }, ...Object.entries(INV.cols || {}).map(([id, c]) => ({ id, name: c.name, decks: c.decks !== false }))]; }
+function colItems(id) { if (id && INV.cols && INV.cols[id]) return INV.cols[id].items || (INV.cols[id].items = {}); return INV.items || (INV.items = {}); }
+const curCol = () => (S.prefs.colId && INV.cols && INV.cols[S.prefs.colId] ? S.prefs.colId : '');
+const colName = (id = curCol()) => (colList().find((c) => c.id === id) || {}).name || 'My collection';
+S.inv = { get items() { return colItems(curCol()); }, set items(v) { if (curCol()) INV.cols[curCol()].items = v; else INV.items = v; } };
+function saveInv() { try { localStorage.setItem(INV_KEY, JSON.stringify(INV)); } catch { toast('Could not save on this device'); } }
+/** cards that count for deck building and the wishlist: every collection marked "use for decks" */
+function poolItems() {
+  const out = {};
+  for (const c of colList()) if (c.decks) for (const [k, e] of Object.entries(colItems(c.id))) { const o = out[k]; out[k] = o ? { ...o, qty: o.qty + (e.qty || 0) } : { ...e }; }
+  return out;
+}
 function savePrefs() { try { localStorage.setItem(PREF_KEY, JSON.stringify(S.prefs)); } catch {} }
 const money = (v) => v == null ? '—' : '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -155,7 +169,7 @@ function show(view) {
   if (view === 'score') { renderScore(); keepAwake(true); } else keepAwake(false);
   if (view === 'decks') renderDecks();
   if (view === 'events') renderEvents();
-  if (view === 'scan') startCamera(); else { stopCamera(); clearTimeout(SCAN.timer); }
+  if (view === 'scan') { startCamera(); if (typeof renderColPickers === 'function') renderColPickers(); } else { stopCamera(); clearTimeout(SCAN.timer); }
   if (view === 'collection') renderCollection();
   if (view === 'add') renderAdd();
   if (view === 'movers') renderMovers();
@@ -215,11 +229,14 @@ function renderSetStrip() {
 /** under a set's value: the whole collection, so the total is always on screen */
 function sumAllLine(cur) {
   let el = $('#sum-all'); if (!el) { el = document.createElement('div'); el.id = 'sum-all'; el.className = 'sumall'; $('#sum-change').after(el); }
-  if (cur === 'all') { el.innerHTML = ''; el.classList.add('hidden'); return; }
-  let v = 0, n = 0; for (const r of ownedRows()) { v += r.value; n += r.e.qty; }
-  el.innerHTML = `Whole collection <b>${money(v)}</b> · ${n.toLocaleString()} cards <button class="linkbtn" id="sum-allbtn">Show all</button>`;
-  el.classList.remove('hidden');
-  $('#sum-allbtn').onclick = () => { S.prefs.colSet = 'all'; savePrefs(); renderCollection(); };
+  const many = colList().length > 1;
+  let html = '';
+  if (cur !== 'all') { let v = 0, n = 0; for (const r of ownedRows()) { v += r.value; n += r.e.qty; }
+    html += `<div>Whole ${many ? esc(colName()) : 'collection'} <b>${money(v)}</b> · ${n.toLocaleString()} cards <button class="linkbtn" id="sum-allbtn">Show all</button></div>`; }
+  if (many) { let v = 0, n = 0; for (const c of colList()) for (const [k, e] of Object.entries(colItems(c.id))) { v += (e.qty || 0) * ((S.byKey.get(k) || {}).m || 0); n += e.qty || 0; }
+    html += `<div>All ${colList().length} collections <b>${money(v)}</b> · ${n.toLocaleString()} cards</div>`; }
+  el.innerHTML = html; el.classList.toggle('hidden', !html);
+  const b = $('#sum-allbtn'); if (b) b.onclick = () => { S.prefs.colSet = 'all'; savePrefs(); renderCollection(); };
 }
 function renderCollection() {
   if (!S.cards) return;
@@ -238,8 +255,9 @@ function renderCollection() {
     $('#col-setmode [data-m=owned]').textContent = `Owned (${x.have})`;
     $('#col-setmode [data-m=missing]').textContent = `Missing (${x.total - x.have})`;
     $('#col-setmode [data-m=binder]').textContent = 'Binder';
-    $('#sum-label').textContent = `${g ? g.name : 'Set'} value`;
-  } else $('#sum-label').textContent = 'Collection value';
+    $('#sum-label').textContent = `${g ? g.name : 'Set'} value${colList().length > 1 ? ' · ' + colName() : ''}`;
+  } else $('#sum-label').textContent = colList().length > 1 ? `${colName()} value` : 'Collection value';
+  if (typeof renderColPickers === 'function') renderColPickers();
   if (cur !== 'all' && S.prefs.colMode === 'missing') { renderMissing(+cur); return; }
   if (cur !== 'all' && S.prefs.colMode === 'binder') { $('#col-list').innerHTML = '<li style="list-style:none">' + renderBinder(cur) + '</li>'; $$('#col-list .bslot').forEach((b) => b.onclick = () => openDetail(b.dataset.k)); return; }
   $('#col-list').classList.remove('missing');
@@ -1216,7 +1234,7 @@ function renderSync() {
 }
 /** another device changed synced data: reload it into the app and redraw */
 function reloadFromStorage() {
-  S.inv = loadJSON(INV_KEY, { items: {} });
+  INV = loadJSON(INV_KEY, { items: {} });
   MD.decks = (loadJSON(MD_KEY, {}).decks) || [];
   EV.events = (loadJSON(EV_KEY, {}).events) || [];
   WL.items = (loadJSON(WL_KEY, {}).items) || {};
@@ -1249,8 +1267,8 @@ async function importBackup(file) {
       for (const [k, v] of Object.entries(data.store)) if (k.startsWith('rbt.')) { try { localStorage.setItem(k, v); } catch {} }
       toast('Backup restored'); setTimeout(() => location.reload(), 600); return;
     }
-    S.inv = { items: {} };
-    for (const [k, e] of Object.entries(data.items)) S.inv.items[k] = { qty: +e.qty || 1, added: e.added || Date.now(), cost: e.cost ?? null, name: e.name };
+    INV.items = {}; S.prefs.colId = ''; savePrefs();
+    for (const [k, e] of Object.entries(data.items)) INV.items[k] = { qty: +e.qty || 1, added: e.added || Date.now(), cost: e.cost ?? null, name: e.name };
     if (Array.isArray(data.decks)) { MD.decks = data.decks; saveMD(); }
     if (Array.isArray(data.events)) { EV.events = data.events; saveEV(); }
     if (data.wishlist && typeof data.wishlist === 'object') { WL.items = data.wishlist; saveWL(); }
@@ -1314,7 +1332,7 @@ function wire() {
   $('#btn-export').onclick = exportBackup;
   $('#btn-csv').onclick = exportCSV;
   $('#import-file').onchange = (e) => { const f = e.target.files[0]; if (f) importBackup(f); e.target.value = ''; };
-  $('#btn-clear').onclick = async () => { if (await confirmBox('Delete every card from your collection? Make a backup first if unsure.')) { S.inv = { items: {} }; saveInv(); toast('Collection cleared'); } };
+  $('#btn-clear').onclick = async () => { if (await confirmBox(`Delete every card from "${colName()}"? Make a backup first if unsure.`)) { S.inv.items = {}; saveInv(); toast('Collection cleared'); } };
   $('#btn-refresh').onclick = async () => { try { await loadData(true); S.history = null; renderMore(); checkStale(); toast('Prices are up to date (' + fmtDate(S.cards.updated) + ')'); } catch { toast('Could not reach the price data'); } };
   document.addEventListener('visibilitychange', () => { if (document.hidden) { stopCamera(); clearTimeout(SCAN.timer); } else if (S.view === 'scan') startCamera(); });
 }
@@ -1353,7 +1371,7 @@ function buildDeckIndexes() {
 }
 function ownedCountByName() {
   const m = new Map();
-  for (const [k, e] of Object.entries(S.inv.items)) {
+  for (const [k, e] of Object.entries(poolItems())) {
     const it = S.byKey.get(k); const n = normName(it ? it.n : e.name);
     m.set(n, (m.get(n) || 0) + e.qty);
   }
@@ -2200,7 +2218,7 @@ function wireEvents() {
 const WL_KEY = 'rbt.wish.v1';
 const WL = Object.assign({ items: {} }, loadJSON(WL_KEY, {}));
 function saveWL() { try { localStorage.setItem(WL_KEY, JSON.stringify(WL)); } catch { toast('Could not save on this device'); } }
-const ownedQty = (k) => S.inv.items[k]?.qty || 0;
+const ownedQty = (k) => poolItems()[k]?.qty || 0;
 const wlHit = (it, w) => w.max != null && it.m != null && it.m <= w.max;
 function renderWishBox(k) {
   const box = $('#wishbox'); if (!box) return;

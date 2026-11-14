@@ -40,6 +40,7 @@
 <main>
   <!-- COLLECTION -->
   <section id="v-collection" class="view">
+    <div class="colbar"><select id="col-pick" aria-label="Collection to show"></select><button class="ghost sm" id="col-manage">Manage</button></div>
     <div class="seg" id="col-top"><button data-c="mine" class="on">My cards</button><button data-c="wish">Wishlist</button></div>
     <div id="wish-view" class="hidden"></div>
     <div id="col-main">
@@ -102,6 +103,7 @@
       <button class="ghost sm hidden" id="scan-session">This session (0)</button>
       <label class="photo-btn">Photo<input id="scan-file" type="file" accept="image/*" capture="environment" hidden></label>
     </div>
+    <label class="toggle small hidden" id="scan-colwrap" style="justify-content:center;margin-top:6px">Scanning into <select id="scan-col" aria-label="Collection scans go into"></select></label>
     <div class="scan-opts">
       <label class="toggle small"><input type="checkbox" id="scan-review"> Review before adding</label>
       <label class="toggle small"><input type="checkbox" id="scan-norepeat"> Ignore repeats</label>

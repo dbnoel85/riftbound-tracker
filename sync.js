@@ -35,6 +35,15 @@
         if (k === 'rbt.inventory.v1') out.items[id] = { ...o, ...e, qty: Math.max(+o.qty || 0, +e.qty || 0), added: Math.min(o.added || Infinity, e.added || Infinity), cost: e.cost ?? o.cost ?? null };
         else out.items[id] = { ...o, ...e };
       }
+      if (k === 'rbt.inventory.v1' && (A.cols || B.cols)) { // extra collections: combine each one the same way
+        out.cols = { ...(B.cols || {}) };
+        for (const [cid, c] of Object.entries(A.cols || {})) {
+          const o = out.cols[cid]; if (!o) { out.cols[cid] = c; continue; }
+          const items = { ...(o.items || {}) };
+          for (const [id, e] of Object.entries(c.items || {})) { const x = items[id]; items[id] = x ? { ...x, ...e, qty: Math.max(+x.qty || 0, +e.qty || 0) } : e; }
+          out.cols[cid] = { ...o, ...c, items };
+        }
+      }
       return JSON.stringify(out);
     }
     const listKey = k === 'rbt.mydecks.v1' ? 'decks' : k === 'rbt.events.v1' ? 'events' : k === 'rbt.matches.v1' ? 'list' : null;
