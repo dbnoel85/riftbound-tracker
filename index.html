@@ -61,6 +61,7 @@
     <div class="seg hidden" id="col-setmode"><button data-m="owned" class="on">Owned</button><button data-m="missing">Missing</button><button data-m="binder">Binder</button></div>
     <div class="toolbar">
       <input id="col-filter" type="search" placeholder="Filter my cards" autocomplete="off">
+      <select id="col-lang" class="hidden" aria-label="Language"></select>
       <select id="col-sort" aria-label="Sort">
         <option value="value">Total value ↓</option>
         <option value="priceHi">Price high → low</option>
@@ -107,6 +108,7 @@
     <div class="scan-opts">
       <label class="toggle small"><input type="checkbox" id="scan-review"> Review before adding</label>
       <label class="toggle small"><input type="checkbox" id="scan-norepeat"> Ignore repeats</label>
+      <label class="toggle small langpick">Language <select id="scan-lang" aria-label="Card language"></select></label>
       <button class="ghost sm" id="scan-byname">Search by name</button>
     </div>
     <label class="toggle small" style="justify-content:center"><input type="checkbox" id="scan-autotoggle" checked> <span id="scan-mode">Auto-add</span></label>
@@ -121,6 +123,7 @@
       <input id="add-q" type="search" placeholder="Name or number, e.g. Jinx or OGN-066" autocomplete="off">
     </div>
     <div class="chips" id="add-sets"></div>
+    <label class="toggle small langpick">Adding cards in <select id="add-lang" aria-label="Card language"></select></label>
     <div class="row"><label class="toggle small"><input type="checkbox" id="add-text"> Search card text</label>
     <label class="toggle small"><input type="checkbox" id="add-sealed"> Include sealed products</label></div>
     <div class="chips" id="add-everywhere"></div>
@@ -264,6 +267,8 @@
       <div class="seg mini" id="pref-format"><button data-v="standard">Standard</button><button data-v="2v2">2v2 Constructed</button></div>
       <label class="sub" style="display:block;margin-top:10px">Text size</label>
       <div class="seg mini" id="pref-text"><button data-v="s">Small</button><button data-v="m">Normal</button><button data-v="l">Large</button><button data-v="xl">Extra large</button></div>
+      <label class="sub" style="display:block;margin-top:10px">Value of non-English cards</label>
+      <div class="seg mini" id="pref-langval"><button data-v="en">Use English price</button><button data-v="none">Don't count value</button></div>
       <label class="toggle small" style="margin-top:12px"><input type="checkbox" id="pref-camgap"> Keep top buttons clear of a front camera (iPhone Duo front screen)</label>
       <button class="ghost" id="btn-import" style="margin-top:12px">Import cards from another app</button>
       <button class="ghost" id="btn-tour" style="margin-top:8px">Show the quick tour again</button>

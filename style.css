@@ -564,3 +564,19 @@ a.btnlink{text-decoration:none;color:var(--text)}
 .artstrip .art small{font-size:10.5px;line-height:1.2;text-align:center;max-width:76px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .artstrip .art.on img,.artstrip .art.on span{border-color:var(--gold);box-shadow:0 0 12px rgba(241,212,142,.45)}
 .artstrip .art.on small{color:var(--gold)}
+
+/* card languages */
+.tag.lang{background:rgba(255,106,87,.14);color:#ffb3a6;border:1px solid rgba(255,106,87,.45)}
+.langrow{margin:12px 0 4px}
+.langrow .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
+.langrow .chips button{background:var(--deep);border:1px solid var(--line2);border-radius:3px;padding:7px 11px;font-weight:600;color:var(--text)}
+.langrow .chips button.on{border-color:var(--gold);color:var(--gold);background:rgba(241,212,142,.12)}
+.langrow .chips button b{color:var(--rift);margin-left:3px}
+.langrow select{padding:7px 9px;font-size:13px}
+.langpick select{margin-left:6px;padding:6px 8px}
+.langpick.langon{color:#ffb3a6}
+.langpick.langon select{border-color:rgba(255,106,87,.6);color:#ffb3a6}
+#col-lang{max-width:42%}
+.toolbar:has(#col-lang:not(.hidden)){flex-wrap:wrap}
+.toolbar:has(#col-lang:not(.hidden)) #col-filter{flex:1 1 100%}
+.toolbar:has(#col-lang:not(.hidden)) #col-lang,.toolbar:has(#col-lang:not(.hidden)) #col-sort{flex:1 1 40%;max-width:none}

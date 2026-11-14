@@ -315,7 +315,7 @@ const SESS = Object.assign({ list: [] }, loadJSON(SESS_KEY, {}));
 const saveSess = () => { try { localStorage.setItem(SESS_KEY, JSON.stringify(SESS)); } catch {} updateSessBtn(); };
 const scanReview = () => S.prefs.scanReview !== false;
 const scanNoRepeat = () => S.prefs.scanNoRepeat !== false;
-const sessProd = (k) => (S.byKey.get(k) || {}).p;
+const sessProd = (k) => (S.byKey.get(k) || {}).p + '~' + langOf(k);
 const sessGet = (id) => SESS.list.find((e) => e.id === id);
 function sessCount() { return SESS.list.reduce((t, e) => t + e.qty, 0); }
 function sessPending() { return SESS.list.filter((e) => !e.done).reduce((t, e) => t + e.qty, 0); }
@@ -331,6 +331,7 @@ function invBump(k, d, col) { // quiet inventory change (no toast); col = collec
 }
 /** a scanned card: returns { e, dup } — dup when the same card (any finish) is already in this session */
 function sessionAdd(k, { force = false } = {}) {
+  k = addKey(k);
   const p = sessProd(k);
   const seen = SESS.list.find((x) => sessProd(x.k) === p);
   if (seen && !force && scanNoRepeat()) return { e: seen, dup: true };
@@ -371,7 +372,7 @@ function renderSession() {
   const rows = SESS.list.slice().reverse();
   const val = (e) => e.qty * ((S.byKey.get(e.k) || {}).m || 0);
   const total = rows.reduce((t, e) => t + val(e), 0), pend = sessPending();
-  const finishes = (k) => { const it = S.byKey.get(k); return it ? (S.byPid.get(it.p) || [it]) : []; };
+  const finishes = (k) => { const it = S.byKey.get(k); return it ? (S.byPid.get(it.p) || [it]).map((v) => S.byKey.get(withLang(v.k, langOf(k)))) : []; };
   $('#sheet-content').innerHTML = `<div class="detail sess"><h2>Scanned this session</h2>
     <p class="sub">${sessCount()} cards · about ${money(total)}.${pend ? ` <b class="part">${pend} waiting for review</b> — check each one, fix the finish or count, then add them all.` : ' Everything here is already in your collection; changes you make here update it.'}</p>
     ${pend ? '<button class="primary" id="ss-commit" style="width:100%;padding:13px">Add ' + pend + ' card' + (pend === 1 ? '' : 's') + ' to my collection</button>' : ''}
@@ -395,7 +396,7 @@ function scanFlash(it, kind) {
   const f = $('#scan-flash'); if (!f || !it) return;
   const txt = { added: 'Added to collection', review: 'Added to review list', dup: 'Already scanned — skipped' }[kind];
   f.className = 'scan-flash show ' + kind;
-  f.innerHTML = `<div class="sf-card">${it.img ? `<img src="${esc(it.img)}" alt="">` : ''}<div class="sf-txt"><b>${kind === 'dup' ? '↺' : '✓'} ${esc(it.n)}</b><span>${esc(it.s !== 'Normal' ? it.s + ' · ' : '')}${money(it.m)}</span><small>${txt}</small></div></div>`;
+  f.innerHTML = `<div class="sf-card">${it.img ? `<img src="${esc(it.img)}" alt="">` : ''}<div class="sf-txt"><b>${kind === 'dup' ? '↺' : '✓'} ${esc(it.n)}</b><span>${it.lang && it.lang !== 'en' ? esc(langTag(it.lang)) + ' · ' : ''}${esc(it.s !== 'Normal' ? it.s + ' · ' : '')}${money(it.m)}</span><small>${txt}</small></div></div>`;
   $('.cam-wrap')?.classList.remove('hit', 'hitdup', 'hitrev'); void f.offsetWidth; $('.cam-wrap')?.classList.add(kind === 'dup' ? 'hitdup' : kind === 'review' ? 'hitrev' : 'hit');
   clearTimeout(scanFlash.t); scanFlash.t = setTimeout(() => { f.classList.remove('show'); $('.cam-wrap')?.classList.remove('hit', 'hitdup', 'hitrev'); }, kind === 'dup' ? 1100 : 1500);
 }
@@ -431,6 +432,11 @@ function showTour(i = 0) {
   const rv = $('#scan-review'); if (rv) { rv.checked = scanReview(); rv.onchange = () => { S.prefs.scanReview = rv.checked; savePrefs(); toast(rv.checked ? 'Scans wait in the review list until you add them' : 'Scans go straight into your collection'); }; }
   const nr = $('#scan-norepeat'); if (nr) { nr.checked = scanNoRepeat(); nr.onchange = () => { S.prefs.scanNoRepeat = nr.checked; savePrefs(); }; }
   const bn = $('#scan-byname'); if (bn) bn.onclick = () => show('add');
+  for (const id of ['#scan-lang', '#add-lang']) { const sel = $(id); if (!sel) continue;
+    sel.innerHTML = LANGS.map(([l, n]) => `<option value="${l}">${esc(n)}</option>`).join(''); sel.value = S.prefs.cardLang || 'en';
+    sel.onchange = () => { S.prefs.cardLang = sel.value; savePrefs(); $$('#scan-lang, #add-lang').forEach((x) => { x.value = sel.value; x.closest('label')?.classList.toggle('langon', sel.value !== 'en'); }); toast(sel.value === 'en' ? 'Adding English cards' : `Adding <b>${esc(langName(sel.value))}</b> cards — switch back to English when you're done`); };
+    sel.closest('label')?.classList.toggle('langon', (S.prefs.cardLang || 'en') !== 'en'); }
+  const cl = $('#col-lang'); if (cl) cl.onchange = () => { S.prefs.colLang = cl.value; savePrefs(); renderCollection(); };
   updateSessBtn();
   window.addEventListener('rbt-sync', () => { MT.list = (loadJSON(MT_KEY, {}).list) || []; });
 })();
@@ -648,19 +654,30 @@ function parseImport(text) {
   const col = (...names) => head.findIndex((h) => names.some((n) => h === n || h.replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, '')));
   const ci = { qty: col('quantity', 'qty', 'count', 'total quantity', 'add to quantity', 'amount', 'owned'), name: col('name', 'card name', 'product name', 'card', 'title', 'simple name'),
     set: col('set', 'set name', 'edition', 'expansion', 'group'), code: col('set code', 'setcode'), num: col('card number', 'number', 'collector number', 'no', '#'),
-    foil: col('printing', 'foil', 'finish', 'variant', 'treatment'), pid: col('product id', 'tcgplayer id', 'tcgplayer product id', 'productid') };
+    foil: col('printing', 'foil', 'finish', 'variant', 'treatment'), lang: col('language', 'lang'), pid: col('product id', 'tcgplayer id', 'tcgplayer product id', 'productid') };
   const rows = [];
   if (ci.name >= 0 || ci.pid >= 0 || ci.num >= 0) {
     for (const l of lines.slice(1)) { const c = splitCSV(l, sep), g = (i) => (i >= 0 ? c[i] || '' : '');
-      const f = g(ci.foil); rows.push({ raw: l, qty: parseInt(g(ci.qty), 10) || (ci.qty >= 0 ? 0 : 1), name: g(ci.name), set: g(ci.set), code: g(ci.code), num: g(ci.num), pid: g(ci.pid), foil: /foil|holo/i.test(f) && !/non/i.test(f) ? true : f && /normal|non/i.test(f) ? false : null }); }
+      const f = g(ci.foil); rows.push({ raw: l, qty: parseInt(g(ci.qty), 10) || (ci.qty >= 0 ? 0 : 1), name: g(ci.name), set: g(ci.set), code: g(ci.code), num: g(ci.num), pid: g(ci.pid), lang: impLang(g(ci.lang)), foil: /foil|holo/i.test(f) && !/non/i.test(f) ? true : f && /normal|non/i.test(f) ? false : null }); }
   } else {
     for (const l of lines) { let t = l.trim(); let qty = 1; const m = t.match(/^(\d+)\s*x?\s+(.*)$/i) || t.match(/^(.*?)\s+x\s*(\d+)$/i);
       if (m) { if (/^\d/.test(m[1])) { qty = +m[1]; t = m[2]; } else { t = m[1]; qty = +m[2]; } }
+      const lang = impLang(t); if (lang !== 'en') t = t.replace(/\s*[\[(]?\b(chinese|simplified|traditional|japanese|korean|french|german|spanish|italian|portuguese|zh|cn|jp|ja|kr|ko)\b[\])]?|中文|简体|繁體|日本語|한국어/ig, ' ').trim();
       const foil = /\b(foil|holo)\b/i.test(t) ? true : null; t = t.replace(/\s*[\[(]?\b(foil|holo|normal|non-foil)\b[\])]?/ig, '').trim();
       const cm = t.match(/^([A-Z]{2,4})[-\s]?0*(\d{1,3}[a-z*]?)\b\s*(.*)$/i);
-      rows.push({ raw: l, qty, name: cm ? cm[3] : t, code: cm ? cm[1] : '', num: cm ? cm[2] : '', set: '', pid: '', foil }); }
+      rows.push({ raw: l, qty, name: cm ? cm[3] : t, code: cm ? cm[1] : '', num: cm ? cm[2] : '', set: '', pid: '', foil, lang }); }
   }
   return rows.filter((r) => r.qty > 0 && (r.name || r.pid || r.num));
+}
+function impLang(v) {
+  v = String(v || '');
+  if (/traditional|繁|zh-?tw|zh-?hant/i.test(v)) return 'zh-tw';
+  if (/chinese|simplified|中文|简|\bzh\b|\bcn\b|zh-?cn|zh-?hans/i.test(v)) return 'zh';
+  if (/japanese|日本|\bja\b|\bjp\b/i.test(v)) return 'ja';
+  if (/korean|한국|\bko\b|\bkr\b/i.test(v)) return 'ko';
+  if (/french|fran[cç]ais/i.test(v)) return 'fr'; if (/german|deutsch/i.test(v)) return 'de'; if (/spanish|espa[nñ]ol/i.test(v)) return 'es';
+  if (/italian|italiano/i.test(v)) return 'it'; if (/portug/i.test(v)) return 'pt';
+  return 'en';
 }
 function matchImport(r) {
   const X = impIndex();
@@ -681,6 +698,11 @@ function matchImport(r) {
     items = l[0] || null;
   }
   if (!items) return null;
+  const lang = r.lang && r.lang !== 'en' ? r.lang : (IMP.lang || 'en');
+  const pk = (it) => it && (lang === 'en' ? it : S.byKey.get(withLang(it.k, lang)));
+  return pk(pickFinish0(items, r));
+}
+function pickFinish0(items, r) {
   const pick = r.foil === true ? items.find((v) => v.s !== 'Normal') : r.foil === false ? items.find((v) => v.s === 'Normal') : items.find((v) => v.s === 'Normal');
   return pick || items[0];
 }
@@ -695,6 +717,7 @@ function renderImport() {
   $('#sheet-content').innerHTML = `<div class="detail form"><h2>Import cards</h2>
     ${colList().length > 1 ? `<label>Import into</label><select id="imp-col">${colList().map((c) => `<option value="${esc(c.id)}" ${c.id === (IMP.col ?? curCol()) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>` : ''}
     <p class="sub">Export your collection from the other app as a CSV or text list, then pick the file or paste it here. Works with TCGplayer exports and most collection apps (columns like Quantity, Name, Set, Number, Printing/Foil). Plain lists work too: <i>3 Jinx, Loose Cannon</i>, <i>2x OGN-251 foil</i>.</p>
+    <label>Card language (when the list doesn't say)</label><select id="imp-lang">${LANGS.map(([l, n]) => `<option value="${l}" ${l === (IMP.lang || 'en') ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
     <label class="ghost filebtn" for="imp-file" style="display:block;text-align:center">Choose a file…</label><input type="file" id="imp-file" accept=".csv,.txt,.tsv,text/*" hidden>
     <textarea id="imp-text" rows="6" placeholder="…or paste the list here" style="width:100%;margin-top:8px">${esc(IMP.text)}</textarea>
     <button class="ghost" id="imp-check" style="width:100%;margin-top:8px">Check the list</button>
@@ -703,8 +726,9 @@ function renderImport() {
         <button class="primary" id="imp-go" style="width:100%;margin-top:10px" ${ok.length ? '' : 'disabled'}>Add ${n.toLocaleString()} cards to my collection</button>
         <p class="sub" style="margin:6px 0 0">Adds to what you already have. A backup snapshot is saved first, so you can undo from Settings → Backup.</p></div>
       ${bad.length ? `<div class="dsec">Not recognised</div><ul class="dl">${bad.slice(0, 40).map((x) => `<li><span class="nm">${esc(x.r.raw)}</span></li>`).join('')}</ul>` : ''}
-      <div class="dsec">Matched</div><ul class="dl">${ok.slice(0, 150).map((x) => `<li><span class="cnt">${x.r.qty}×</span><span class="nm">${esc(x.it.n)}<small>${esc(setName(x.it.g))} · ${esc(x.it.num || '')} · ${esc(x.it.s)}</small></span><span class="st">${money(x.it.m)}</span></li>`).join('')}${ok.length > 150 ? `<li class="sub">…and ${ok.length - 150} more</li>` : ''}</ul>` : ''}</div>`;
+      <div class="dsec">Matched</div><ul class="dl">${ok.slice(0, 150).map((x) => `<li><span class="cnt">${x.r.qty}×</span><span class="nm">${esc(x.it.n)}<small>${esc(setName(x.it.g))} · ${esc(x.it.num || '')} · ${esc(x.it.s)}${x.it.lang && x.it.lang !== 'en' ? ' · ' + esc(langName(x.it.lang)) : ''}</small></span><span class="st">${money(x.it.m)}</span></li>`).join('')}${ok.length > 150 ? `<li class="sub">…and ${ok.length - 150} more</li>` : ''}</ul>` : ''}</div>`;
   const ic = $('#imp-col'); if (ic) ic.onchange = () => { IMP.col = ic.value; };
+  const il = $('#imp-lang'); if (il) il.onchange = () => { IMP.lang = il.value; if (IMP.rows) check(); };
   $('#imp-file').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; IMP.text = await f.text(); check(); };
   const check = () => { IMP.text = IMP.text || $('#imp-text').value; IMP.rows = parseImport(IMP.text).map((r) => ({ r, it: matchImport(r) })); renderImport(); };
   $('#imp-check').onclick = () => { IMP.text = $('#imp-text').value; check(); };
@@ -713,7 +737,7 @@ function renderImport() {
     try { await takeSnapshot('before import'); } catch {}
     const col = IMP.col ?? curCol();
     for (const x of ok) invBump(x.it.k, x.r.qty, col);
-    IMP = { text: '', rows: null }; S.prefs.colId = col; savePrefs(); closeSheet(); show('collection'); toast(`Imported ${n.toLocaleString()} cards into ${esc(colName(col))}`);
+    IMP = { text: '', rows: null, lang: IMP.lang }; S.prefs.colId = col; savePrefs(); closeSheet(); show('collection'); toast(`Imported ${n.toLocaleString()} cards into ${esc(colName(col))}`);
   };
 }
 

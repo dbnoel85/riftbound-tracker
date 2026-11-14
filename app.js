@@ -1,15 +1,35 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v41';
+const SHELL_VERSION = 'v42';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
+/* ---- card languages. English is the plain key ("pid|Foil"); other languages add "~zh" etc.
+   S.byKey.get() hands back a language copy of the English printing, so the rest of the app just works. */
+const LANGS = [['en', 'English', 'EN'], ['zh', 'Chinese (Simplified)', '中文'], ['zh-tw', 'Chinese (Traditional)', '繁中'], ['ja', 'Japanese', '日本語'], ['ko', 'Korean', '한국어'], ['fr', 'French', 'FR'], ['de', 'German', 'DE'], ['es', 'Spanish', 'ES'], ['it', 'Italian', 'IT'], ['pt', 'Portuguese', 'PT']];
+const langOf = (k) => { const i = String(k).indexOf('~'); return i < 0 ? 'en' : String(k).slice(i + 1); };
+const baseKey = (k) => String(k).split('~')[0];
+const withLang = (k, l) => (!l || l === 'en' ? baseKey(k) : baseKey(k) + '~' + l);
+const langName = (l) => (LANGS.find((x) => x[0] === l) || [l, l])[1];
+const langTag = (l) => (LANGS.find((x) => x[0] === l) || [l, l, String(l).toUpperCase()])[2];
+class LangMap extends Map {
+  get(k) {
+    const v = super.get(k); if (v !== undefined || typeof k !== 'string' || !k.includes('~')) return v;
+    const b = super.get(baseKey(k)); if (!b) return undefined;
+    const it = { ...b, k, bk: b.k, lang: langOf(k) };
+    if (S.prefs.langValue === 'none') { it.m = null; it.w = null; it.d = null; it.pc = null; }
+    return it;
+  }
+}
+/** key to store when adding from the Scan or Search screens: the language picked there */
+function addKey(k) { return String(k).includes('~') || !['scan', 'add'].includes(S.view) ? k : withLang(k, S.prefs.cardLang || 'en'); }
+
 const S = {
   cards: null,          // data/cards.json
-  byKey: new Map(),     // "productId|Normal" -> item
+  byKey: new LangMap(), // "productId|Normal" -> item ("…~zh" -> Chinese copy)
   byPid: new Map(),     // productId -> [items]
   groups: new Map(),    // groupId -> group
   history: null,        // data/history.json (lazy)
@@ -62,7 +82,7 @@ function confirmBox(text) {
   });
 }
 function variantTags(it) {
-  let t = '';
+  let t = it.lang && it.lang !== 'en' ? `<span class="tag lang" title="${esc(langName(it.lang))}">${esc(langTag(it.lang))}</span>` : '';
   if (it.s && it.s !== 'Normal') t += `<span class="tag foil">${esc(it.s)}</span>`;
   return t + banTag(it.n);
 }
@@ -134,6 +154,7 @@ async function loadHashes() {
 
 /* ---------------------------------------------------------------- inventory */
 function addCard(k, n = 1) {
+  k = addKey(k);
   const it = S.byKey.get(k); if (!it) return;
   const e = S.inv.items[k] || { qty: 0, added: Date.now() };
   e.qty += n; e.added = Date.now();
@@ -261,7 +282,10 @@ function renderCollection() {
   if (cur !== 'all' && S.prefs.colMode === 'missing') { renderMissing(+cur); return; }
   if (cur !== 'all' && S.prefs.colMode === 'binder') { $('#col-list').innerHTML = '<li style="list-style:none">' + renderBinder(cur) + '</li>'; $$('#col-list .bslot').forEach((b) => b.onclick = () => openDetail(b.dataset.k)); return; }
   $('#col-list').classList.remove('missing');
-  const rows = ownedRows().filter((r) => inSet(r.it));
+  const langs = [...new Set(Object.keys(S.inv.items).map(langOf))];
+  const lf = $('#col-lang'); const curL = langs.includes(S.prefs.colLang) ? S.prefs.colLang : 'all';
+  if (lf) { lf.classList.toggle('hidden', langs.length < 2 && curL === 'all'); const o = `<option value="all">All languages</option>` + LANGS.filter(([l]) => langs.includes(l)).map(([l, n]) => `<option value="${l}" ${l === curL ? 'selected' : ''}>${esc(n)}</option>`).join(''); if (lf.innerHTML !== o) lf.innerHTML = o; lf.value = curL; }
+  const rows = ownedRows().filter((r) => inSet(r.it) && (curL === 'all' || langOf(r.it.k) === curL));
   let total = 0, totalPrev = 0, count = 0;
   for (const r of rows) {
     total += r.value; count += r.e.qty;
@@ -516,10 +540,19 @@ function checkStale() {
 
 /* ----- detail sheet */
 function openDetail(k) { if (S.byKey.get(k)) pushSheet(() => renderDetail(k)); }
+/** which languages you own this printing in, and a way to open (and count) another language */
+function langRowHTML(it) {
+  const b = baseKey(it.k), all = poolAndView();
+  const have = LANGS.filter(([l]) => l === 'en' || all[withLang(b, l)] || l === it.lang);
+  return `<div class="langrow"><span class="label">Language</span><div class="chips">${have.map(([l, , t]) => { const q = (all[withLang(b, l)] || {}).qty || 0;
+      return `<button class="${l === (it.lang || 'en') ? 'on' : ''}" data-open="${esc(withLang(b, l))}">${esc(t)}${q ? ` <b>×${q}</b>` : ''}</button>`; }).join('')}
+    <select data-langadd="${esc(b)}" aria-label="Another language"><option value="">＋ Other language…</option>${LANGS.filter(([l]) => !have.some((h) => h[0] === l)).map(([l, n]) => `<option value="${esc(l)}">${esc(n)}</option>`).join('')}</select></div></div>`;
+}
+function poolAndView() { return { ...poolItems(), ...S.inv.items }; }
 function renderDetail(k) {
   const it = S.byKey.get(k); if (!it) return;
   const owned = S.inv.items[k];
-  const siblings = (S.byPid.get(it.p) || []).filter((v) => v.k !== k);
+  const siblings = (S.byPid.get(it.p) || []).filter((v) => v.k !== baseKey(k));
   const html = `<div class="detail">
     <img class="detail-img" src="${esc(bigImg(it.img))}" onerror="this.onerror=null;this.src='${esc(it.img)}'" alt="">
     <h2>${esc(it.n)}${variantTags(it)}</h2>
@@ -527,7 +560,7 @@ function renderDetail(k) {
     ${banBox(it.n)}
     <div id="detail-text"></div>
     <div class="card-box mkt">
-      <span class="label">TCGplayer market price${it.s !== 'Normal' ? ' · ' + esc(it.s) : ''}</span>
+      <span class="label">${it.lang && it.lang !== 'en' ? `English TCGplayer price — used for ${esc(langName(it.lang))} copies` : 'TCGplayer market price'}${it.s !== 'Normal' ? ' · ' + esc(it.s) : ''}</span>
       <b class="big">${it.tm != null || !('tm' in it) ? money(it.m) : '—'}</b>
       <div class="chg">${chg(it.d, it.pc)} <span class="flat">vs. last week (${money(it.w)})</span></div>
       ${it.est ? `<p class="sub" style="margin:6px 0 0">TCGplayer hasn't set a market price for this one yet, so the app values it at <b>${money(it.m)}</b> (its lowest listing) until it does.</p>` : ''}
@@ -555,7 +588,8 @@ function renderDetail(k) {
       <span id="pl" class="sub"></span>
     </div>
     <div class="card-box wishbox" id="wishbox"></div>
-    ${siblings.length ? `<div class="row">${siblings.map((v) => `<button class="ghost" data-open="${esc(v.k)}">${esc(v.s)} · ${money(v.m)}</button>`).join('')}</div>` : ''}
+    ${siblings.length ? `<div class="row">${siblings.map((v) => `<button class="ghost" data-open="${esc(withLang(v.k, it.lang))}">${esc(v.s)} · ${money(v.m)}</button>`).join('')}</div>` : ''}
+    ${langRowHTML(it)}
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
   $('#sheet-content').innerHTML = html;
@@ -576,7 +610,8 @@ function renderDetail(k) {
     upd(); refreshCurrent();
   });
   $('#cost').oninput = (e) => { const en = S.inv.items[k]; if (!en) return; const v = parseFloat(e.target.value); en.cost = isNaN(v) ? null : v; saveInv(); upd(); };
-  $$('#sheet [data-open]').forEach((b) => b.onclick = () => openDetail(b.dataset.open));
+  $$('#sheet [data-open]').forEach((b) => b.onclick = () => { SHEET[SHEET.length - 1] = () => renderDetail(b.dataset.open); renderDetail(b.dataset.open); });
+  const la = $('#sheet [data-langadd]'); if (la) la.onchange = () => { if (!la.value) return; const nk = withLang(la.dataset.langadd, la.value); SHEET[SHEET.length - 1] = () => renderDetail(nk); renderDetail(nk); };
   renderWishBox(k);
   drawChart(it);
   if (typeof fillDetailText === 'function') fillDetailText(it);
@@ -592,8 +627,9 @@ async function drawChart(it) {
   const svg = $('#chart'); if (!svg) return;
   const [h, w] = await Promise.all([loadHist(it.g), loadHistory()]);
   let pts = [];
-  if (h && h.s[it.k]) pts = h.s[it.k].map((v, i) => ({ d: h.dates[i], v })).filter((p) => p.v != null);
-  if (!pts.length && w.series[it.k]) pts = w.series[it.k].map((v, i) => ({ d: w.dates[i], v })).filter((p) => p.v != null); // weekly fallback
+  const hk = it.bk || it.k;
+  if (h && h.s[hk]) pts = h.s[hk].map((v, i) => ({ d: h.dates[i], v })).filter((p) => p.v != null);
+  if (!pts.length && w.series[hk]) pts = w.series[hk].map((v, i) => ({ d: w.dates[i], v })).filter((p) => p.v != null); // weekly fallback
   if (it.m != null && (!pts.length || pts[pts.length - 1].d < S.cards.updated)) pts.push({ d: S.cards.updated, v: it.m });
   CH.all = pts; CH.it = it;
   $$('#rng button').forEach((b) => { b.classList.toggle('on', b.dataset.r === CH.range); b.onclick = () => { CH.range = b.dataset.r; drawChart(it); }; });
@@ -1139,7 +1175,7 @@ function wireScan() {
     if (act === 'undo') { const e = sessGet(last.id); if (e) sessSetQty(e.id, e.qty - 1); toast('Removed'); $('#scan-results').innerHTML = ''; SCAN.last = null; }
     if (act === 'more') { const { e } = sessionAdd(last.k, { force: true }); SCAN.last = { ...last, id: e.id, k: e.k, dup: false }; scanFlash(S.byKey.get(e.k), e.done ? 'added' : 'review'); showAdded(S.byKey.get(e.k), prodOf(e.k), last.res.cands); }
     if (act === 'swap') {
-      const k = b.dataset.k; const e = sessSwap(last.id, k) || sessionAdd(k, { force: true }).e; SCAN.last = { ...last, id: e.id, k };
+      const k = withLang(b.dataset.k, langOf(last.k)); const e = sessSwap(last.id, k) || sessionAdd(k, { force: true }).e; SCAN.last = { ...last, id: e.id, k };
       const prod = prodOf(k);
       showAdded(S.byKey.get(k), prod, last.res.cands);
     }
@@ -1200,6 +1236,7 @@ function applyCamGap() { document.documentElement.classList.toggle('camgap', !!S
 function renderPrefs() {
   const cg = $('#pref-camgap'); if (cg) { cg.checked = !!S.prefs.camGap; cg.onchange = () => { S.prefs.camGap = cg.checked; savePrefs(); applyCamGap(); }; }
   const ib = $('#btn-import'); if (ib) ib.onclick = () => openImport();
+  $$('#pref-langval button').forEach((b) => { b.classList.toggle('on', b.dataset.v === (S.prefs.langValue || 'en')); b.onclick = () => { S.prefs.langValue = b.dataset.v; savePrefs(); renderPrefs(); }; });
   $$('#pref-format button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.format || 'standard')));
   $$('#pref-text button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.text || 'm')));
 }
