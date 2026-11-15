@@ -13,7 +13,7 @@
 },
 "Assault": {
 "text": "+1 might while I'm an attacker.",
-"cards": 22
+"cards": 23
 },
 "Assault N": {
 "text": "+N might while I'm an attacker.",
@@ -77,7 +77,7 @@
 },
 "Shield": {
 "text": "+1 might while I'm a defender.",
-"cards": 21
+"cards": 22
 },
 "Shield N": {
 "text": "+N might while I'm a defender.",
@@ -101,6 +101,6 @@
 },
 "Weaponmaster": {
 "text": "When you play me, you may [Equip] one of your Equipment to me for a rune of any color less, even if it's already attached.",
-"cards": 19
+"cards": 20
 }
 }
