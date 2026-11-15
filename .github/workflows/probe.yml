@@ -5,17 +5,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -sL -A "Mozilla/5.0" "https://playriftbound.com/en-us/events/" -o ev.html; echo "size $(wc -c < ev.html)"
-          python3 - <<'PY'
-          import re,json
-          h=open('ev.html',encoding='utf-8',errors='ignore').read()
-          print(re.findall(r'<title>(.*?)</title>',h)[:1])
-          m=re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',h,re.S)
-          if m:
-              d=json.loads(m.group(1)); print('page', d.get('page'), list(d.get('props',{}).get('pageProps',{}).keys()))
-              s=json.dumps(d)[:3000]; print(s)
-          for u in sorted(set(re.findall(r'https?://[a-zA-Z0-9.-]*(?:api|events|riot|rgpub)[a-zA-Z0-9./_-]*',h)))[:40]: print('URL',u)
-          js=re.findall(r'src="(/_next/static/[^"]+\.js)"',h); print('js',len(js), js[:5])
-          open('js.txt','w').write('\n'.join(js))
-          PY
-          for f in $(cat js.txt); do curl -s "https://playriftbound.com$f" -o b.js; grep -oE '"(https?:)?//[a-zA-Z0-9.-]+/[a-zA-Z0-9/_.{}$-]*(event|search|locat|store)[a-zA-Z0-9/_.{}$?=&-]*"|/api/[a-zA-Z0-9/_.-]*(event|store|search)[a-zA-Z0-9/_.-]*|(postal|zip|latitude|radius)[A-Za-z]{0,12}' b.js | sort -u | head -25; done
+          echo "== robots"; curl -sL https://events.playriftbound.com/robots.txt | head -30
+          curl -sL -A "Mozilla/5.0" "https://playriftbound.com/en-us/events/" -o ev.html
+          grep -oE 'https://events.playriftbound.com/_next/static/chunks/[a-z0-9_-]+\.js' ev.html | sort -u > js.txt; wc -l js.txt
+          mkdir js; i=0; for u in $(cat js.txt); do i=$((i+1)); curl -s "$u" -o js/$i.js; done
+          echo "== api-ish strings"
+          cat js/*.js | grep -oE '"/api/[^"]{2,80}"|`/api/[^`]{2,80}`|"https://[a-z0-9.-]*(api|events)[a-z0-9.-]*\.[a-z]+[^"]{0,80}"' | sort | uniq -c | sort -rn | head -40
+          echo "== params"
+          cat js/*.js | grep -oE '(postalCode|zipCode|latitude|longitude|radius|distance|lat|lng|searchQuery|startDate|location)[=:"][^,;]{0,40}' | sort | uniq -c | sort -rn | head -30
+          echo "== fetch calls"
+          cat js/*.js | grep -oE 'fetch\([^)]{0,120}\)' | sort -u | head -20
+          echo "== search page"
+          for p in "/en-us/events/?location=75501" "/en-us/events/search/"; do echo "-- $p $(curl -sL -o /dev/null -w '%{http_code} %{url_effective}' -A Mozilla/5.0 https://playriftbound.com$p)"; done
+          curl -sL -A Mozilla/5.0 "https://events.playriftbound.com/" -o e2.html; echo "events root $(wc -c < e2.html)"; grep -oE '<title>[^<]*' e2.html | head -2
+          grep -oE 'href="/[a-z-]*/?(events|stores|locator|search)[^"]*"' ev.html | sort -u | head -20
