@@ -5,17 +5,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "== robots"; curl -sL https://events.playriftbound.com/robots.txt | head -30
           curl -sL -A "Mozilla/5.0" "https://playriftbound.com/en-us/events/" -o ev.html
-          grep -oE 'https://events.playriftbound.com/_next/static/chunks/[a-z0-9_-]+\.js' ev.html | sort -u > js.txt; wc -l js.txt
+          grep -oE 'https://events.playriftbound.com/_next/static/chunks/[a-z0-9_-]+\.js' ev.html | sort -u > js.txt
           mkdir js; i=0; for u in $(cat js.txt); do i=$((i+1)); curl -s "$u" -o js/$i.js; done
-          echo "== api-ish strings"
-          cat js/*.js | grep -oE '"/api/[^"]{2,80}"|`/api/[^`]{2,80}`|"https://[a-z0-9.-]*(api|events)[a-z0-9.-]*\.[a-z]+[^"]{0,80}"' | sort | uniq -c | sort -rn | head -40
-          echo "== params"
-          cat js/*.js | grep -oE '(postalCode|zipCode|latitude|longitude|radius|distance|lat|lng|searchQuery|startDate|location)[=:"][^,;]{0,40}' | sort | uniq -c | sort -rn | head -30
-          echo "== fetch calls"
-          cat js/*.js | grep -oE 'fetch\([^)]{0,120}\)' | sort -u | head -20
-          echo "== search page"
-          for p in "/en-us/events/?location=75501" "/en-us/events/search/"; do echo "-- $p $(curl -sL -o /dev/null -w '%{http_code} %{url_effective}' -A Mozilla/5.0 https://playriftbound.com$p)"; done
-          curl -sL -A Mozilla/5.0 "https://events.playriftbound.com/" -o e2.html; echo "events root $(wc -c < e2.html)"; grep -oE '<title>[^<]*' e2.html | head -2
-          grep -oE 'href="/[a-z-]*/?(events|stores|locator|search)[^"]*"' ev.html | sort -u | head -20
+          python3 - <<'PY'
+          import re,glob
+          src=''.join(open(f,encoding='utf-8',errors='ignore').read() for f in glob.glob('js/*.js'))
+          qs=re.findall(r'(query\s+\w+\([^`]{0,1500}?`)',src)
+          for q in qs:
+              if 'atitude' in q or 'vent' in q[:80]: print('QUERY>>',q[:1400].replace('\\n','\n')); print()
+          for m in re.finditer(r'.{200}api/gql.{300}',src): print('GQLCTX>>',m.group(0)); 
+          for m in re.finditer(r'.{150}searchParams.{0,20}(get|set)\("(lat|lng|location|postal|zip|q|distance|radius)[^"]*"\).{100}',src): print('SP>>',m.group(0)[:400])
+          print(sorted(set(re.findall(r'searchParams\.(?:get|set|has)\("([^"]+)"',src))))
+          PY
