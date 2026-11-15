@@ -1,0 +1,21 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -sL -A "Mozilla/5.0" "https://playriftbound.com/en-us/events/" -o ev.html; echo "size $(wc -c < ev.html)"
+          python3 - <<'PY'
+          import re,json
+          h=open('ev.html',encoding='utf-8',errors='ignore').read()
+          print(re.findall(r'<title>(.*?)</title>',h)[:1])
+          m=re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',h,re.S)
+          if m:
+              d=json.loads(m.group(1)); print('page', d.get('page'), list(d.get('props',{}).get('pageProps',{}).keys()))
+              s=json.dumps(d)[:3000]; print(s)
+          for u in sorted(set(re.findall(r'https?://[a-zA-Z0-9.-]*(?:api|events|riot|rgpub)[a-zA-Z0-9./_-]*',h)))[:40]: print('URL',u)
+          js=re.findall(r'src="(/_next/static/[^"]+\.js)"',h); print('js',len(js), js[:5])
+          open('js.txt','w').write('\n'.join(js))
+          PY
+          for f in $(cat js.txt); do curl -s "https://playriftbound.com$f" -o b.js; grep -oE '"(https?:)?//[a-zA-Z0-9.-]+/[a-zA-Z0-9/_.{}$-]*(event|search|locat|store)[a-zA-Z0-9/_.{}$?=&-]*"|/api/[a-zA-Z0-9/_.-]*(event|store|search)[a-zA-Z0-9/_.-]*|(postal|zip|latitude|radius)[A-Za-z]{0,12}' b.js | sort -u | head -25; done

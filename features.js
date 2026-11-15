@@ -510,7 +510,6 @@ async function renderLearn() {
       <button class="tile" id="lr-gloss"><b>Keywords</b><span>${Object.keys(GL || {}).length} explained</span></button>
       <button class="tile" id="lr-bans"><b>Ban list</b><span>${BAN.byKey.size} cards</span></button>
       <button class="tile" id="lr-errata"><b>Errata</b><span>${Object.keys(ERR || {}).length} updated cards</span></button>
-      <button class="tile" id="lr-score"><b>Score counter</b><span>First to 8</span></button>
     </div>
     ${(R.articles || []).length ? `<div class="dsec">Rules updates &amp; FAQs</div><ul class="dl">${R.articles.slice(0, 12).map((a) => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener" class="nm" style="color:var(--text);text-decoration:none">${esc(a.title)}<small>${esc(fmtDate(a.date))}</small></a><span class="st">↗</span></li>`).join('')}</ul>` : ''}
     <p class="sub">Quick guide written for this app; when in doubt the official Core Rules win.</p></div>`;
@@ -518,7 +517,6 @@ async function renderLearn() {
   $('#lr-gloss').onclick = () => { GLQ = ''; pushSheet(renderGlossary); };
   $('#lr-bans').onclick = () => pushSheet(renderBanList);
   $('#lr-errata').onclick = () => pushSheet(renderErrataList);
-  $('#lr-score').onclick = () => { closeSheet(); show('score'); };
 }
 function renderErrataList() {
   const e = ERR || {};
