@@ -11,13 +11,7 @@ jobs:
           python3 - <<'PY'
           import re,glob
           src=''.join(open(f,encoding='utf-8',errors='ignore').read() for f in glob.glob('js/*.js'))
-          i=src.find('CompeteTournamentSearch')
-          for m in re.finditer(r'competeTournamentSearch|CompeteTournamentSearch',src):
-              pass
-          for m in re.finditer(r'.{700}(filter:\{|filter:)[^`]{0,40}(location|latitude|distance|radius|geo).{500}',src):
-              print('FILT>>',m.group(0)[:1300]); print()
-          for m in re.finditer(r'.{300}searchParams\.get\("l"\).{300}',src): print('L>>',m.group(0))
-          for m in re.finditer(r'.{200}searchParams\.get\("q"\).{200}',src): print('Q>>',m.group(0))
+          for m in re.finditer(r'ek=\(0,s\.useCallback\).{0,1500}',src): print('EK>>',m.group(0)); print()
+          for m in re.finditer(r'.{400}\.get\("(lat|latitude|lng|place|distance|coords)"\).{400}',src): print('GET>>',m.group(0)[:900]); print()
+          print(sorted(set(re.findall(r'\.(?:get|set)\("([a-zA-Z_]{1,20})"',src)))[:200])
           PY
-          echo "== CORS"
-          curl -s -i -X OPTIONS https://events.playriftbound.com/api/gql -H "Origin: https://dbnoel85.github.io" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type" | head -20
