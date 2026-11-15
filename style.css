@@ -593,3 +593,10 @@ a.btnlink{text-decoration:none;color:var(--text)}
 .langrow select{margin-top:4px}
 .addbtns .langbtn{background:none;border:1px dashed var(--line2);color:var(--sub);font-size:12px}
 .tiles:has(> :nth-child(3):last-child){grid-template-columns:repeat(3,1fr)}
+.localev .lev-form{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.localev #lev-zip{flex:1 1 120px;font-size:18px;letter-spacing:.06em;text-align:center}
+.localev select{flex:1 1 110px}
+.localev #lev-save{flex:1 1 100%;padding:12px}
+.localev .lev-go{display:block;text-align:center;padding:13px;margin:8px 0 6px;text-decoration:none}
+.localev .linkbtn{margin-top:4px}
+.localev a.lev-go{color:#1b1404;font-weight:700}

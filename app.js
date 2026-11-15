@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v43';
+const SHELL_VERSION = 'v44';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -2186,14 +2186,52 @@ function newEvent(f) {
   const e = { id: Date.now().toString(36), name: f.name || '', date: f.date || todayISO(), end: f.end || '', time: f.time || '', loc: f.loc || '', type: f.type || 'Nexus Night', format: 'Constructed', deckId: '', deckName: '', fee: '', prize: '', notes: '', place: '', players: '', url: f.url || '', rounds: [], created: Date.now(), mod: Date.now() };
   EV.events.push(e); saveEV(); return e;
 }
+/* ---- local events: save a ZIP / postcode once, then open PlayRiftbound's event search already set to that area */
+const MI = 1609.344;
+function localEventsURL(z) {
+  const p = new URLSearchParams({ q: z.label || z.code });
+  if (z.lat != null) { p.set('lat', z.lat); p.set('lng', z.lng); p.set('distanceMeters', Math.round((z.mi || 25) * MI)); }
+  return 'https://playriftbound.com/en-us/events/?' + p.toString();
+}
+function localEventsHTML() {
+  const z = S.prefs.home;
+  if (!z || S.editHome) return `<div class="card-box localev"><h3>Local events near you</h3>
+    <p class="sub">Enter your ZIP code once and this button will open PlayRiftbound.com's event search set to your area — Nexus Nights, Summoner Skirmishes, Pre-Rifts and store tournaments, with sign-up.</p>
+    <div class="lev-form"><input type="text" id="lev-zip" inputmode="numeric" autocomplete="postal-code" maxlength="10" placeholder="ZIP code" value="${esc(z ? z.code : '')}">
+      <select id="lev-mi" aria-label="Distance">${[10, 25, 50, 100].map((m) => `<option value="${m}" ${m === ((z && z.mi) || 25) ? 'selected' : ''}>within ${m} mi</option>`).join('')}</select>
+      <select id="lev-cc" aria-label="Country">${[['us', 'US'], ['ca', 'Canada'], ['gb', 'UK'], ['au', 'Australia'], ['de', 'Germany'], ['fr', 'France'], ['es', 'Spain'], ['it', 'Italy'], ['mx', 'Mexico'], ['br', 'Brazil']].map(([c, n]) => `<option value="${c}" ${c === ((z && z.cc) || 'us') ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <button class="primary" id="lev-save">Save</button></div>
+    ${z ? '<button class="linkbtn" id="lev-cancel">Cancel</button>' : ''}</div>`;
+  return `<div class="card-box localev"><h3>Local events near you</h3>
+    <p class="sub">Within ${z.mi || 25} miles of <b>${esc(z.label || z.code)}</b>. Opens PlayRiftbound.com (sign in with your Riot account to register), then tap <b>＋ Add event</b> under My events to track one here.</p>
+    <a class="primary btnlink lev-go" href="${esc(localEventsURL(z))}" target="_blank" rel="noopener">Show events near ${esc(z.place || z.code)} ↗</a>
+    <button class="linkbtn" id="lev-edit">Change ZIP or distance</button></div>`;
+}
+function wireLocalEvents() {
+  const ed = $('#lev-edit'); if (ed) ed.onclick = () => { S.editHome = true; renderUpcoming(); };
+  const cc = $('#lev-cancel'); if (cc) cc.onclick = () => { S.editHome = false; renderUpcoming(); };
+  const sv = $('#lev-save'); if (!sv) return;
+  const zi = $('#lev-zip'); zi.onkeydown = (e) => { if (e.key === 'Enter') sv.click(); };
+  sv.onclick = async () => {
+    const code = zi.value.trim().toUpperCase(), cn = $('#lev-cc').value, mi = +$('#lev-mi').value;
+    if (!code) { toast('Enter your ZIP code'); return; }
+    sv.disabled = true; sv.textContent = 'Finding…';
+    let home = { code, cc: cn, mi };
+    try {
+      const r = await fetch(`https://api.zippopotam.us/${cn}/${encodeURIComponent(cn === 'ca' || cn === 'gb' ? code.split(' ')[0] : code)}`);
+      if (r.ok) { const j = await r.json(), p = j.places && j.places[0];
+        if (p) home = { ...home, lat: +(+p.latitude).toFixed(4), lng: +(+p.longitude).toFixed(4), place: p['place name'], label: `${p['place name']}, ${p['state abbreviation'] || p.state || ''} ${code}`.replace(/,\s+(?=\d)/, ' ').trim() }; }
+      else { toast("Couldn't find that code — saved it anyway; the event page will search for it"); }
+    } catch { toast('Offline — saved; the location will be looked up next time'); }
+    S.prefs.home = home; savePrefs(); S.editHome = false; renderUpcoming();
+  };
+}
 async function renderUpcoming() {
   const body = $('#ev-body');
   if (!EVS.up) { body.innerHTML = '<p class="sub">Loading…</p>'; try { EVS.up = await (await fetch('data/upcoming.json')).json(); } catch { EVS.up = { events: [] }; } }
   const today = todayISO();
   const list = EVS.up.events.filter((e) => (e.end || e.start) >= today);
-  let month = '', html = `<div class="card-box"><h3>Local events near you</h3>
-    <p class="sub">Nexus Nights, Summoner Skirmishes, Pre-Rifts and store tournaments are now listed and registered for on PlayRiftbound.com (sign in with your Riot account). Find one, then tap <b>＋ Add event</b> under My events to track it.</p>
-    <a class="ghost" style="display:inline-block;text-decoration:none" href="https://playriftbound.com/en-us/events" target="_blank" rel="noopener">Find events on PlayRiftbound.com ↗</a></div>
+  let month = '', html = localEventsHTML() + `
     <p class="sub">Major events from Riot's official schedule (updated ${fmtDate(EVS.up.updated)}).</p><ul class="list">`;
   for (const e of list) {
     const [y, m] = e.start.split('-').map(Number); const mo = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -2207,6 +2245,7 @@ async function renderUpcoming() {
   }
   html += `</ul><p class="sub center">Source: <a href="${esc(EVS.up.source)}" target="_blank" rel="noopener">playriftbound.com</a></p>`;
   body.innerHTML = html;
+  wireLocalEvents();
   $$('#ev-body [data-upadd]').forEach((b) => b.onclick = () => {
     const [name, start] = b.dataset.upadd.split('|'); const u = EVS.up.events.find((x) => x.name === name && x.start === start);
     newEvent({ name: u.name, date: u.start, end: u.end, loc: u.loc, type: EV_TYPES.includes(u.type) ? u.type : 'Casual / other', url: u.url });
