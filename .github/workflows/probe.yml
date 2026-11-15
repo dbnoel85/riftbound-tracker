@@ -5,13 +5,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -sL -A "Mozilla/5.0" "https://playriftbound.com/en-us/events/" -o ev.html
-          grep -oE 'https://events.playriftbound.com/_next/static/chunks/[a-z0-9_-]+\.js' ev.html | sort -u > js.txt
-          mkdir js; i=0; for u in $(cat js.txt); do i=$((i+1)); curl -s "$u" -o js/$i.js; done
-          python3 - <<'PY'
-          import re,glob
-          src=''.join(open(f,encoding='utf-8',errors='ignore').read() for f in glob.glob('js/*.js'))
-          for m in re.finditer(r'ek=\(0,s\.useCallback\).{0,1500}',src): print('EK>>',m.group(0)); print()
-          for m in re.finditer(r'.{400}\.get\("(lat|latitude|lng|place|distance|coords)"\).{400}',src): print('GET>>',m.group(0)[:900]); print()
-          print(sorted(set(re.findall(r'\.(?:get|set)\("([a-zA-Z_]{1,20})"',src)))[:200])
-          PY
+          curl -s -i "https://api.zippopotam.us/us/75501" -H "Origin: https://dbnoel85.github.io" | grep -iE "^HTTP|access-control|^\{" ; echo
+          curl -s "https://api.zippopotam.us/us/75501"; echo
+          curl -sL -o /dev/null -w '%{http_code}\n' "https://playriftbound.com/en-us/events/?q=75501&lat=33.42&lng=-94.05&distanceMeters=80467"
