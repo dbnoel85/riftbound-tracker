@@ -1,7 +1,7 @@
 {
 "Accelerate": {
 "text": "You may pay 1 energy and a Fury rune as an additional cost to have me enter ready.",
-"cards": 44
+"cards": 50
 },
 "Action": {
 "text": "Play on your turn or in showdowns.",
@@ -13,11 +13,11 @@
 },
 "Assault": {
 "text": "+1 might while I'm an attacker.",
-"cards": 23
+"cards": 24
 },
 "Assault N": {
 "text": "+N might while I'm an attacker.",
-"cards": 22
+"cards": 23
 },
 "Backline": {
 "text": "I must be assigned combat damage last.",
@@ -41,11 +41,11 @@
 },
 "Disarm": {
 "text": "When I attack, give an enemy unit here -1 might this turn.",
-"cards": 10
+"cards": 11
 },
 "Disarm N": {
 "text": "When I attack, give an enemy unit here -N might this turn.",
-"cards": 3
+"cards": 4
 },
 "Ganking": {
 "text": "I can move from battlefield to battlefield.",
@@ -73,15 +73,15 @@
 },
 "Reaction": {
 "text": "Play any time, even before spells and abilities resolve.",
-"cards": 86
+"cards": 87
 },
 "Shield": {
 "text": "+1 might while I'm a defender.",
-"cards": 22
+"cards": 23
 },
 "Shield N": {
 "text": "+N might while I'm a defender.",
-"cards": 25
+"cards": 28
 },
 "Tank": {
 "text": "I must be assigned combat damage first.",
