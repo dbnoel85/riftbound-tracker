@@ -603,3 +603,29 @@ a.btnlink{text-decoration:none;color:var(--text)}
 .dl li.banrep .nm s{color:var(--sub);text-decoration-color:var(--ember)}
 .dl li.banrep small{color:var(--text);margin-top:3px}
 .dl li.banrep small b{color:var(--gold)}
+
+/* collection filters */
+.toolbar .fbtn{flex:none;display:flex;align-items:center;gap:6px;padding:0 12px;white-space:nowrap}
+.toolbar .fbtn.on{border-color:var(--gold);color:var(--gold)}
+.fbtn b{background:var(--gold);color:#1b1404;border-radius:9px;min-width:18px;height:18px;font-size:11px;line-height:18px;text-align:center;padding:0 5px}
+.fpanel{border:1px solid var(--line2);background:rgba(13,18,40,.92);border-radius:4px;padding:10px 12px 12px;margin:0 0 10px}
+.fgroup{padding:8px 0;border-bottom:1px solid rgba(42,51,96,.7)}
+.fgroup:last-of-type{border-bottom:0}
+.fg-h{font-size:12.5px;font-weight:700;color:var(--sub);margin-bottom:6px;display:flex;gap:8px;align-items:baseline}
+.fg-h .linkbtn{font-size:12px;font-weight:500}
+.fchips{display:flex;flex-wrap:wrap;gap:6px}
+.fchips button{background:var(--deep);border:1px solid var(--line2);border-radius:16px;padding:6px 12px;font-size:13px;color:var(--text)}
+.fchips button.on{background:rgba(241,212,142,.16);border-color:var(--gold);color:var(--gold);font-weight:600}
+.frange{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--sub)}
+.frange input{width:90px;padding:7px 8px}
+.factive{margin:0 0 8px}
+.fa-line{font-size:13px;color:var(--sub);margin-bottom:6px}
+.fa-line b{color:var(--text)}
+.fa-chips{display:flex;flex-wrap:wrap;gap:6px}
+.fa-chips button{background:rgba(241,212,142,.12);border:1px solid rgba(241,212,142,.5);color:var(--gold);border-radius:14px;padding:4px 10px;font-size:12.5px}
+@media (max-width:520px){
+  #v-collection .toolbar{flex-wrap:wrap}
+  #v-collection .toolbar #col-filter{flex:1 1 100%}
+  #v-collection .toolbar .fbtn{flex:1 1 30%;justify-content:center;min-height:44px}
+  #v-collection .toolbar #col-sort,#v-collection .toolbar #col-lang:not(.hidden){flex:1 1 30%}
+}

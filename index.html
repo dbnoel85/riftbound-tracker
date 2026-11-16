@@ -60,7 +60,8 @@
     <div class="setstrip" id="col-sets"></div>
     <div class="seg hidden" id="col-setmode"><button data-m="owned" class="on">Owned</button><button data-m="missing">Missing</button><button data-m="binder">Binder</button></div>
     <div class="toolbar">
-      <input id="col-filter" type="search" placeholder="Filter my cards" autocomplete="off">
+      <input id="col-filter" type="search" placeholder="Search my cards" autocomplete="off">
+      <button class="ghost fbtn" id="col-fbtn" aria-expanded="false" aria-controls="col-fpanel">Filters<b id="col-fcount" class="hidden"></b></button>
       <select id="col-lang" class="hidden" aria-label="Language"></select>
       <select id="col-sort" aria-label="Sort">
         <option value="value">Total value ↓</option>
@@ -79,6 +80,8 @@
         <option value="added">Recently added</option>
       </select>
     </div>
+    <div id="col-fpanel" class="fpanel hidden"></div>
+    <div id="col-factive" class="factive hidden"></div>
     <ul id="col-list" class="list"></ul>
     <div id="col-empty" class="empty hidden">
       <p>No cards yet.</p>

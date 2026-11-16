@@ -802,3 +802,113 @@ function renderManageCols() {
   onPick($('#col-pick')); onPick($('#scan-col'));
   const m = $('#col-manage'); if (m) m.onclick = () => pushSheet(renderManageCols);
 })();
+
+/* ---------------------------------------------------------------- collection filters (variant · type · price & more) */
+// Within a group, chips are OR (Foil or Promo); between groups they're AND (Foil and Unit and $20–30).
+const CF_TAGS = (it) => (it.n.match(/\(([^)]*)\)/g) || []).join(' ');
+const CF_PROMO_G = (g) => /promo/i.test(setName(g));
+const CF_GROUPS = [
+  { id: 'v', title: 'Variant', chips: [
+    ['foil', 'Foil', (it) => it.s !== 'Normal'],
+    ['base', 'Base (non-foil)', (it) => it.s === 'Normal'],
+    ['promo', 'Promo', (it) => it.r === 'Promo' || CF_PROMO_G(it.g)],
+    ['champ', 'Champion', (it) => /champion/i.test(CF_TAGS(it))],
+    ['serial', 'Serialized', (it) => /serial/i.test(CF_TAGS(it))],
+    ['signed', 'Signed', (it) => /signature/i.test(CF_TAGS(it))],
+    ['alt', 'Alternate art', (it) => it.r === 'Showcase' || /alternate|overnumbered|metal|special art|prize wall|best of/i.test(CF_TAGS(it))],
+  ] },
+  { id: 't', title: 'Type', chips: (() => {
+    const T = (it) => String(it.t || ''), P = (it) => new Set(T(it).split(';'));
+    return [
+      ['battlefield', 'Battlefield', (it) => P(it).has('Battlefield') && !P(it).has('Token')],
+      ['champion', 'Champion', (it) => T(it) === 'Champion Unit'],
+      ['gear', 'Gear', (it) => T(it) === 'Gear'],
+      ['legend', 'Legend', (it) => T(it) === 'Legend'],
+      ['rune', 'Rune', (it) => T(it) === 'Rune'],
+      ['sig', 'Signature', (it) => T(it).startsWith('Signature')],
+      ['sigspell', 'Signature spell', (it) => T(it) === 'Signature Spell'],
+      ['sigunit', 'Signature unit', (it) => T(it) === 'Signature Unit'],
+      ['siggear', 'Signature gear', (it) => T(it) === 'Signature Gear'],
+      ['spell', 'Spell', (it) => T(it) === 'Spell'],
+      ['token', 'Token', (it) => P(it).has('Token')],
+      ['tokbf', 'Token battlefield', (it) => P(it).has('Token') && P(it).has('Battlefield')],
+      ['unit', 'Unit', (it) => P(it).has('Unit') || T(it).endsWith(' Unit')],
+      ['unitgear', 'Unit gear', (it) => P(it).has('Unit') && P(it).has('Gear') && !P(it).has('Token')],
+    ];
+  })() },
+  { id: 'p', title: 'Price (each)', chips: [
+    ['p0', 'Under $1', (it) => it.m != null && it.m < 1], ['p1', '$1–5', (it) => it.m >= 1 && it.m < 5], ['p5', '$5–10', (it) => it.m >= 5 && it.m < 10],
+    ['p10', '$10–20', (it) => it.m >= 10 && it.m < 20], ['p20', '$20–30', (it) => it.m >= 20 && it.m < 30], ['p30', '$30–50', (it) => it.m >= 30 && it.m < 50],
+    ['p50', '$50–100', (it) => it.m >= 50 && it.m < 100], ['p100', '$100+', (it) => it.m >= 100], ['pnone', 'No price', (it) => it.m == null],
+  ] },
+  { id: 'o', title: 'More', chips: [
+    ['up', 'Up this week', (it) => it.pc != null && it.pc > 0], ['down', 'Down this week', (it) => it.pc != null && it.pc < 0],
+    ['dupes', 'Duplicates (2+)', (it, r) => r.e.qty >= 2], ['playset', 'Playset (3+)', (it, r) => r.e.qty >= 3], ['single', 'Only one copy', (it, r) => r.e.qty === 1],
+    ['new', 'Added in last 7 days', (it, r) => Date.now() - (r.e.added || 0) < 7 * 864e5],
+  ] },
+  { id: 'r', title: 'Rarity', chips: ['Common', 'Uncommon', 'Rare', 'Epic', 'Showcase', 'Promo'].map((x) => [x, x, (it) => it.r === x]) },
+  { id: 'd', title: 'Domain', needsInfo: true, chips: ['Fury', 'Calm', 'Mind', 'Body', 'Chaos', 'Order', 'Colorless'].map((x) => [x, x, (it) => { const c = cardInfo(it.n); const d = (c && c.d) || []; return x === 'Colorless' ? c && !d.filter((y) => y !== 'Colorless').length : d.includes(x); }]) },
+];
+const CF = () => (S.prefs.cf = S.prefs.cf || {});
+function cfActive() { const f = CF(); let n = 0; for (const g of CF_GROUPS) n += (f[g.id] || []).length; if (f.min != null) n++; if (f.max != null) n++; return n; }
+function cfPass(r) {
+  const f = CF(), it = r.it;
+  for (const g of CF_GROUPS) {
+    const on = f[g.id] || []; if (!on.length) continue;
+    if (g.needsInfo && !D.rb) continue;
+    if (!g.chips.some(([id, , fn]) => on.includes(id) && fn(it, r))) return false;
+  }
+  if (f.min != null && !(it.m != null && it.m >= f.min)) return false;
+  if (f.max != null && !(it.m != null && it.m <= f.max)) return false;
+  return true;
+}
+function cfSummary(list, rows) {
+  const n = cfActive(), b = $('#col-fcount'), act = $('#col-factive');
+  const shown = list.reduce((t, r) => t + r.e.qty, 0); const dn = $('#cf-done'); if (dn) dn.textContent = `Show ${shown.toLocaleString()} card${shown === 1 ? '' : 's'}`;
+  if (b) { b.textContent = n; b.classList.toggle('hidden', !n); $('#col-fbtn').classList.toggle('on', !!n); }
+  if (!act) return;
+  if (!n) { act.classList.add('hidden'); act.innerHTML = ''; return; }
+  const f = CF(), chips = [];
+  for (const g of CF_GROUPS) for (const [id, label] of g.chips) if ((f[g.id] || []).includes(id)) chips.push(`<button data-cfx="${g.id}|${esc(id)}">${esc(label)} ✕</button>`);
+  if (f.min != null) chips.push(`<button data-cfx="min|">Over ${money(f.min)} ✕</button>`);
+  if (f.max != null) chips.push(`<button data-cfx="max|">Under ${money(f.max)} ✕</button>`);
+  const v = list.reduce((t, r) => t + r.value, 0), q = list.reduce((t, r) => t + r.e.qty, 0);
+  act.innerHTML = `<div class="fa-line"><b>${q.toLocaleString()}</b> of ${rows.reduce((t, r) => t + r.e.qty, 0).toLocaleString()} cards match · <b>${money(v)}</b> <button class="linkbtn" id="cf-clear">Clear all</button></div><div class="fa-chips">${chips.join('')}</div>`;
+  act.classList.remove('hidden');
+  act.querySelectorAll('[data-cfx]').forEach((x) => x.onclick = () => { const [g, id] = x.dataset.cfx.split('|'); if (g === 'min' || g === 'max') delete f[g]; else f[g] = (f[g] || []).filter((y) => y !== id); savePrefs(); renderCollection(); renderCFPanel(); });
+  $('#cf-clear').onclick = () => { S.prefs.cf = {}; savePrefs(); renderCollection(); renderCFPanel(); };
+}
+function renderCFPanel() {
+  const pn = $('#col-fpanel'); if (!pn || pn.classList.contains('hidden')) return;
+  const f = CF();
+  // only offer chips that match something you own (keeps the panel short), plus anything already switched on
+  const rows = ownedRows();
+  const has = (g, id, fn) => (f[g.id] || []).includes(id) || (g.needsInfo && !D.rb) || rows.some((r) => fn(r.it, r));
+  pn.innerHTML = CF_GROUPS.map((g) => {
+    const chips = g.chips.filter(([id, , fn]) => has(g, id, fn));
+    if (!chips.length) return '';
+    return `<div class="fgroup"><div class="fg-h">${esc(g.title)}${(f[g.id] || []).length ? ` <button class="linkbtn" data-cfg="${g.id}">clear</button>` : ''}</div>
+      <div class="fchips">${chips.map(([id, label]) => `<button class="${(f[g.id] || []).includes(id) ? 'on' : ''}" data-cf="${g.id}|${esc(id)}">${esc(label)}</button>`).join('')}</div>
+      ${g.id === 'p' ? `<div class="frange"><span>Custom</span><input type="number" inputmode="decimal" min="0" step="1" id="cf-min" placeholder="Min $" value="${f.min ?? ''}"><span>to</span><input type="number" inputmode="decimal" min="0" step="1" id="cf-max" placeholder="Max $" value="${f.max ?? ''}"></div>` : ''}</div>`;
+  }).join('') + `<div class="row" style="margin-top:8px"><button class="primary" id="cf-done" style="flex:1">Show cards</button><button class="ghost" id="cf-reset">Clear all</button></div>`;
+  pn.querySelectorAll('[data-cf]').forEach((b) => b.onclick = () => {
+    const [g, id] = b.dataset.cf.split('|'); const a = f[g] = f[g] || []; const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id);
+    if (g === 'd' && !D.rb) loadDecks().then(() => { renderCollection(); renderCFPanel(); }, () => {});
+    savePrefs(); renderCollection(); renderCFPanel();
+  });
+  pn.querySelectorAll('[data-cfg]').forEach((b) => b.onclick = () => { f[b.dataset.cfg] = []; savePrefs(); renderCollection(); renderCFPanel(); });
+  const num = (v) => (v === '' || v == null || isNaN(+v) ? null : +v);
+  const mn = $('#cf-min'), mx = $('#cf-max');
+  const upd = () => { const a = num(mn.value), b = num(mx.value); if (a == null) delete f.min; else f.min = a; if (b == null) delete f.max; else f.max = b; savePrefs(); renderCollection(); };
+  if (mn) { mn.onchange = upd; mx.onchange = upd; }
+  $('#cf-done').onclick = () => toggleCF(false);
+  renderCollection();
+  $('#cf-reset').onclick = () => { S.prefs.cf = {}; savePrefs(); renderCollection(); renderCFPanel(); };
+}
+function toggleCF(open) {
+  const pn = $('#col-fpanel'), b = $('#col-fbtn'); if (!pn) return;
+  open = open ?? pn.classList.contains('hidden');
+  pn.classList.toggle('hidden', !open); b.setAttribute('aria-expanded', open);
+  if (open) { if ((CF().d || []).length && !D.rb) loadDecks().then(renderCollection, () => {}); renderCFPanel(); }
+}
+(function wireCF() { const b = $('#col-fbtn'); if (b) b.onclick = () => toggleCF(); })();
