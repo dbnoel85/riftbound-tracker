@@ -812,6 +812,7 @@ const CF_GROUPS = [
     ['foil', 'Foil', (it) => it.s !== 'Normal'],
     ['base', 'Base (non-foil)', (it) => it.s === 'Normal'],
     ['promo', 'Promo', (it) => it.r === 'Promo' || CF_PROMO_G(it.g)],
+    ['op', 'Nexus Night / Org Play', (it) => it.g === 24528],
     ['champ', 'Champion', (it) => /champion/i.test(CF_TAGS(it))],
     ['serial', 'Serialized', (it) => /serial/i.test(CF_TAGS(it))],
     ['signed', 'Signed', (it) => /signature/i.test(CF_TAGS(it))],

@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v46';
+const SHELL_VERSION = 'v47';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -94,8 +94,27 @@ function confirmBox(text) {
 }
 function variantTags(it) {
   let t = it.lang && it.lang !== 'en' ? `<span class="tag lang" title="${esc(langName(it.lang))}">${esc(langTag(it.lang))}</span>` : '';
+  const pk = promoKind(it); if (pk) t += `<span class="tag promo" title="${esc(printLabel(it))}">${esc(pk)}</span>`;
   if (it.s && it.s !== 'Normal') t += `<span class="tag foil">${esc(it.s)}</span>`;
   return t + banTag(it.n);
+}
+/* ---- printings: the same card across sets, promos and special versions */
+const PROMO_GROUPS = { 24343: 'Promo', 24528: 'Org Play', 24552: 'Judge' };
+function promoKind(it) { return it && (PROMO_GROUPS[it.g] || (it.r === 'Promo' ? 'Promo' : '')); }
+const printTags = (it) => (it.n.match(/\(([^)]*)\)/g) || []).map((x) => x.slice(1, -1));
+const printBase = (n) => normName(String(n || '').replace(/\s*\([^)]*\)/g, ''));
+/** a short name for which version this is: "Promo", "Nexus Night / store promo", "Alternate Art", "Origins" … */
+function printLabel(it) {
+  const tags = printTags(it).join(' · ');
+  if (it.g === 24528) return 'Organized Play' + (tags ? ` · ${tags}` : ' · Nexus Night / store promo');
+  if (it.g === 24552) return 'Judge promo' + (tags ? ` · ${tags}` : '');
+  if (it.g === 24343) return 'Promo' + (tags ? ` · ${tags}` : '');
+  return (tags || setName(it.g)) + (it.r === 'Promo' ? ' · Promo' : '');
+}
+let PRINTS = null;
+function printingsOf(it) {
+  if (!PRINTS) { PRINTS = new Map(); for (const items of S.byPid.values()) { const f = items[0]; if (f.sealed) continue; const b = printBase(f.n); if (!PRINTS.has(b)) PRINTS.set(b, []); PRINTS.get(b).push(items); } }
+  return PRINTS.get(printBase(it.n)) || [];
 }
 
 /* ---------------------------------------------------------------- ban list (data/bans.json, updated from Riot's announcements) */
@@ -146,7 +165,7 @@ async function loadData(force) {
   // pictures for printings TCGplayer has no photo of yet
   try { const fix = await (await fetch('data/imgfix.json', { cache: force ? 'reload' : 'default' })).json(); for (const it of cards.items) if (fix[it.p]) it.img = fix[it.p]; } catch { /* optional */ }
   await loadLangArt();
-  S.cards = cards; S.byKey.clear(); S.byPid.clear(); S.groups.clear();
+  S.cards = cards; S.byKey.clear(); PRINTS = null; S.byPid.clear(); S.groups.clear();
   for (const g of cards.groups) S.groups.set(g.id, g);
   for (const it of cards.items) {
     S.byKey.set(it.k, it);
@@ -571,6 +590,22 @@ function langRowHTML(it) {
     <div class="ltiles">${show.map(tile).join('')}</div>
     <select data-langadd="${esc(b)}" aria-label="Another language"><option value="">＋ Other language…</option>${LANGS.filter(([l]) => !show.some((h) => h[0] === l)).map(([l, n]) => `<option value="${esc(l)}">${esc(n)}</option>`).join('')}</select></div>`;
 }
+/** every printing of this card (main set, promos, organized play / Nexus Night, judge, alt arts) with what you own of each */
+function printingsHTML(it) {
+  const prods = printingsOf(it); if (prods.length < 2) return '';
+  const lang = it.lang || 'en', all = poolAndView(), mine = S.inv.items[it.k]?.qty || 0;
+  const rows = [];
+  for (const items of prods) for (const v0 of items) {
+    const v = lang === 'en' ? v0 : S.byKey.get(withLang(v0.k, lang)) || v0;
+    rows.push({ v, q: (all[v.k] || {}).qty || 0, cur: baseKey(v.k) === baseKey(it.k) });
+  }
+  const rank = (r) => (r.cur ? 0 : 1) * 1000 + (PROMO_GROUPS[r.v.g] ? 1 : 0) * 100 + (r.v.s === 'Normal' ? 0 : 1);
+  rows.sort((a, b) => rank(a) - rank(b) || (a.v.m ?? 0) - (b.v.m ?? 0));
+  const total = rows.reduce((t, r) => t + r.q, 0);
+  return `<div class="printings"><div class="row" style="justify-content:space-between;align-items:baseline"><span class="label">All printings</span><span class="sub" style="font-size:12px">${total ? `you own ${total} across ${rows.filter((r) => r.q).length}` : 'tap one to count it'}</span></div>
+    <ul class="dl prints">${rows.map((r) => `<li class="${r.cur ? 'cur' : ''}" data-open="${esc(r.v.k)}">${img(r.v.img)}<span class="nm">${esc(printLabel(r.v))}${r.v.s !== 'Normal' ? ` <span class="tag foil">${esc(r.v.s)}</span>` : ''}<small>${esc(setAbbr(r.v.g))} · ${esc(r.v.num || '')}${r.cur ? ' · <b>viewing</b>' : ''}</small></span>
+      <span class="st"><b>${money(r.v.m)}</b>${r.q ? `<br><span class="ok">own ${r.q}</span>` : ''}${!r.cur && mine ? `<br><button class="ghost sm mv1" data-mv1="${esc(r.v.k)}" title="Move one copy from the version you're viewing to this one">⇄ move 1 here</button>` : ''}</span></li>`).join('')}</ul></div>`;
+}
 function poolAndView() { return { ...poolItems(), ...S.inv.items }; }
 function renderDetail(k) {
   const it = S.byKey.get(k); if (!it) return;
@@ -581,6 +616,7 @@ function renderDetail(k) {
     <h2>${esc(it.n)}${variantTags(it)}</h2>${it.ln ? `<div class="ln">${esc(it.ln)}</div>` : ''}
     <div class="sub">${esc(setName(it.g))}${it.num ? ' · ' + esc(it.num) : ''}${it.r ? ' · ' + esc(it.r) : ''}</div>
     ${banBox(it.n)}
+    ${printingsHTML(it)}
     ${langRowHTML(it)}
     <div id="detail-text"></div>
     <div class="card-box mkt">
@@ -634,6 +670,14 @@ function renderDetail(k) {
   });
   $('#cost').oninput = (e) => { const en = S.inv.items[k]; if (!en) return; const v = parseFloat(e.target.value); en.cost = isNaN(v) ? null : v; saveInv(); upd(); };
   $$('#sheet [data-open]').forEach((b) => b.onclick = () => { SHEET[SHEET.length - 1] = () => renderDetail(b.dataset.open); renderDetail(b.dataset.open); });
+  $$('#sheet [data-mv1]').forEach((b) => b.onclick = (e) => {
+    e.stopPropagation(); const to = b.dataset.mv1, from = k;
+    const f = S.inv.items[from]; if (!f || f.qty < 1) return;
+    f.qty -= 1; if (f.qty <= 0) delete S.inv.items[from];
+    const t = S.inv.items[to] || { qty: 0, added: Date.now() }; t.qty += 1; S.inv.items[to] = t; saveInv();
+    toast(`Moved 1 to <b>${esc(printLabel(S.byKey.get(to)))}</b>`);
+    if (S.view === 'collection') renderCollection(); renderDetail(from in S.inv.items ? from : to);
+  });
   const la = $('#sheet [data-langadd]'); if (la) la.onchange = () => { if (!la.value) return; const nk = withLang(la.dataset.langadd, la.value); SHEET[SHEET.length - 1] = () => renderDetail(nk); renderDetail(nk); };
   renderWishBox(k);
   drawChart(it);
@@ -1086,7 +1130,8 @@ function pickFinish(items) {
   return items.find((v) => (foil ? v.s !== 'Normal' : v.s === 'Normal')) || items[0];
 }
 function showAdded(it, product, cands) {
-  const others = cands.filter((c) => c.pid !== product.pid).slice(0, 3);
+  let others = cands.filter((c) => c.pid !== product.pid).slice(0, 3);
+  for (const items of printingsOf(it)) if (items[0].p !== product.pid && !others.some((c) => c.pid === items[0].p) && others.length < 5) others.push({ pid: items[0].p, items });
   const finishes = product.items.filter((v) => v.k !== it.k);
   const e = SCAN.last && sessGet(SCAN.last.id), dup = SCAN.last && SCAN.last.dup;
   $('#scan-status').innerHTML = '';
@@ -1103,7 +1148,7 @@ function showAdded(it, product, cands) {
       </div></li>
     ${others.length && !dup ? `<li class="sub" style="padding:6px 2px">Different version? Tap to switch:</li>` + others.map((c) => {
       const v = pickFinish(c.items);
-      return `<li class="item" data-scan="swap" data-k="${esc(v.k)}">${img(v.img)}<div class="info"><div class="nm">${esc(v.n)}</div><div class="meta">${metaLine(v)}</div></div><div class="px"><b>${money(v.m)}</b></div></li>`;
+      return `<li class="item" data-scan="swap" data-k="${esc(v.k)}">${img(v.img)}<div class="info"><div class="nm">${esc(v.n)}${promoKind(v) ? `<span class="tag promo">${esc(promoKind(v))}</span>` : ''}</div><div class="meta">${metaLine(v)}</div></div><div class="px"><b>${money(v.m)}</b></div></li>`;
     }).join('') : ''}`;
 }
 function showMaybe(res) {
