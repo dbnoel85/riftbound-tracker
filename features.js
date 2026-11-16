@@ -577,7 +577,9 @@ async function renderMatrix() {
   await loadMatrix();
   const M = matrixData();
   const minN = +(S.prefs.mxMin ?? 10);
-  const order = [...M.legends.entries()].filter(([, e]) => e.n).sort((a, b) => b[1].n - a[1].n).map(([k]) => k);
+  const allMode = S.prefs.mxAll === true;
+  let order = [...M.legends.entries()].filter(([, e]) => e.n).sort((a, b) => b[1].n - a[1].n).map(([k]) => k);
+  if (allMode && typeof legendNames === 'function') for (const n0 of legendNames()) { const a = mxArch(n0), n = a ? a.name : n0; if (!M.legends.has(n)) { M.legends.set(n, { n: 0, w: 0, a }); order.push(n); } }
   if (!order.length) { $('#dk-info').innerHTML = ''; $('#dk-list').innerHTML = '<li class="empty">No matchup data yet — check back after the next daily update.</li>'; return; }
   let focus = S.prefs.mxFocus && M.legends.has(S.prefs.mxFocus) ? S.prefs.mxFocus : order[0];
   const days = { '30d': 30, '14d': 14, '7d': 7 }[D.win] || 30;
@@ -585,13 +587,14 @@ async function renderMatrix() {
   const short = (s) => s.replace(/\s+-\s+Starter$/, '').split(' - ')[0];
   const fe = M.legends.get(focus);
   const rows = order.filter((o) => o !== focus).map((o) => ({ o, c: M.get(focus, o) })).filter((r) => r.c && r.c.n >= minN).sort((a, b) => pc(b.c) - pc(a.c));
-  const top = order.slice(0, Math.min(order.length, 14));
+  const top = allMode ? order : order.slice(0, Math.min(order.length, 14));
   const legImg = (k) => { const a = M.legends.get(k)?.a; const r = a && cardRef(D.rb[a.leader]?.n || a.name); return r && r.img; };
 
   $('#dk-info').innerHTML = `How each legend does against the others in tournament play over the last ${days} days. Pick a legend to see its best and worst matchups; the grid reads across a row (row legend's win rate vs the column).
     <span class="flat">(${M.matches.toLocaleString()} matches · ${esc(M.src)})</span>
     ${M.sparse ? '<br><span class="part">Only the strongest and weakest matchup per legend is published in the free deck data, so many grid cells are empty. The full grid fills in once tournament round data is connected.</span>' : ''}
     <div class="mx-ctl"><label>Legend <select id="mx-focus">${order.map((k) => `<option ${k === focus ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select></label>
+    <div class="seg mini" id="mx-all"><button data-a="0" class="${allMode ? '' : 'on'}">Most played</button><button data-a="1" class="${allMode ? 'on' : ''}">All legends</button></div>
     <div class="seg mini" id="mx-min">${[0, 10, 30].map((n) => `<button data-n="${n}" class="${n === minN ? 'on' : ''}">${n ? n + '+ games' : 'All'}</button>`).join('')}</div></div>`;
 
   const bar = (p) => { const d = Math.round((p - 0.5) * 100); return `<span class="mx-bar"><i class="${d >= 0 ? 'p' : 'n'}" style="${d >= 0 ? 'left:50%' : `right:50%`};width:${Math.min(50, Math.abs(d))}%"></i></span>`; };
@@ -606,11 +609,12 @@ async function renderMatrix() {
       if (r === c) return '<td class="self"></td>';
       const x = M.get(r, c); if (!x || x.n < minN) return '<td class="nil">·</td>';
       const p = pc(x); return `<td style="background:${mxColor(p, x.n)}" data-mxc="${esc(r)}|${esc(c)}">${Math.round(p * 100)}<small>${x.n}</small></td>`;
-    }).join('')}</tr>`).join('') + `</tbody></table></div><p class="sub">Most-played ${top.length} legends. Big number = row legend's win %, small = games. Tap a row name to focus it.</p></li>`;
+    }).join('')}</tr>`).join('') + `</tbody></table></div><p class="sub">${allMode ? `All ${top.length} legends` : `Most-played ${top.length} legends`}. Big number = row legend's win %, small = games. Tap a row name to focus it.</p></li>`;
 
   $('#dk-list').innerHTML = focusHTML + grid + (M.src.includes('TopDeck') ? '<li class="sub center">Matchup data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener">TopDeck.gg</a></li>' : '');
   const setFocus = (k) => { S.prefs.mxFocus = k; savePrefs(); renderMatrix(); $('#v-decks').scrollIntoView({ block: 'start' }); };
   $('#mx-focus').onchange = (e) => setFocus(e.target.value);
+  $('#mx-all').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mxAll = b.dataset.a === '1'; savePrefs(); renderMatrix(); };
   $('#mx-min').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.prefs.mxMin = +b.dataset.n; savePrefs(); renderMatrix(); };
   $('#dk-list').querySelectorAll('[data-mxf]').forEach((el) => el.addEventListener('click', (e) => { e.stopPropagation(); setFocus(el.dataset.mxf); }));
   $('#dk-list').querySelectorAll('[data-mxc]').forEach((el) => el.addEventListener('click', (e) => {
@@ -913,3 +917,38 @@ function toggleCF(open) {
   if (open) { if ((CF().d || []).length && !D.rb) loadDecks().then(renderCollection, () => {}); renderCFPanel(); }
 }
 (function wireCF() { const b = $('#col-fbtn'); if (b) b.onclick = () => toggleCF(); })();
+
+/* ---------------------------------------------------------------- add a card to one of my decks (from any card page) */
+let RBID = null;
+function rbIdOf(name) {
+  if (!D.rb) return null;
+  if (!RBID) { RBID = new Map(); for (const [id, c] of Object.entries(D.rb)) { const n = normName(c.n); if (n && (!RBID.has(n) || isBaseId(id))) RBID.set(n, id); } }
+  return RBID.get(normName(name)) || null;
+}
+async function openAddToDeck(name) {
+  if (!D.rb) { toast('Loading cards…'); try { await loadDecks(); } catch { toast('Could not load deck data — check your connection'); return; } }
+  const cid = rbIdOf(name); if (!cid) { toast("That card can't go in a deck"); return; }
+  MDS.zone2 = MDS.zone2 || 'main';
+  pushSheet(() => renderAddToDeck(cid));
+}
+function renderAddToDeck(cid) {
+  const c = D.rb[cid], legend = c.t === 'Legend', r = cardRef(c.n);
+  const zone = legend ? 'main' : MDS.zone2;
+  const decks = MD.decks.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  const fits = (dk) => { const l = D.rb[dk.leader]; if (!l || legend) return true; return (c.d || []).every((d) => d === 'Colorless' || l.d.includes(d)); };
+  $('#sheet-content').innerHTML = `<div class="detail"><div class="row atd-head" style="gap:12px;align-items:center">${img(r && r.img)}<div><h2 style="margin:0">${esc(c.n)}</h2><div class="sub">${esc([c.t, c.c != null ? c.c + ' energy' : '', (c.d || []).join('/')].filter(Boolean).join(' · '))}</div></div></div>
+    ${legend ? '<p class="sub">Legends lead a deck — picking a deck makes this its legend.</p>' : `<div class="seg" id="atd-zone" style="margin-top:12px"><button data-z="main" class="${zone === 'main' ? 'on' : ''}">Main deck</button><button data-z="side" class="${zone === 'side' ? 'on' : ''}">Sideboard</button></div>`}
+    <button class="primary" id="atd-new" style="width:100%;padding:13px;margin:12px 0">＋ New deck ${legend ? 'with this legend' : 'starting with this card'}</button>
+    ${decks.length ? `<div class="dsec">My decks</div><ul class="dl atd">${decks.map((dk) => { const z = zone === 'side' ? dk.side : dk.main, n = legend ? (dk.leader === cid ? 1 : 0) : (z[cid] || 0), cn = mdCounts(dk), lg = D.rb[dk.leader];
+      return `<li><span class="nm">${esc(dk.name)}<small>${lg ? esc(lg.n.split(' - ')[0]) : 'No legend yet'} · ${cn.main}/40${!fits(dk) ? ' · <span class="part">outside its domains</span>' : ''}</small></span>
+        <span class="mstep">${legend ? `<button class="ghost sm" data-atdleg="${esc(dk.id)}" ${n ? 'disabled' : ''}>${n ? '✓ Legend' : 'Make legend'}</button>` : `<button data-atd="${esc(dk.id)}|-1" aria-label="Remove one" ${n ? '' : 'disabled'}>−</button><b>${n}</b><button data-atd="${esc(dk.id)}|1" aria-label="Add one">+</button>`}</span></li>`; }).join('')}</ul>` : '<p class="sub">No decks yet — start one above.</p>'}</div>`;
+  const re = () => renderAddToDeck(cid);
+  const zs = $('#atd-zone'); if (zs) zs.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; MDS.zone2 = b.dataset.z; re(); };
+  $('#atd-new').onclick = () => pushSheet(() => renderNewDeck(cid));
+  $$('#sheet-content [data-atd]').forEach((b) => b.onclick = () => {
+    const [id, d] = b.dataset.atd.split('|'); const dk = mdGet(id), z = zone === 'side' ? dk.side : dk.main;
+    if (+d > 0 && c.t !== 'Rune') { let total = 0; for (const zz of [dk.main, dk.side]) for (const [k2, n2] of Object.entries(zz)) if (D.rb[k2] && normName(D.rb[k2].n) === normName(c.n)) total += n2; if (total >= 3) { toast('Max 3 copies of a card'); return; } }
+    mdBump(id, cid, zone, +d); toast(+d > 0 ? `Added to <b>${esc(dk.name)}</b>` : `Removed from <b>${esc(dk.name)}</b>`); re();
+  });
+  $$('#sheet-content [data-atdleg]').forEach((b) => b.onclick = () => { const dk = mdGet(b.dataset.atdleg); if (dk.leader) delete dk.main[dk.leader]; dk.leader = cid; dk.main[cid] = 1; dk.updated = Date.now(); saveMD(); toast(`${esc(c.n.split(' - ')[0])} now leads <b>${esc(dk.name)}</b>`); re(); });
+}

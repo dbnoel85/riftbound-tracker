@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v47';
+const SHELL_VERSION = 'v48';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -648,6 +648,7 @@ function renderDetail(k) {
       <span id="pl" class="sub"></span>
     </div>
     <div class="card-box wishbox" id="wishbox"></div>
+    <button class="ghost" id="d-todeck" style="width:100%;margin:-4px 0 12px">＋ Add to a deck</button>
     ${siblings.length ? `<div class="row">${siblings.map((v) => `<button class="ghost" data-open="${esc(withLang(v.k, it.lang))}">${esc(v.s)} · ${money(v.m)}</button>`).join('')}</div>` : ''}
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
@@ -680,6 +681,7 @@ function renderDetail(k) {
   });
   const la = $('#sheet [data-langadd]'); if (la) la.onchange = () => { if (!la.value) return; const nk = withLang(la.dataset.langadd, la.value); SHEET[SHEET.length - 1] = () => renderDetail(nk); renderDetail(nk); };
   renderWishBox(k);
+  const td = $('#d-todeck'); if (td) td.onclick = () => openAddToDeck(it.n);
   drawChart(it);
   if (typeof fillDetailText === 'function') fillDetailText(it);
 }
@@ -1933,10 +1935,40 @@ function renderMyDecksList() {
   }).join('');
   $('#dk-list').innerHTML = `<li class="row" style="list-style:none;margin-bottom:10px"><button class="primary ghost" id="md-new" style="flex:2;padding:13px">＋ New deck</button><button class="ghost" id="md-import" style="flex:1">Import list</button></li>` +
     (rows || '<li class="empty">No decks yet. Tap <b>New deck</b> and pick a legend to start.</li>');
-  $('#md-new').onclick = () => pushSheet(renderLegendPicker);
+  $('#md-new').onclick = () => pushSheet(() => renderNewDeck());
   $('#md-import').onclick = () => pushSheet(renderDeckImport);
 }
 
+/** start a deck from scratch: name it, then pick a legend now or later. withCard = a card id to put in straight away */
+function renderNewDeck(withCard) {
+  const card = withCard && D.rb[withCard];
+  $('#sheet-content').innerHTML = `<div class="detail form"><h2>New deck</h2>
+    ${card ? `<p class="sub">Starting with <b>${esc(card.n)}</b>.</p>` : ''}
+    <label for="nd-name">Deck name</label><input type="text" id="nd-name" maxlength="50" placeholder="e.g. Jinx aggro" value="${esc(MDS.newName || '')}">
+    ${card && card.t === 'Legend' ? `<button class="primary" id="nd-go" style="width:100%;margin-top:14px;padding:13px">Create deck with ${esc(card.n.split(' - ')[0])}</button>`
+      : `<button class="primary" id="nd-leg" style="width:100%;margin-top:14px;padding:13px">Next: pick a legend</button>
+         <button class="ghost" id="nd-skip" style="width:100%;margin-top:8px">Create now, pick the legend later</button>`}</div>`;
+  const nm = $('#nd-name'); setTimeout(() => nm.focus(), 60); nm.oninput = () => { MDS.newName = nm.value; };
+  const name = () => nm.value.trim();
+  const make = (leader) => {
+    const main = {}; if (leader) main[leader] = 1;
+    const c = leader && D.rb[leader];
+    if (c) { // 12 runes split across the legend's domains
+      const runes = Object.entries(D.rb).filter(([rid, r]) => r.t === 'Rune' && isBaseId(rid) && r.d.length === 1 && c.d.includes(r.d[0]));
+      const per = runes.length ? Math.floor(12 / Math.min(runes.length, c.d.length || 1)) : 0; const used = new Set();
+      for (const [rid, r] of runes) if (!used.has(r.d[0]) && used.size < 2) { main[rid] = per; used.add(r.d[0]); }
+    }
+    if (card && card.t !== 'Legend') main[withCard] = 1;
+    const dk = { id: Date.now().toString(36), name: name() || (c ? c.n.split(' - ')[0] + ' deck' : 'New deck'), leader: leader || '', main, side: {}, created: Date.now(), updated: Date.now() };
+    MD.decks.push(dk); saveMD(); MDS.newName = '';
+    toast(`Created <b>${esc(dk.name)}</b>`);
+    SHEET[SHEET.length - 1] = () => renderMyDeck(dk.id); renderMyDeck(dk.id); $('#sheet .sheet-body').scrollTop = 0;
+    if (D.tab === 'mine' && S.view === 'decks') renderDecks();
+  };
+  const go = $('#nd-go'); if (go) go.onclick = () => make(withCard);
+  const sk = $('#nd-skip'); if (sk) sk.onclick = () => make('');
+  const lg = $('#nd-leg'); if (lg) lg.onclick = () => { MDS.newName = name(); MDS.withCard = withCard || ''; pushSheet(renderLegendPicker); };
+}
 function renderLegendPicker() {
   const q = (MDS.lq || '').toLowerCase();
   const strength = new Map(ranked().map((a) => [a.leader, a]));
@@ -1955,8 +1987,10 @@ function renderLegendPicker() {
     const per = runes.length ? Math.floor(12 / Math.min(runes.length, c.d.length || 1)) : 0;
     const used = new Set();
     for (const [rid, r] of runes) if (!used.has(r.d[0]) && used.size < 2) { main[rid] = per; used.add(r.d[0]); }
-    const dk = { id: Date.now().toString(36), name: c.n.split(' - ')[0] + ' deck', leader: id, main, side: {}, created: Date.now(), updated: Date.now() };
-    MD.decks.push(dk); saveMD();
+    const wc = MDS.withCard; if (wc && D.rb[wc] && D.rb[wc].t !== 'Legend') main[wc] = (main[wc] || 0) + 1;
+    const dk = { id: Date.now().toString(36), name: (MDS.newName || '').trim() || c.n.split(' - ')[0] + ' deck', leader: id, main, side: {}, created: Date.now(), updated: Date.now() };
+    MD.decks.push(dk); saveMD(); MDS.newName = ''; MDS.withCard = '';
+    if (SHEET.length > 1) SHEET.splice(SHEET.length - 2, 1);
     SHEET[SHEET.length - 1] = () => renderMyDeck(dk.id); renderMyDeck(dk.id);
     $('#sheet .sheet-body').scrollTop = 0;
   });
@@ -1990,6 +2024,7 @@ function renderMyDeck(id) {
       <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>
     </div>
     <div class="row"><button class="primary ghost" id="md-add" style="flex:1">＋ Add cards</button><button class="ghost" id="md-copy">Copy list</button></div>`;
+  if (!dk.leader) html += `<div class="dsec">Legend</div><ul class="dl"><li><span class="nm">No legend yet<small>Pick one to check domains and get rune suggestions</small></span><span class="st"><button class="primary sm" id="md-chleg">Choose legend</button></span></li></ul>`;
   for (const [sec, title] of SECTION_ORDER) {
     const g = groups[sec]; if (!g || !g.size) continue;
     if (sec === 'Legend') { html += `<div class="dsec">Legend</div><ul class="dl"><li><span class="nm">${esc(D.rb[dk.leader]?.n || '')}</span><span class="st"><button class="ghost sm" id="md-chleg">Change</button></span></li></ul>`; continue; }
@@ -2035,9 +2070,15 @@ function renderLegendSwap(id) {
   MDS.lq = '';
   renderLegendPicker();
   $$('#sheet [data-pickleg]').forEach((li) => li.onclick = () => {
-    delete dk.main[dk.leader]; dk.leader = li.dataset.pickleg; dk.main[dk.leader] = 1; dk.updated = Date.now(); saveMD(); sheetBack();
+    const first = !dk.leader; if (dk.leader) delete dk.main[dk.leader]; dk.leader = li.dataset.pickleg; dk.main[dk.leader] = 1;
+    if (first && !Object.keys(dk.main).some((k) => D.rb[k]?.t === 'Rune')) { // first legend on a from-scratch deck: start the 12 runes
+      const c = D.rb[dk.leader]; const runes = Object.entries(D.rb).filter(([rid, r]) => r.t === 'Rune' && isBaseId(rid) && r.d.length === 1 && c.d.includes(r.d[0]));
+      const per = runes.length ? Math.floor(12 / Math.min(runes.length, c.d.length || 1)) : 0; const used = new Set();
+      for (const [rid, r] of runes) if (!used.has(r.d[0]) && used.size < 2) { dk.main[rid] = per; used.add(r.d[0]); }
+    }
+    dk.updated = Date.now(); saveMD(); sheetBack();
   });
-  $('#sheet-content h2').textContent = 'Change legend';
+  $('#sheet-content h2').textContent = dk.leader ? 'Change legend' : 'Choose a legend';
 }
 function mdBump(id, cid, zone, d) {
   const dk = mdGet(id); const z = zone === 'side' ? dk.side : dk.main;
