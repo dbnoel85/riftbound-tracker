@@ -600,3 +600,6 @@ a.btnlink{text-decoration:none;color:var(--text)}
 .localev .lev-go{display:block;text-align:center;padding:13px;margin:8px 0 6px;text-decoration:none}
 .localev .linkbtn{margin-top:4px}
 .localev a.lev-go{color:#1b1404;font-weight:700}
+.dl li.banrep .nm s{color:var(--sub);text-decoration-color:var(--ember)}
+.dl li.banrep small{color:var(--text);margin-top:3px}
+.dl li.banrep small b{color:var(--gold)}

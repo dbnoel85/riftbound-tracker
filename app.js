@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v44';
+const SHELL_VERSION = 'v45';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -1478,16 +1478,17 @@ function analyzeDeck(a, opts = {}) {
     let sec = sectionOf(id, legendTags);
     if (sec === 'Champion') { if (champTaken) sec = 'Unit'; else champTaken = true; } // one chosen champion copy; extras are units
     const n = normName(c.n);
+    // banned cards: still show what you own, never count them as "needed" — they get replacement suggestions instead
     const banned = legal && sec !== 'Legend' && bannedForMe(c.n);
-    const have = banned ? 0 : Math.max(0, Math.min(cnt, (owned.get(n) || 0) - (used.get(n) || 0)));
+    const have = Math.max(0, Math.min(cnt, (owned.get(n) || 0) - (used.get(n) || 0)));
     used.set(n, (used.get(n) || 0) + have);
-    lines.push({ id, c, cnt, have, miss: cnt - have, sec, banned });
+    lines.push({ id, c, cnt, have, miss: banned ? 0 : cnt - have, rep: banned ? cnt : 0, sec, banned });
   }
   // a chosen champion line counts 1; any remaining copies of that card are listed as units
   for (const l of lines) if (l.sec === 'Champion' && l.cnt > 1) {
     const extra = { ...l, cnt: l.cnt - 1, sec: 'Unit' };
-    extra.have = Math.max(0, l.have - 1); extra.miss = extra.cnt - extra.have;
-    l.cnt = 1; l.have = Math.min(1, l.have); l.miss = 1 - l.have;
+    extra.have = Math.max(0, l.have - 1); extra.miss = l.banned ? 0 : extra.cnt - extra.have; extra.rep = l.banned ? extra.cnt : 0;
+    l.cnt = 1; l.have = Math.min(1, l.have); l.miss = l.banned ? 0 : 1 - l.have; l.rep = l.banned ? 1 : 0;
     lines.push(extra);
   }
   const side = Object.entries(a.list.side || {}).map(([id, cnt]) => {
@@ -1521,15 +1522,16 @@ function analyzeDeck(a, opts = {}) {
   };
   const allIds = Object.keys(D.rb);
   const subs = [];
-  for (const miss of lines.filter((l) => l.miss > 0).sort((x, y) => y.miss - x.miss)) {
-    let need = miss.miss; const picks = [];
+  const gap = (l) => l.miss + (l.rep || 0);
+  for (const miss of lines.filter((l) => gap(l) > 0).sort((x, y) => (y.banned - x.banned) || gap(y) - gap(x))) {
+    let need = gap(miss); const picks = [];
     const cands = allIds.filter((id) => okCand(id, D.rb[id], miss))
       .map((id) => ({ id, c: D.rb[id], s: scoreCand(id, D.rb[id], miss) }))
       .sort((x, y) => y.s - x.s);
     for (const cd of cands) {
       if (need <= 0) break;
       const n = normName(cd.c.n);
-      const room = (miss.sec === 'Rune' ? 99 : 3) - (inDeck.get(n) || 0);
+      const room = (miss.sec === 'Rune' ? 99 : miss.sec === 'Battlefield' ? 1 : 3) - (inDeck.get(n) || 0);
       const take = Math.min(need, spare(n), room);
       if (take > 0) {
         picks.push({ ...cd, take }); need -= take;
@@ -1539,11 +1541,13 @@ function analyzeDeck(a, opts = {}) {
     // nothing owned left: suggest the best cheap card to buy instead
     let buy = null;
     if (need > 0) {
-      const affordable = cands.slice(0, 12).map((cd) => ({ ...cd, p: cardPrice(cd.c.n) })).filter((x) => x.p && x.p.m != null);
+      const cap = miss.sec === 'Rune' ? 99 : miss.sec === 'Battlefield' ? 1 : 3;
+      const affordable = cands.filter((cd) => (inDeck.get(normName(cd.c.n)) || 0) + need <= cap).slice(0, 12).map((cd) => ({ ...cd, p: cardPrice(cd.c.n) })).filter((x) => x.p && x.p.m != null);
       affordable.sort((x, y) => (y.s - x.s) - (y.p.m - x.p.m) * 0.02);
       buy = affordable[0] || null;
+      if (buy) inDeck.set(normName(buy.c.n), (inDeck.get(normName(buy.c.n)) || 0) + need);
     }
-    subs.push({ miss, picks, still: need, buy });
+    subs.push({ miss, picks, still: need, buy, need: gap(miss) });
   }
   const mainTotal = lines.filter((l) => !['Legend', 'Rune', 'Battlefield'].includes(l.sec)).reduce((t, l) => t + l.cnt, 0);
   const mainHave = lines.filter((l) => !['Legend', 'Rune', 'Battlefield'].includes(l.sec)).reduce((t, l) => t + l.have, 0);
@@ -1551,7 +1555,8 @@ function analyzeDeck(a, opts = {}) {
   let cost = 0, costMain = 0;
   for (const l of allLines) if (l.miss > 0 && !l.banned) { const p = cardPrice(l.c.n); if (p) { cost += p.m * l.miss; if (l.sec !== 'Side') costMain += p.m * l.miss; } }
   const pct = lines.reduce((t, l) => t + l.have, 0) / Math.max(1, lines.reduce((t, l) => t + l.cnt, 0));
-  return { lines, side, subs, mainTotal, mainHave, cost, costMain, pct, legendTags };
+  const banned = lines.filter((l) => l.banned).reduce((t, l) => t + l.cnt, 0);
+  return { lines, side, subs, mainTotal, mainHave, cost, costMain, pct, legendTags, banned };
 }
 
 /* ---- time windows and strength ranking */
@@ -1761,7 +1766,7 @@ function renderDeck(slug) {
       html += '<p class="sub">Swaps from your own cards for what you\'re missing (and for any banned cards), chosen by how often they appear in winning lists of the same domains, then closest cost.</p><ul class="dl">';
       for (const sb of an.subs) {
         const m = sb.miss;
-        html += `<li${m.banned ? ' class="banned"' : ''}><span class="cnt no">−${m.miss}</span><span class="nm">${esc(m.c.n)}${m.banned ? banTag(m.c.n) : ''}<small>${esc(m.sec)}${m.c.c != null ? ' · ' + m.c.c + ' energy' : ''}</small></span><span class="st">${m.banned ? '<span class="no">replace</span>' : money(cardPrice(m.c.n)?.m)}</span></li>`;
+        html += `<li${m.banned ? ' class="banned"' : ''}><span class="cnt no">−${sb.need}</span><span class="nm">${esc(m.c.n)}${m.banned ? banTag(m.c.n) : ''}<small>${esc(m.sec)}${m.c.c != null ? ' · ' + m.c.c + ' energy' : ''}</small></span><span class="st">${m.banned ? `<span class="no">replace</span>${m.have ? `<br><small class="sub">you own ${m.have}</small>` : ''}` : money(cardPrice(m.c.n)?.m)}</span></li>`;
         for (const p of sb.picks) html += `<li class="sub-line">↳ play <b>${p.take}× ${esc(p.c.n)}</b> (you own it${p.c.c != null ? ' · ' + p.c.c + ' energy' : ''}${D.pop[p.id] ? ' · in ' + Math.round(D.pop[p.id] / D.nLists * 100) + '% of top lists' : ''})</li>`;
         if (sb.still > 0) html += sb.buy
           ? `<li class="sub-line">↳ still short ${sb.still} — budget pick: <b>${esc(sb.buy.c.n)}</b> ${money(sb.buy.p.m)}</li>`
@@ -1800,9 +1805,14 @@ function renderDeck(slug) {
     try { await navigator.clipboard.writeText(txt); toast('Copied — paste into TCGplayer Mass Entry'); } catch { toast('Couldn\'t copy on this device'); }
   };
 }
+function ownSt(l) {
+  if (!l) return '';
+  if (l.banned) return `<span class="no">banned</span>${l.have ? `<br><small class="sub">own ${l.have}/${l.cnt}</small>` : ''}`;
+  return l.miss === 0 ? '<span class="ok">✓ own</span>' : l.have > 0 ? `<span class="part">own ${l.have}/${l.cnt}</span>` : '<span class="no">need</span>';
+}
 function lineHTML(l) {
   const p = cardPrice(l.c.n);
-  const st = l.miss === 0 ? '<span class="ok">✓ own</span>' : l.have > 0 ? `<span class="part">own ${l.have}/${l.cnt}</span>` : '<span class="no">need</span>';
+  const st = ownSt(l);
   const r = cardRef(l.c.n);
   return `<li data-card="${esc(r ? r.k : '')}"${banInfo(l.c.n) ? ' class="banned"' : ''}><span class="cnt">${l.cnt}×</span><span class="nm">${esc(l.c.n)}${banTag(l.c.n)}<small>${[l.c.t, l.c.c != null ? l.c.c + ' energy' : '', (l.c.d || []).join('/')].filter(Boolean).map(esc).join(' · ')}</small></span><span class="st">${st}<br><small class="sub">${money(p && p.m)}</small></span></li>`;
 }
@@ -1909,8 +1919,8 @@ function renderLegendPicker() {
 function mdLine(dk, id, n, zone, an) {
   const c = D.rb[id] || { n: id }; const p = cardPrice(c.n); const r = cardRef(c.n);
   const l = an && an.all.find((x) => x.id === id && (zone === 'side' ? x.sec === 'Side' : x.sec !== 'Side'));
-  const st = !l ? '' : l.miss === 0 ? '<span class="ok">✓ own</span>' : l.have > 0 ? `<span class="part">own ${l.have}/${l.cnt}</span>` : '<span class="no">need</span>';
-  return `<li><span class="nm" data-card="${esc(r ? r.k : '')}">${esc(c.n)}<small>${[c.t, c.c != null ? c.c + ' energy' : '', (c.d || []).join('/')].filter(Boolean).map(esc).join(' · ')} · ${money(p && p.m)}</small></span>
+  const st = ownSt(l);
+  return `<li${l && l.banned ? ' class="banned"' : ''}><span class="nm" data-card="${esc(r ? r.k : '')}">${esc(c.n)}${l && l.banned ? banTag(c.n) : ''}<small>${[c.t, c.c != null ? c.c + ' energy' : '', (c.d || []).join('/')].filter(Boolean).map(esc).join(' · ')} · ${money(p && p.m)}</small></span>
     <span class="st">${st}</span>
     <span class="mstep"><button data-md="dec" data-id="${esc(id)}" data-zone="${zone}" aria-label="Remove one">−</button><b>${n}</b><button data-md="inc" data-id="${esc(id)}" data-zone="${zone}" aria-label="Add one">+</button></span></li>`;
 }
@@ -1930,7 +1940,7 @@ function renderMyDeck(id) {
     <div class="card-box" style="margin-top:12px">
       <div class="row" style="justify-content:space-between"><b>${c.main}/40 main</b><b>${c.runes}/12 runes</b><b>${c.bf}/3 battlefields</b><b>${c.side} side</b></div>
       ${probs.length ? `<div class="sub" style="margin-top:6px">${probs.slice(0, 5).map((p) => '• ' + esc(p)).join('<br>')}</div>` : '<div class="ok" style="margin-top:6px">✓ Deck is complete and legal</div>'}
-      <div class="sub" style="margin-top:8px">You own ${Math.round(an.pct * 100)}% of it${an.cost > 0 ? ` · missing cards about <b>${money(an.cost)}</b>` : ''}</div>
+      <div class="sub" style="margin-top:8px">You own ${Math.round(an.pct * 100)}% of it${an.cost > 0 ? ` · missing cards about <b>${money(an.cost)}</b>` : ''}${an.banned ? ` · <span class="no">${an.banned} banned — see replacements below</span>` : ''}</div>
       <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>
     </div>
     <div class="row"><button class="primary ghost" id="md-add" style="flex:1">＋ Add cards</button><button class="ghost" id="md-copy">Copy list</button></div>`;
@@ -1941,8 +1951,13 @@ function renderMyDeck(id) {
   }
   const sideIds = Object.entries(dk.side);
   html += `<div class="dsec">Sideboard (${c.side})</div><ul class="dl">${sideIds.length ? sideIds.map(([cid, n]) => mdLine(dk, cid, n, 'side', an)).join('') : '<li class="sub">Empty — use Add cards and choose Sideboard.</li>'}</ul>`;
-  const subs = an.subs.filter((s) => s.picks.length);
-  if (subs.length) html += `<div class="dsec">Swaps from your collection</div><ul class="dl">` + subs.map((sb) => `<li class="sub-line">for ${sb.miss.miss}× <b style="color:var(--text)">${esc(sb.miss.c.n)}</b>, you could play ${sb.picks.map((p) => `<b>${p.take}× ${esc(p.c.n)}</b>`).join(', ')}</li>`).join('') + '</ul>';
+  const bsubs = an.subs.filter((s) => s.miss.banned);
+  if (bsubs.length) html += `<div class="dsec">Replace banned cards</div><ul class="dl">` + bsubs.map((sb) => {
+    const sug = sb.picks.map((p) => `<b>${p.take}× ${esc(p.c.n)}</b> <span class="ok">(you own)</span>`).concat(sb.still > 0 && sb.buy ? [`<b>${sb.still}× ${esc(sb.buy.c.n)}</b> (${money(sb.buy.p.m)} each)`] : []);
+    return `<li class="banrep"><span class="nm"><s>${sb.need}× ${esc(sb.miss.c.n)}</s>${banTag(sb.miss.c.n)}<small>${sug.length ? 'Play instead: ' + sug.join(', ') : 'No legal substitute found'}</small></span>${sb.picks.length || sb.buy ? `<span class="st"><button class="ghost sm" data-swapban="${esc(sb.miss.id)}">Swap</button></span>` : ''}</li>`;
+  }).join('') + '</ul>';
+  const subs = an.subs.filter((s) => !s.miss.banned && s.picks.length);
+  if (subs.length) html += `<div class="dsec">Swaps from your collection</div><ul class="dl">` + subs.map((sb) => `<li class="sub-line">for ${sb.need}× <b style="color:var(--text)">${esc(sb.miss.c.n)}</b>, you could play ${sb.picks.map((p) => `<b>${p.take}× ${esc(p.c.n)}</b>`).join(', ')}</li>`).join('') + '</ul>';
   html += `<div class="row" style="margin-top:16px"><button class="ghost" id="md-dup">Duplicate</button><button class="danger" id="md-del">Delete deck</button></div></div>`;
   $('#sheet-content').innerHTML = html;
   $$('#sheet-content .detail [data-md]').forEach((b) => b.onclick = (e) => {
@@ -1959,6 +1974,13 @@ function renderMyDeck(id) {
     if (sideIds.length) { lines.push('', 'Sideboard'); for (const [cid, n] of sideIds) lines.push(`${n} ${D.rb[cid]?.n || cid}`); }
     try { await navigator.clipboard.writeText(`${dk.name}\n` + lines.join('\n')); toast('Deck list copied'); } catch { toast('Couldn\'t copy on this device'); }
   };
+  $$('#sheet-content [data-swapban]').forEach((b) => b.onclick = () => {
+    const sb = an.subs.find((x) => x.miss.banned && x.miss.id === b.dataset.swapban); if (!sb) return;
+    delete dk.main[sb.miss.id];
+    for (const p of sb.picks) dk.main[p.id] = (dk.main[p.id] || 0) + p.take;
+    if (sb.still > 0 && sb.buy) dk.main[sb.buy.id] = (dk.main[sb.buy.id] || 0) + sb.still;
+    dk.updated = Date.now(); saveMD(); toast(`Swapped out ${esc(sb.miss.c.n)}`); renderMyDeck(dk.id);
+  });
   $('#md-dup').onclick = () => { const cp = { ...structuredClone(dk), id: Date.now().toString(36), name: dk.name + ' (copy)', created: Date.now(), updated: Date.now() }; MD.decks.push(cp); saveMD(); toast('Duplicated'); SHEET[SHEET.length - 1] = () => renderMyDeck(cp.id); renderMyDeck(cp.id); };
   $('#md-del').onclick = async () => { if (await confirmBox(`Delete "${dk.name}"?`)) { MD.decks = MD.decks.filter((d) => d.id !== id); saveMD(); closeSheet(); } };
 }
