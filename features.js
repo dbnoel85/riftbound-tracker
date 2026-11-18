@@ -656,18 +656,20 @@ function parseImport(text) {
   const col = (...names) => head.findIndex((h) => names.some((n) => h === n || h.replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, '')));
   const ci = { qty: col('quantity', 'qty', 'count', 'total quantity', 'add to quantity', 'amount', 'owned'), name: col('name', 'card name', 'product name', 'card', 'title', 'simple name'),
     set: col('set', 'set name', 'edition', 'expansion', 'group'), code: col('set code', 'setcode'), num: col('card number', 'number', 'collector number', 'no', '#'),
-    foil: col('printing', 'foil', 'finish', 'variant', 'treatment'), lang: col('language', 'lang'), pid: col('product id', 'tcgplayer id', 'tcgplayer product id', 'productid') };
+    foil: col('printing', 'foil', 'finish', 'variance', 'treatment', 'foil type'), variant: col('variant', 'version', 'art', 'edition type'), rarity: col('rarity'), lang: col('language', 'lang'), pid: col('product id', 'tcgplayer id', 'tcgplayer product id', 'productid') };
   const rows = [];
   if (ci.name >= 0 || ci.pid >= 0 || ci.num >= 0) {
     for (const l of lines.slice(1)) { const c = splitCSV(l, sep), g = (i) => (i >= 0 ? c[i] || '' : '');
-      const f = g(ci.foil); rows.push({ raw: l, qty: parseInt(g(ci.qty), 10) || (ci.qty >= 0 ? 0 : 1), name: g(ci.name), set: g(ci.set), code: g(ci.code), num: g(ci.num), pid: g(ci.pid), lang: impLang(g(ci.lang)), foil: /foil|holo/i.test(f) && !/non/i.test(f) ? true : f && /normal|non/i.test(f) ? false : null }); }
+      const f = g(ci.foil); rows.push({ raw: l, csv: true, fRaw: f, qty: parseInt(g(ci.qty), 10) || (ci.qty >= 0 ? 0 : 1), name: g(ci.name), set: g(ci.set), code: g(ci.code), num: g(ci.num), pid: g(ci.pid), rarity: g(ci.rarity), variant: g(ci.variant), lang: impLang(g(ci.lang)), foil: /foil|holo/i.test(f) && !/non/i.test(f) ? true : f && /normal|non/i.test(f) ? false : null }); }
   } else {
     for (const l of lines) { let t = l.trim(); let qty = 1; const m = t.match(/^(\d+)\s*x?\s+(.*)$/i) || t.match(/^(.*?)\s+x\s*(\d+)$/i);
       if (m) { if (/^\d/.test(m[1])) { qty = +m[1]; t = m[2]; } else { t = m[1]; qty = +m[2]; } }
       const lang = impLang(t); if (lang !== 'en') t = t.replace(/\s*[\[(]?\b(chinese|simplified|traditional|japanese|korean|french|german|spanish|italian|portuguese|zh|cn|jp|ja|kr|ko)\b[\])]?|中文|简体|繁體|日本語|한국어/ig, ' ').trim();
+      const VW = /\s*[\[(]?\b(alt(ernate)?[\s-]*art|alt|over[\s-]*numbered|signature|signed|showcase|promo)\b[\])]?/ig;
+      const variant = (t.match(VW) || []).join(' '); t = t.replace(VW, ' ').replace(/\s+/g, ' ').trim();
       const foil = /\b(foil|holo)\b/i.test(t) ? true : null; t = t.replace(/\s*[\[(]?\b(foil|holo|normal|non-foil)\b[\])]?/ig, '').trim();
       const cm = t.match(/^([A-Z]{2,4})[-\s]?0*(\d{1,3}[a-z*]?)\b\s*(.*)$/i);
-      rows.push({ raw: l, qty, name: cm ? cm[3] : t, code: cm ? cm[1] : '', num: cm ? cm[2] : '', set: '', pid: '', foil, lang }); }
+      rows.push({ raw: l, variant, qty, name: cm ? cm[3] : t, code: cm ? cm[1] : '', num: cm ? cm[2] : '', set: '', pid: '', foil, lang }); }
   }
   return rows.filter((r) => r.qty > 0 && (r.name || r.pid || r.num));
 }
@@ -681,28 +683,54 @@ function impLang(v) {
   if (/italian|italiano/i.test(v)) return 'it'; if (/portug/i.test(v)) return 'pt';
   return 'en';
 }
+/* which set a row means: set code column, a code inside the number ("OGN-027a"), or a set name written loosely */
+function impGroups(r) {
+  const out = new Set(), groups = S.cards.groups;
+  const code = String(r.code || '').trim().toUpperCase() || (String(r.num || '').match(/^\s*([A-Z]{2,4})[-\s]/i) || [])[1]?.toUpperCase();
+  if (code) for (const g of groups) if ((g.abbr || '').toUpperCase() === code) out.add(g.id);
+  if (r.set) { const w = impKey(r.set).replace(/^riftbound\s*/, '');
+    for (const g of groups) { const gn = impKey(g.name).replace(/^riftbound\s*/, ''); if (w && gn && (gn === w || gn.includes(w) || w.includes(gn) || (g.abbr || '').toLowerCase() === w)) out.add(g.id); } }
+  return out;
+}
+const impNum = (s) => { const m = String(s || '').replace(/^\s*[A-Z]{2,4}[-\s]+/i, '').match(/0*(\d{1,3})([a-z*]?)/i); return m ? `${+m[1]}${(m[2] || '').toLowerCase()}` : ''; };
+/** words in the row that point to a special printing */
+function impVariantWant(r) {
+  const t = (r.csv ? [r.name, r.variant, r.rarity, r.fRaw].join(' ') : r.raw + ' ' + (r.variant || '')).toLowerCase();
+  return { alt: /alt(ernate)?[\s-]*art|\balt\b/.test(t), over: /over[\s-]*number/.test(t), sig: /signature|signed/.test(t), show: /showcase/.test(t), promo: /\bpromo/.test(t) };
+}
 function matchImport(r) {
   const X = impIndex();
-  let items = null;
-  if (r.pid && S.byPid.get(+r.pid)) items = S.byPid.get(+r.pid);
-  if (!items && r.num) {
-    const n = String(r.num).match(/0*(\d{1,3})([a-z*]?)/i);
-    const code = (r.code || (S.cards.groups.find((g) => impKey(g.name) === impKey(r.set)) || {}).abbr || '').toUpperCase();
-    if (n && code) { const l = X.byCode.get(`${code}-${+n[1]}${(n[2] || '').toLowerCase()}`); if (l && l.length === 1) items = l[0]; }
+  if (r.pid && S.byPid.get(+r.pid)) return impLangPick(S.byPid.get(+r.pid), r);
+  // every printing this row could be: by name (with or without a variant tag) and by set + number
+  const pool = new Map(); const addL = (l) => { for (const items of l || []) pool.set(items[0].p, items); };
+  if (r.name) { addL(X.byName.get(impKey(r.name))); addL(X.byName.get(impKey(r.name.replace(/\s*\([^)]*\)\s*/g, ' ')) + ' §base')); }
+  const gs = impGroups(r), num = impNum(r.num);
+  if (num) for (const [code, l] of X.byCode) if (code.endsWith('-' + num) && (!gs.size || l.some((x) => gs.has(x[0].g)))) addL(l.filter((x) => !gs.size || gs.has(x[0].g)));
+  let l = [...pool.values()]; if (!l.length) return null;
+  const nm = (x) => (r.name ? printBase(x[0].n) === printBase(r.name) : true);
+  if (r.name && l.some(nm)) l = l.filter(nm);
+  // narrow down: exact number first (027a = alternate art, 299 = overnumbered), then set, then variant words
+  const numOf = (x) => impNum(x[0].num), want = impVariantWant(r), wantAny = Object.values(want).some(Boolean);
+  // a plain number ("240") next to words like "Alternate Art" may be the base number: then only the digits must agree
+  const loose = wantAny && /^\d+$/.test(num);
+  const numOk = (x) => (loose ? parseInt(numOf(x), 10) === +num : numOf(x) === num);
+  if (num && l.some(numOk)) l = l.filter(numOk);
+  if (gs.size && l.some((x) => gs.has(x[0].g))) l = l.filter((x) => gs.has(x[0].g));
+  const tags = (x) => x[0].n.toLowerCase();
+  const prefer = [[want.alt, (x) => /alternate art/.test(tags(x))], [want.over, (x) => /overnumbered/.test(tags(x))], [want.sig, (x) => /signature/.test(tags(x))],
+    [want.show, (x) => x[0].r === 'Showcase'], [want.promo, (x) => x[0].r === 'Promo' || !!PROMO_GROUPS[x[0].g]]];
+  for (const [on, fn] of prefer) if (on && l.some(fn)) l = l.filter(fn);
+  if (l.length > 1 && !(num && !loose) && !wantAny) { // nothing says it's special: standard art from a main set
+    const g2 = impGroupSize();
+    l.sort((a, b) => /\(/.test(a[0].n) - /\(/.test(b[0].n) || (g2.get(b[0].g) || 0) - (g2.get(a[0].g) || 0) || (a[0].m ?? 1e9) - (b[0].m ?? 1e9));
   }
-  if (!items && r.name) {
-    const k = impKey(r.name); let l = X.byName.get(k) || X.byName.get(impKey(r.name.replace(/\s*\([^)]*\)\s*$/, '')) + ' §base') || [];
-    if (l.length > 1 && r.set) { const want = impKey(r.set); const f = l.filter((x) => impKey(setName(x[0].g)).includes(want) || want.includes(impKey(setName(x[0].g)))); if (f.length) l = f; }
-    if (l.length > 1) { // standard art first, then the main sets over promo/bundle groups, then the cheaper printing
-      const gs = impGroupSize();
-      l = l.slice().sort((a, b) => /\(/.test(a[0].n) - /\(/.test(b[0].n) || (gs.get(b[0].g) || 0) - (gs.get(a[0].g) || 0) || (a[0].m ?? 1e9) - (b[0].m ?? 1e9));
-    }
-    items = l[0] || null;
-  }
+  return impLangPick(l[0], r);
+}
+function impLangPick(items, r) {
   if (!items) return null;
   const lang = r.lang && r.lang !== 'en' ? r.lang : (IMP.lang || 'en');
-  const pk = (it) => it && (lang === 'en' ? it : S.byKey.get(withLang(it.k, lang)));
-  return pk(pickFinish0(items, r));
+  const it = pickFinish0(items, r);
+  return it && (lang === 'en' ? it : S.byKey.get(withLang(it.k, lang)));
 }
 function pickFinish0(items, r) {
   const pick = r.foil === true ? items.find((v) => v.s !== 'Normal') : r.foil === false ? items.find((v) => v.s === 'Normal') : items.find((v) => v.s === 'Normal');
@@ -725,8 +753,10 @@ function renderImport() {
     <button class="ghost" id="imp-check" style="width:100%;margin-top:8px">Check the list</button>
     ${res ? `<div class="card-box" style="margin-top:12px"><b>${ok.length} of ${res.length} lines matched</b> · ${n.toLocaleString()} cards · about ${money(val)}
         ${bad.length ? `<p class="sub" style="margin:6px 0 0">${bad.length} not recognised (listed below) — fix the name or number in the box and check again, or add them by hand later.</p>` : ''}
-        <button class="primary" id="imp-go" style="width:100%;margin-top:10px" ${ok.length ? '' : 'disabled'}>Add ${n.toLocaleString()} cards to my collection</button>
-        <p class="sub" style="margin:6px 0 0">Adds to what you already have. A backup snapshot is saved first, so you can undo from Settings → Backup.</p></div>
+        ${(() => { const sp = ok.filter((x) => /\(/.test(x.it.n) || x.it.r === 'Showcase' || promoKind(x.it)); return sp.length ? `<p class="sub" style="margin:6px 0 0">Includes <b>${sp.reduce((t, x) => t + x.r.qty, 0)}</b> alternate art, overnumbered, signature, showcase or promo cards.</p>` : ''; })()}
+        <div class="seg mini" id="imp-mode" style="margin-top:10px"><button data-m="add" class="${IMP.mode !== 'replace' ? 'on' : ''}">Add to what I have</button><button data-m="replace" class="${IMP.mode === 'replace' ? 'on' : ''}">Replace with this list</button></div>
+        <button class="primary" id="imp-go" style="width:100%;margin-top:10px" ${ok.length ? '' : 'disabled'}>${IMP.mode === 'replace' ? `Replace "${esc(colName(IMP.col ?? curCol()))}" with these ${n.toLocaleString()} cards` : `Add ${n.toLocaleString()} cards to my collection`}</button>
+        <p class="sub" style="margin:6px 0 0">${IMP.mode === 'replace' ? 'Use this to redo an earlier import: the collection is emptied first, then filled from this list.' : 'Adds to what you already have.'} A backup snapshot is saved first, so you can undo from Settings → Backup.</p></div>
       ${bad.length ? `<div class="dsec">Not recognised</div><ul class="dl">${bad.slice(0, 40).map((x) => `<li><span class="nm">${esc(x.r.raw)}</span></li>`).join('')}</ul>` : ''}
       <div class="dsec">Matched</div><ul class="dl">${ok.slice(0, 150).map((x) => `<li><span class="cnt">${x.r.qty}×</span><span class="nm">${esc(x.it.n)}<small>${esc(setName(x.it.g))} · ${esc(x.it.num || '')} · ${esc(x.it.s)}${x.it.lang && x.it.lang !== 'en' ? ' · ' + esc(langName(x.it.lang)) : ''}</small></span><span class="st">${money(x.it.m)}</span></li>`).join('')}${ok.length > 150 ? `<li class="sub">…and ${ok.length - 150} more</li>` : ''}</ul>` : ''}</div>`;
   const ic = $('#imp-col'); if (ic) ic.onchange = () => { IMP.col = ic.value; };
@@ -734,12 +764,15 @@ function renderImport() {
   $('#imp-file').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; IMP.text = await f.text(); check(); };
   const check = () => { IMP.text = IMP.text || $('#imp-text').value; IMP.rows = parseImport(IMP.text).map((r) => ({ r, it: matchImport(r) })); renderImport(); };
   $('#imp-check').onclick = () => { IMP.text = $('#imp-text').value; check(); };
+  const md = $('#imp-mode'); if (md) md.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; IMP.mode = b.dataset.m; renderImport(); };
   const go = $('#imp-go'); if (go) go.onclick = async () => {
-    if (!(await confirmBox(`Add ${n.toLocaleString()} cards (${ok.length} different) to "${colName(IMP.col ?? curCol())}"?`))) return;
+    const rep = IMP.mode === 'replace';
+    if (!(await confirmBox(rep ? `Empty "${colName(IMP.col ?? curCol())}" and replace it with these ${n.toLocaleString()} cards? A backup is saved first.` : `Add ${n.toLocaleString()} cards (${ok.length} different) to "${colName(IMP.col ?? curCol())}"?`))) return;
     try { await takeSnapshot('before import'); } catch {}
     const col = IMP.col ?? curCol();
+    if (rep) { const items = colItems(col); for (const k of Object.keys(items)) delete items[k]; saveInv(); }
     for (const x of ok) invBump(x.it.k, x.r.qty, col);
-    IMP = { text: '', rows: null, lang: IMP.lang }; S.prefs.colId = col; savePrefs(); closeSheet(); show('collection'); toast(`Imported ${n.toLocaleString()} cards into ${esc(colName(col))}`);
+    IMP = { text: '', rows: null, lang: IMP.lang, mode: 'add' }; S.prefs.colId = col; savePrefs(); closeSheet(); show('collection'); toast(`Imported ${n.toLocaleString()} cards into ${esc(colName(col))}`);
   };
 }
 
