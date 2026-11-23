@@ -690,18 +690,19 @@ table.dt-odds td[style]{background:linear-gradient(90deg,transparent calc(100% -
 .sctimer.out{border-color:var(--ember);color:#fff;background:var(--ember);animation:tmPulse 1s ease-in-out infinite}
 @keyframes tmPulse{50%{opacity:.6}}
 @media (prefers-reduced-motion:reduce){.sctimer.out{animation:none}}
-/* holo */
-.holo{position:relative;display:block;width:min(78%,340px);margin:0 auto 12px;perspective:900px;--rx:0deg;--ry:0deg;--mx:50%;--my:50%}
-.holo .detail-img{display:block;width:100%;margin:0;border-radius:4.5%/3.3%;transform:rotateX(var(--rx)) rotateY(var(--ry));transition:transform .5s cubic-bezier(.2,.8,.2,1);box-shadow:0 18px 40px rgba(0,0,0,.5)}
-.holo.live .detail-img,.holo.live .holo-shine{transition:transform .06s linear}
-.holo-shine{position:absolute;inset:0;border-radius:4.5%/3.3%;pointer-events:none;transform:rotateX(var(--rx)) rotateY(var(--ry));mix-blend-mode:color-dodge;opacity:0;transition:opacity .3s}
+/* holo — the card itself tilts and clips its own shine; no drop shadow */
+.holo{display:flex;justify-content:center;margin:6px auto 12px;perspective:900px}
+.holo-card{position:relative;width:62vw;max-width:300px;aspect-ratio:63/88;border-radius:4.6%/3.3%;overflow:hidden;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;will-change:transform;-webkit-mask-image:-webkit-radial-gradient(white,black)}
+.holo .holo-card .detail-img{display:block;width:100%;height:100%;max-width:none;margin:0;border-radius:0;box-shadow:none;object-fit:cover}
+.holo-shine{position:absolute;inset:0;pointer-events:none;mix-blend-mode:color-dodge;opacity:0;transition:opacity .3s}
 .holo.live .holo-shine{opacity:1}
-.holo:not(.foil):not(.prism):not(.rainbow) .holo-shine{background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.35),transparent 45%);mix-blend-mode:soft-light}
-.holo.foil .holo-shine{opacity:.55;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.55),transparent 40%),linear-gradient(115deg,transparent 20%,rgba(255,240,200,.35) calc(var(--mx) - 10%),rgba(180,220,255,.35) var(--mx),transparent calc(var(--mx) + 20%))}
-.holo.prism .holo-shine{opacity:.6;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.5),transparent 38%),repeating-linear-gradient(120deg,rgba(255,0,128,.22) calc(var(--mx) - 40%),rgba(255,200,0,.22) calc(var(--mx) - 25%),rgba(0,255,200,.22) calc(var(--mx) - 10%),rgba(80,120,255,.22) calc(var(--mx) + 5%),rgba(255,0,128,.22) calc(var(--mx) + 20%))}
-.holo.rainbow .holo-shine{opacity:.7;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.6),transparent 35%),conic-gradient(from calc(var(--ry) * 8) at var(--mx) var(--my),#ff3b8d55,#ffd23f55,#3bffb455,#3b8dff55,#c43bff55,#ff3b8d55)}
+.holo:not(.foil):not(.prism):not(.rainbow) .holo-shine{background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.3),transparent 45%);mix-blend-mode:soft-light}
+.holo.foil .holo-shine{opacity:.5;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.5),transparent 40%),linear-gradient(115deg,transparent 20%,rgba(255,240,200,.3) calc(var(--mx,50%) - 10%),rgba(180,220,255,.3) var(--mx,50%),transparent calc(var(--mx,50%) + 20%))}
+.holo.prism .holo-shine{opacity:.55;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.45),transparent 38%),repeating-linear-gradient(120deg,rgba(255,0,128,.2) calc(var(--mx,50%) - 40%),rgba(255,200,0,.2) calc(var(--mx,50%) - 25%),rgba(0,255,200,.2) calc(var(--mx,50%) - 10%),rgba(80,120,255,.2) calc(var(--mx,50%) + 5%),rgba(255,0,128,.2) calc(var(--mx,50%) + 20%))}
+.holo.rainbow .holo-shine{opacity:.65;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.55),transparent 35%),conic-gradient(from calc(var(--ry,0deg) * 8) at var(--mx,50%) var(--my,50%),#ff3b8d55,#ffd23f55,#3bffb455,#3b8dff55,#c43bff55,#ff3b8d55)}
 .holo-btn{display:block;margin:-4px auto 12px}
-@media (prefers-reduced-motion:reduce){.holo .detail-img,.holo-shine{transform:none!important}}
+@media (min-width:700px){.holo-card{width:340px;max-width:340px}}
+@media (prefers-reduced-motion:reduce){.holo-card{transform:none!important}}
 /* milestones */
 .msgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .ms{border:1px solid var(--line2);border-radius:4px;padding:10px;background:rgba(13,18,40,.6);display:flex;flex-direction:column;gap:4px;opacity:.75}

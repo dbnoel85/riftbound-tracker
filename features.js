@@ -1161,22 +1161,49 @@ function renderShared(data) {
 /* ---------------------------------------------------------------- holo tilt on card pages */
 // Foils and special printings get a moving shine; any card tilts with your finger, or with the phone (after you allow motion).
 function holoKind(it) { return it.s !== 'Normal' || it.r === 'Showcase' || /\(/.test(it.n) ? (/(overnumbered|signature|serial)/i.test(it.n) ? 'rainbow' : it.r === 'Showcase' || /alternate/i.test(it.n) ? 'prism' : 'foil') : ''; }
+let TILT_OK = false;          // motion permission granted in this app session (iOS asks again after the app restarts)
 function holoWire(it) {
   const img = $('#sheet .detail-img'); if (!img || img.closest('.holo')) return;
-  const wrap = document.createElement('div'); wrap.className = 'holo ' + holoKind(it); img.replaceWith(wrap); wrap.appendChild(img);
-  const shine = document.createElement('i'); shine.className = 'holo-shine'; wrap.appendChild(shine);
+  // .holo (perspective) > .holo-card (tilts, clips) > img + shine — the shine can never spill outside the card
+  const wrap = document.createElement('div'); wrap.className = 'holo ' + holoKind(it);
+  const card = document.createElement('div'); card.className = 'holo-card';
+  img.replaceWith(wrap); wrap.appendChild(card); card.appendChild(img);
+  const shine = document.createElement('i'); shine.className = 'holo-shine'; card.appendChild(shine);
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const set = (x, y) => { wrap.style.setProperty('--rx', ((0.5 - y) * 18).toFixed(2) + 'deg'); wrap.style.setProperty('--ry', ((x - 0.5) * 22).toFixed(2) + 'deg'); wrap.style.setProperty('--mx', (x * 100).toFixed(1) + '%'); wrap.style.setProperty('--my', (y * 100).toFixed(1) + '%'); };
-  const rest = () => { wrap.classList.remove('live'); set(0.5, 0.5); };
-  wrap.addEventListener('pointermove', (e) => { const r = wrap.getBoundingClientRect(); wrap.classList.add('live'); set((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); });
-  wrap.addEventListener('pointerleave', rest); wrap.addEventListener('pointerup', () => setTimeout(rest, 600));
-  const onTilt = (e) => { if (!document.body.contains(wrap)) { removeEventListener('deviceorientation', onTilt); return; } if (e.gamma == null) return; wrap.classList.add('live'); set(Math.max(0, Math.min(1, 0.5 + e.gamma / 50)), Math.max(0, Math.min(1, 0.5 + (e.beta - 45) / 60))); };
-  if (S.prefs.tilt) addEventListener('deviceorientation', onTilt);
-  else if (window.DeviceOrientationEvent && holoKind(it)) {
-    const b = document.createElement('button'); b.className = 'ghost sm holo-btn'; b.textContent = '✨ Tilt with my phone'; wrap.after(b);
-    b.onclick = async () => { try { if (DeviceOrientationEvent.requestPermission) { const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') { toast('Motion access not allowed'); return; } } S.prefs.tilt = true; savePrefs(); addEventListener('deviceorientation', onTilt); b.remove(); toast('Tilt your phone to catch the light'); } catch { toast('Motion not available here'); } };
-  }
-  rest();
+  let tx = 0.5, ty = 0.5, cx = 0.5, cy = 0.5, raf = 0;
+  const paint = () => { cx += (tx - cx) * 0.25; cy += (ty - cy) * 0.25;
+    card.style.setProperty('--rx', ((0.5 - cy) * 20).toFixed(2) + 'deg'); card.style.setProperty('--ry', ((cx - 0.5) * 24).toFixed(2) + 'deg');
+    card.style.setProperty('--mx', (cx * 100).toFixed(1) + '%'); card.style.setProperty('--my', (cy * 100).toFixed(1) + '%');
+    raf = Math.abs(tx - cx) + Math.abs(ty - cy) > 0.002 ? requestAnimationFrame(paint) : 0; };
+  const aim = (x, y) => { tx = Math.max(0, Math.min(1, x)); ty = Math.max(0, Math.min(1, y)); wrap.classList.add('live'); if (!raf) raf = requestAnimationFrame(paint); };
+  const rest = () => { if (!TILT_OK) wrap.classList.remove('live'); aim(0.5, 0.5); };
+  wrap.addEventListener('pointermove', (e) => { const r = card.getBoundingClientRect(); aim((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); });
+  wrap.addEventListener('pointerleave', rest); wrap.addEventListener('pointerup', () => setTimeout(rest, 700));
+  // phone tilt: works in portrait and landscape; the angle you hold the phone at when the page opens counts as "flat"
+  let base = null;
+  const onTilt = (e) => {
+    if (!document.body.contains(wrap)) { removeEventListener('deviceorientation', onTilt); return; }
+    if (e.beta == null || e.gamma == null) return;
+    const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    let x = e.gamma, y = e.beta;
+    if (ang === 90) { x = e.beta; y = -e.gamma; } else if (ang === -90 || ang === 270) { x = -e.beta; y = e.gamma; }
+    if (!base) base = { x, y };
+    aim(0.5 + (x - base.x) / 40, 0.5 + (y - base.y) / 40);
+  };
+  const startTilt = () => { TILT_OK = true; S.prefs.tilt = true; savePrefs(); addEventListener('deviceorientation', onTilt); };
+  const needsAsk = window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function';
+  if (!window.DeviceOrientationEvent) return;
+  if (!needsAsk) { startTilt(); return; }               // Android and others: no permission step
+  if (TILT_OK) { addEventListener('deviceorientation', onTilt); return; }
+  const b = document.createElement('button'); b.className = 'ghost sm holo-btn'; b.textContent = '✨ Tilt with my phone'; wrap.after(b);
+  b.onclick = async () => {
+    try {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) { try { await DeviceMotionEvent.requestPermission(); } catch {} }
+      if (r === 'granted') { startTilt(); b.remove(); toast('Tilt your phone to catch the light'); }
+      else toast('Motion access is off. Turn on Settings → Apps → Safari → Motion & Orientation Access, then reopen the app.', 6000);
+    } catch { toast('Motion access is off. Turn on Settings → Apps → Safari → Motion & Orientation Access, then reopen the app.', 6000); }
+  };
 }
 
 /* ---------------------------------------------------------------- milestones */
