@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v49';
+const SHELL_VERSION = 'v50';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -279,6 +279,20 @@ function renderSetStrip() {
   const on = $('#col-sets .settile.on'); if (on && !renderSetStrip.scrolled) { on.scrollIntoView({ inline: 'center', block: 'nearest' }); renderSetStrip.scrolled = true; }
 }
 /** under a set's value: the whole collection, so the total is always on screen */
+/** long lists: draw the first rows now and the rest as you scroll, so thousands of cards stay smooth */
+function chunkList(ul, parts, first = 120, step = 200) {
+  if (ul._io) { ul._io.disconnect(); ul._io = null; }
+  let i = Math.min(first, parts.length);
+  ul.innerHTML = parts.slice(0, i).join('');
+  if (i >= parts.length) return;
+  const more = () => {
+    ul.querySelector(':scope > .more-sentinel')?.remove();
+    const n = Math.min(parts.length, i + step); ul.insertAdjacentHTML('beforeend', parts.slice(i, n).join('')); i = n;
+    if (i < parts.length) { ul.insertAdjacentHTML('beforeend', '<li class="more-sentinel" aria-hidden="true"></li>'); ul._io.observe(ul.lastElementChild); } else { ul._io.disconnect(); ul._io = null; }
+  };
+  ul._io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) more(); }, { rootMargin: '1200px 0px' });
+  ul.insertAdjacentHTML('beforeend', '<li class="more-sentinel" aria-hidden="true"></li>'); ul._io.observe(ul.lastElementChild);
+}
 function sumAllLine(cur) {
   let el = $('#sum-all'); if (!el) { el = document.createElement('div'); el.id = 'sum-all'; el.className = 'sumall'; $('#sum-change').after(el); }
   const many = colList().length > 1;
@@ -359,9 +373,10 @@ function renderCollection() {
   $('#col-empty').classList.toggle('hidden', rows.length > 0 || cur !== 'all');
   if (!rows.length && cur !== 'all') { $('#col-list').innerHTML = '<li class="empty">You don\'t have any cards from this set yet. Tap <b>Missing</b> to see them all.</li>'; return; }
   let lastG = null;
-  $('#col-list').innerHTML = list.map((r) => {
+  const grpTot = new Map(); if (groupOf) for (const x of list) { const g = groupOf(x), o = grpTot.get(g) || [0, 0]; o[0] += x.e.qty; o[1] += x.value; grpTot.set(g, o); }
+  chunkList($('#col-list'), list.map((r) => {
     let head = '';
-    if (groupOf) { const g = groupOf(r); if (g !== lastG) { lastG = g; const n = list.filter((x) => groupOf(x) === g); head = `<li class="dsec grp">${esc(g)} <span class="flat">· ${n.reduce((t, x) => t + x.e.qty, 0)} cards · ${money(n.reduce((t, x) => t + x.value, 0))}</span></li>`; } }
+    if (groupOf) { const g = groupOf(r); if (g !== lastG) { lastG = g; const t = grpTot.get(g); head = `<li class="dsec grp">${esc(g)} <span class="flat">· ${t[0]} cards · ${money(t[1])}</span></li>`; } }
     return head + `
     <li class="item" data-k="${esc(r.it.k)}">
       ${img(r.it.img)}
@@ -371,7 +386,7 @@ function renderCollection() {
         <div class="meta">${r.it.est ? '~' : ''}${money(r.it.m)} each${r.it.est ? ' <span class="flat">(no market price yet)</span>' : ''}</div>
       </div>
       <div class="px"><b>${money(r.value)}</b><small>${chg(r.dval, r.it.pc)}</small></div>
-    </li>`; }).join('');
+    </li>`; }));
 
   // new-set banner
   const fresh = (S.cards.newGroups || []).filter((g) => !S.prefs.seenNew.includes(g.id));
@@ -1153,6 +1168,20 @@ function showAdded(it, product, cands) {
       return `<li class="item" data-scan="swap" data-k="${esc(v.k)}">${img(v.img)}<div class="info"><div class="nm">${esc(v.n)}${promoKind(v) ? `<span class="tag promo">${esc(promoKind(v))}</span>` : ''}</div><div class="meta">${metaLine(v)}</div></div><div class="px"><b>${money(v.m)}</b></div></li>`;
     }).join('') : ''}`;
 }
+/* ---- scanner samples: when you correct the scanner, keep a small picture of that card so it can be used to tune it */
+const SAMPLE_KEY = 'rbt.scansamples.v1';
+function keepShot(canvas, res) {
+  try { if (!res.quad || !CardScan.flatten) return; const c = CardScan.flatten(canvas, res.quad, 240, 335); SCAN.shot = { url: c.toDataURL('image/jpeg', 0.72), guess: res.best ? String(res.best.pid) : '', score: +(res.score || 0).toFixed(3) }; } catch { SCAN.shot = null; }
+}
+function saveSample(k, why) {
+  const sh = SCAN.shot; if (!sh || !k) return;
+  const it = S.byKey.get(k); if (!it || String(it.p) === sh.guess && why !== 'confirm') return;
+  let list = []; try { list = JSON.parse(localStorage.getItem(SAMPLE_KEY) || '[]'); } catch {}
+  list.push({ t: Date.now(), want: String(it.p), name: it.n, guess: sh.guess, score: sh.score, why, img: sh.url });
+  while (list.length > 40) list.shift();
+  try { localStorage.setItem(SAMPLE_KEY, JSON.stringify(list)); } catch { list.splice(0, 10); try { localStorage.setItem(SAMPLE_KEY, JSON.stringify(list)); } catch {} }
+  SCAN.shot = null;
+}
 function showMaybe(res) {
   if (!res.cands.length) return;
   $('#scan-status').textContent = 'Which one is it? Tap to add:';
@@ -1192,6 +1221,7 @@ async function runScan(canvas, manual) {
       res = await identify(canvas, { useName: true });
     }
     if (res.sure && res.best) {
+      keepShot(canvas, res);
       const it = pickFinish(res.best.items);
       const { e, dup } = sessionAdd(it.k);
       if (navigator.vibrate) navigator.vibrate(dup ? 15 : [20, 40, 20]);
@@ -1203,7 +1233,7 @@ async function runScan(canvas, manual) {
       msg.textContent = dup ? `Already scanned: ${it.n}` : e.done ? `Added ✓ ${it.n}` : `✓ ${it.n} — in review list`;
     } else if (res.cands.length) {
       const changed = res.group ? res.group !== SCAN.shownFor : (SCAN.shownFor === null || hamming(res.hash, SCAN.shownFor) > 46);
-      if (manual || changed) { showMaybe(res); SCAN.shownFor = res.hash; }
+      if (manual || changed) { keepShot(canvas, res); showMaybe(res); SCAN.shownFor = res.hash; }
       msg.textContent = 'Not sure which version — pick below, or hold steady';
     } else {
       msg.textContent = manual ? 'Couldn\'t recognize that card — try more light or less glare' : 'Looking for a card…';
@@ -1245,6 +1275,7 @@ function wireScan() {
     if (act === 'undo') { const e = sessGet(last.id); if (e) sessSetQty(e.id, e.qty - 1); toast('Removed'); $('#scan-results').innerHTML = ''; SCAN.last = null; }
     if (act === 'more') { const { e } = sessionAdd(last.k, { force: true }); SCAN.last = { ...last, id: e.id, k: e.k, dup: false }; scanFlash(S.byKey.get(e.k), e.done ? 'added' : 'review'); showAdded(S.byKey.get(e.k), prodOf(e.k), last.res.cands); }
     if (act === 'swap') {
+      saveSample(b.dataset.k, 'switched');
       const k = withLang(b.dataset.k, langOf(last.k)); const e = sessSwap(last.id, k) || sessionAdd(k, { force: true }).e; SCAN.last = { ...last, id: e.id, k };
       const prod = prodOf(k);
       showAdded(S.byKey.get(k), prod, last.res.cands);
@@ -1302,10 +1333,37 @@ async function restoreSnapshot(t) {
   location.reload();
 }
 /* ---- settings: sync, format, text size */
+/** download the pictures of every card you own (all collections) and your wishlist, so lists work without signal */
+async function saveOffline(btn) {
+  const urls = new Set();
+  for (const c of colList()) for (const k of Object.keys(colItems(c.id))) { const it = S.byKey.get(k); if (it && it.img) urls.add(it.img); }
+  for (const k of Object.keys(WL.items || {})) { const it = S.byKey.get(k); if (it && it.img) urls.add(it.img); }
+  const list = [...urls]; let done = 0; btn.disabled = true;
+  const run = async () => { while (list.length) { const u = list.pop(); try { await fetch(u, { mode: 'no-cors' }); } catch {} done++; if (done % 25 === 0) btn.textContent = `Saving pictures… ${done}/${urls.size}`; } };
+  await Promise.all([run(), run(), run(), run(), run(), run()]);
+  btn.disabled = false; btn.textContent = 'Save my card pictures for offline use';
+  toast(`${done} card pictures saved on this device`);
+}
+function renderScanSamples() {
+  let list = []; try { list = JSON.parse(localStorage.getItem(SAMPLE_KEY) || '[]'); } catch {}
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>Scanner samples</h2>
+    <p class="sub">Each time you correct the scanner (switch to a different version, or pick from the list), a small picture of that card is kept here — ${list.length} so far, on this device only. Share the file with me and I'll use them to tune the scanner.</p>
+    <div class="row" style="gap:8px"><button class="primary" id="ss-share" ${list.length ? '' : 'disabled'}>Share / save file</button><button class="ghost" id="ss-clear" ${list.length ? '' : 'disabled'}>Clear</button></div>
+    <div class="ssgrid">${list.slice().reverse().map((x) => `<figure><img src="${x.img}" alt=""><figcaption>${esc(x.name)}<small>${esc(x.why)} · ${x.score}</small></figcaption></figure>`).join('') || '<p class="sub">Nothing yet.</p>'}</div></div>`;
+  const sh = $('#ss-share'); if (sh) sh.onclick = async () => {
+    const blob = new Blob([JSON.stringify({ app: SHELL_VERSION, samples: list })], { type: 'application/json' });
+    const f = new File([blob], `riftbound-scanner-samples-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) { try { await navigator.share({ files: [f], title: 'Scanner samples' }); return; } catch {} }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  const cl = $('#ss-clear'); if (cl) cl.onclick = async () => { if (await confirmBox('Delete the saved scanner samples?')) { localStorage.removeItem(SAMPLE_KEY); renderScanSamples(); } };
+}
 function applyCamGap() { document.documentElement.classList.toggle('camgap', !!S.prefs.camGap); }
 function renderPrefs() {
   const cg = $('#pref-camgap'); if (cg) { cg.checked = !!S.prefs.camGap; cg.onchange = () => { S.prefs.camGap = cg.checked; savePrefs(); applyCamGap(); }; }
   const ib = $('#btn-import'); if (ib) ib.onclick = () => openImport();
+  const ob = $('#btn-offline'); if (ob) ob.onclick = () => saveOffline(ob);
+  const sb2 = $('#btn-scansamples'); if (sb2) sb2.onclick = () => pushSheet(renderScanSamples);
   $$('#pref-langval button').forEach((b) => { b.classList.toggle('on', b.dataset.v === (S.prefs.langValue || 'en')); b.onclick = () => { S.prefs.langValue = b.dataset.v; savePrefs(); renderPrefs(); }; });
   $$('#pref-format button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.format || 'standard')));
   $$('#pref-text button').forEach((b) => b.classList.toggle('on', b.dataset.v === (S.prefs.text || 'm')));
@@ -1422,7 +1480,7 @@ function wire() {
     if (lb) { e.stopPropagation(); openDetail(lb.dataset.langs); setTimeout(() => $('#langrow')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120); return; }
     if (add) {
       e.stopPropagation();
-      if (S.view === 'scan') { const r = sessionAdd(add.dataset.add, { force: true }); const it = S.byKey.get(r.e.k); scanFlash(it, r.e.done ? 'added' : 'review'); toast(r.e.done ? `Added <b>${esc(it.n)}</b>` : `<b>${esc(it.n)}</b> is in your review list`); return; }
+      if (S.view === 'scan') { saveSample(add.dataset.add, 'picked'); const r = sessionAdd(add.dataset.add, { force: true }); const it = S.byKey.get(r.e.k); scanFlash(it, r.e.done ? 'added' : 'review'); toast(r.e.done ? `Added <b>${esc(it.n)}</b>` : `<b>${esc(it.n)}</b> is in your review list`); return; }
       addCard(add.dataset.add); return;
     }
     const row = e.target.closest('.list .item[data-k]');
@@ -1803,7 +1861,7 @@ function renderDeck(slug) {
       html += `<div class="dsec">${title} (${ls.reduce((t, l) => t + l.cnt, 0)})</div><ul class="dl">` + ls.map(lineHTML).join('') + '</ul>';
     }
     if (an.side.length) html += `<div class="dsec">Sideboard (${an.side.reduce((t, l) => t + l.cnt, 0)})</div><ul class="dl">` + an.side.map(lineHTML).join('') + '</ul>';
-    html += '<div class="row" style="margin-top:10px"><button class="ghost" id="dk-export">Copy deck list</button></div><p class="sub">Plain text list (e.g. <i>3 Defy</i>) — pastes into riftbound.gg, other deck builders, Discord, or this app\'s Import list.</p>';
+    html += '<div class="row" style="margin-top:10px"><button class="ghost" id="dk-export">Copy deck list</button><button class="ghost" id="dk-test">🂠 Test draw &amp; odds</button></div><p class="sub">Plain text list (e.g. <i>3 Defy</i>) — pastes into riftbound.gg, other deck builders, Discord, or this app\'s Import list.</p>';
     if ((a.mu || []).length) {
       const mu = a.mu.slice().sort((x, y) => (y.n || 0) - (x.n || 0)).slice(0, 12);
       html += `<div class="dsec">Matchups (last ${{ '30d': 30, '14d': 14, '7d': 7 }[D.win] || 30} days)</div><ul class="dl">` + mu.map((m) => `<li ${findArch(m.slug) ? `data-deck="${esc(m.slug)}"` : ''}><span class="nm">vs ${esc(m.vs)}<small>${(m.n || 0).toLocaleString()} matches</small></span><span class="st"><b class="${m.wr >= 0.5 ? 'pos' : 'neg'}">${Math.round(m.wr * 100)}%</b></span></li>`).join('') + '</ul>';
@@ -1841,6 +1899,7 @@ function renderDeck(slug) {
   };
   const wb = $('#dk-wish'); if (wb) wb.onclick = wishMissing;
   const wb2 = $('#dk-wish2'); if (wb2) wb2.onclick = wishMissing;
+  const dt = $('#dk-test'); if (dt) dt.onclick = () => openDeckTest(a.list.main, a.list.leader || a.leader, a.name);
   const ex = $('#dk-export');
   if (ex) ex.onclick = async () => {
     const lines = []; for (const [id, n] of Object.entries(a.list.main)) lines.push(`${n} ${D.rb[id]?.n || id}`);
@@ -2023,7 +2082,8 @@ function renderMyDeck(id) {
       <div class="sub" style="margin-top:8px">You own ${Math.round(an.pct * 100)}% of it${an.cost > 0 ? ` · missing cards about <b>${money(an.cost)}</b>` : ''}${an.banned ? ` · <span class="no">${an.banned} banned — see replacements below</span>` : ''}</div>
       <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div>
     </div>
-    <div class="row"><button class="primary ghost" id="md-add" style="flex:1">＋ Add cards</button><button class="ghost" id="md-copy">Copy list</button></div>`;
+    <div class="row"><button class="primary ghost" id="md-add" style="flex:1">＋ Add cards</button><button class="ghost" id="md-copy">Copy list</button></div>
+    <button class="ghost" id="md-test" style="width:100%;margin-top:8px">🂠 Test draw &amp; odds</button>`;
   if (!dk.leader) html += `<div class="dsec">Legend</div><ul class="dl"><li><span class="nm">No legend yet<small>Pick one to check domains and get rune suggestions</small></span><span class="st"><button class="primary sm" id="md-chleg">Choose legend</button></span></li></ul>`;
   for (const [sec, title] of SECTION_ORDER) {
     const g = groups[sec]; if (!g || !g.size) continue;
@@ -2050,6 +2110,7 @@ function renderMyDeck(id) {
   $('#md-name').onchange = (e) => { dk.name = e.target.value.trim() || dk.name; dk.updated = Date.now(); saveMD(); };
   $('#md-add').onclick = () => pushSheet(() => renderMdAdd(id));
   const ch = $('#md-chleg'); if (ch) ch.onclick = () => pushSheet(() => renderLegendSwap(id));
+  $('#md-test').onclick = () => openDeckTest(dk.main, dk.leader, dk.name);
   $('#md-copy').onclick = async () => {
     const lines = []; for (const [cid, n] of Object.entries(dk.main)) lines.push(`${n} ${D.rb[cid]?.n || cid}`);
     if (sideIds.length) { lines.push('', 'Sideboard'); for (const [cid, n] of sideIds) lines.push(`${n} ${D.rb[cid]?.n || cid}`); }

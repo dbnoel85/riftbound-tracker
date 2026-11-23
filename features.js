@@ -985,3 +985,67 @@ function renderAddToDeck(cid) {
   });
   $$('#sheet-content [data-atdleg]').forEach((b) => b.onclick = () => { const dk = mdGet(b.dataset.atdleg); if (dk.leader) delete dk.main[dk.leader]; dk.leader = cid; dk.main[cid] = 1; dk.updated = Date.now(); saveMD(); toast(`${esc(c.n.split(' - ')[0])} now leads <b>${esc(dk.name)}</b>`); re(); });
 }
+
+/* ---------------------------------------------------------------- deck testing: sample hands, mulligan, turns, odds */
+// Core rules: each player draws 4; mulligan = set aside up to 2, draw that many, recycle them (bottom of deck).
+// 1v1: you draw 1 each turn (including the first), channel 2 runes each turn; the player going second channels 1 extra on their first turn.
+// The chosen champion starts in its own zone, so one copy is taken out of the deck you draw from.
+const DT = {};
+function hyperAtLeast1(N, K, n) { if (K <= 0) return 0; if (n >= N) return 1; let p = 1; for (let i = 0; i < n; i++) p *= (N - K - i) / (N - i); return 1 - Math.max(0, p); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function openDeckTest(main, leader, name) {
+  const leg = D.rb[leader];
+  const deck = [], runes = []; let champ = null;
+  for (const [id, n] of Object.entries(main)) { const c = D.rb[id]; if (!c) continue;
+    if (c.t === 'Rune') { for (let i = 0; i < n; i++) runes.push(id); continue; }
+    if (c.t === 'Legend' || c.t === 'Battlefield') continue;
+    for (let i = 0; i < n; i++) deck.push(id); }
+  if (leg && leg.tg && leg.tg.length) { const i = deck.findIndex((id) => D.rb[id].st === 'Champion' && (D.rb[id].tg || []).some((t) => leg.tg.includes(t))); if (i >= 0) champ = deck.splice(i, 1)[0]; }
+  Object.assign(DT, { name, deckAll: deck, runesAll: runes, champ, second: DT.second || false });
+  dtNewHand(); pushSheet(renderDeckTest);
+}
+function dtNewHand() {
+  DT.lib = shuffle(DT.deckAll.slice()); DT.rlib = shuffle(DT.runesAll.slice());
+  DT.hand = DT.lib.splice(0, 4); DT.sel = new Set(); DT.mull = false; DT.turn = 0; DT.pool = []; DT.drawn = [];
+}
+function dtNextTurn() {
+  DT.turn += 1; DT.mull = true;
+  if (DT.lib.length) { const c = DT.lib.shift(); DT.hand.push(c); DT.drawn.push(c); }
+  const ch = 2 + (DT.second && DT.turn === 1 ? 1 : 0);
+  for (let i = 0; i < ch && DT.rlib.length; i++) DT.pool.push(DT.rlib.shift());
+}
+function renderDeckTest() {
+  const N = DT.deckAll.length, card = (id, i, opts = {}) => { const c = D.rb[id], r = cardRef(c.n), en = DT.pool.length;
+    const can = DT.turn > 0 && c.c != null && c.c <= en;
+    return `<button class="dt-card ${DT.sel.has(i) ? 'sel' : ''} ${can ? 'can' : ''}" data-dti="${i}" ${opts.lock ? 'disabled' : ''} title="${esc(c.n)}">${r && r.img ? `<img src="${esc(r.img)}" alt="">` : `<span>${esc(c.n)}</span>`}<small>${c.c != null ? c.c + '⚡ ' : ''}${esc(c.n.split(',')[0])}</small>${can ? '<i>playable</i>' : ''}</button>`; };
+  const runeDom = {}; for (const id of DT.pool) for (const d of D.rb[id].d) runeDom[d] = (runeDom[d] || 0) + 1;
+  // odds: chance to have at least one copy by the opening hand and by each of your first turns
+  const counts = new Map(); for (const id of DT.deckAll) counts.set(id, (counts.get(id) || 0) + 1);
+  const seen = (t) => 4 + t; // 1v1: draw each turn, including the first
+  const odds = [...counts.entries()].sort((a, b) => b[1] - a[1] || (D.rb[a[0]].c ?? 99) - (D.rb[b[0]].c ?? 99)).map(([id, k]) => ({ id, k, p: [0, 1, 2, 3].map((t) => hyperAtLeast1(N, k, seen(t))) }));
+  const curve = {}; for (const id of DT.deckAll) { const c = D.rb[id].c; const b = c == null ? '–' : c >= 7 ? '7+' : String(c); curve[b] = (curve[b] || 0) + 1; }
+  const cmax = Math.max(1, ...Object.values(curve));
+  const pc = (p) => `${Math.round(p * 100)}%`;
+  $('#sheet-content').innerHTML = `<div class="detail dtest"><h2>Test draw</h2><div class="sub">${esc(DT.name)} · ${N} cards to draw from${DT.champ ? ` · ${esc(D.rb[DT.champ].n.split(',')[0])} starts in the champion zone` : ''}</div>
+    <div class="seg mini" id="dt-order" style="margin-top:10px"><button data-s="0" class="${DT.second ? '' : 'on'}">Going first</button><button data-s="1" class="${DT.second ? 'on' : ''}">Going second</button></div>
+    <div class="dsec">${DT.turn ? `Turn ${DT.turn} — hand (${DT.hand.length})` : 'Opening hand'}</div>
+    <div class="dt-hand">${DT.hand.map((id, i) => card(id, i, { lock: DT.mull })).join('')}</div>
+    ${!DT.mull ? `<p class="sub">Tap up to 2 cards to send back, then Mulligan — or keep.</p><div class="row" style="gap:8px"><button class="ghost" id="dt-mull" ${DT.sel.size ? '' : 'disabled'}>Mulligan ${DT.sel.size || ''}</button><button class="primary" id="dt-keep" style="flex:1">Keep &amp; start turn 1</button></div>`
+      : `<div class="dt-runes"><b>${DT.pool.length} rune${DT.pool.length === 1 ? '' : 's'}</b> channeled${Object.keys(runeDom).length ? ': ' + Object.entries(runeDom).map(([d, n]) => `${domTags([d])} ×${n}`).join(' ') : ''} · cards marked <i>playable</i> cost ${DT.pool.length} or less</div>
+         <div class="row" style="gap:8px"><button class="primary" id="dt-next" style="flex:1" ${DT.lib.length ? '' : 'disabled'}>Next turn (draw 1, channel 2)</button><button class="ghost" id="dt-new">New hand</button></div>`}
+    <div class="dsec">Odds of seeing at least one</div>
+    <table class="dt-odds"><thead><tr><th>Card</th><th>#</th><th>Opening</th><th>Turn 1</th><th>Turn 2</th><th>Turn 3</th></tr></thead><tbody>
+      ${odds.slice(0, DT.all ? 99 : 10).map((o) => `<tr><td>${esc(D.rb[o.id].n)}</td><td>${o.k}</td>${o.p.map((p) => `<td style="--p:${p}">${pc(p)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    ${odds.length > 10 ? `<button class="linkbtn" id="dt-all">${DT.all ? 'Show fewer' : `Show all ${odds.length}`}</button>` : ''}
+    <p class="sub">Counts every card you've seen: the 4 in your opening hand plus one draw a turn (mulligans not included).</p>
+    <div class="dsec">Energy curve</div>
+    <div class="dt-curve">${['0', '1', '2', '3', '4', '5', '6', '7+', '–'].filter((b) => curve[b]).map((b) => `<div><i style="height:${Math.round(curve[b] / cmax * 100)}%"></i><b>${curve[b]}</b><small>${b === '–' ? 'n/a' : b}</small></div>`).join('')}</div></div>`;
+  const re = () => renderDeckTest();
+  $('#dt-order').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; DT.second = b.dataset.s === '1'; dtNewHand(); re(); };
+  $$('#sheet-content [data-dti]').forEach((b) => b.onclick = () => { if (DT.mull) return; const i = +b.dataset.dti; if (DT.sel.has(i)) DT.sel.delete(i); else if (DT.sel.size < 2) DT.sel.add(i); re(); });
+  const m = $('#dt-mull'); if (m) m.onclick = () => { const out = [...DT.sel].sort((a, b) => b - a).map((i) => DT.hand.splice(i, 1)[0]); DT.hand.push(...DT.lib.splice(0, out.length)); DT.lib.push(...out); DT.sel = new Set(); DT.mull = true; DT.turn = 0; dtNextTurn(); re(); };
+  const k = $('#dt-keep'); if (k) k.onclick = () => { DT.sel = new Set(); dtNextTurn(); re(); };
+  const n = $('#dt-next'); if (n) n.onclick = () => { dtNextTurn(); re(); };
+  const nw = $('#dt-new'); if (nw) nw.onclick = () => { dtNewHand(); re(); };
+  const al = $('#dt-all'); if (al) al.onclick = () => { DT.all = !DT.all; re(); };
+}

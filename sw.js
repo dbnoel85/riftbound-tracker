@@ -1,5 +1,5 @@
 // Offline support: app shell cached; price data always tries the network first.
-const SHELL = 'rbt-shell-v49';
+const SHELL = 'rbt-shell-v50';
 const IMG = 'rbt-img-v1';
 const FILES = ['fonts/marcellus-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', './', 'index.html', 'style.css', 'app.js', 'scanner.js', 'features.js', 'sync.js', 'firebase-config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
@@ -13,10 +13,10 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
   // card images: cache-first
-  if (url.hostname.includes('tcgplayer')) {
+  if (url.hostname.includes('tcgplayer') || url.hostname.includes('rgpub.io')) {
     e.respondWith(caches.open(IMG).then(async (c) => {
       const hit = await c.match(e.request); if (hit) return hit;
-      try { const r = await fetch(e.request); c.put(e.request, r.clone()); return r; } catch { return Response.error(); }
+      try { const r = await fetch(e.request); if (r.ok || r.type === 'opaque') { c.put(e.request, r.clone()); trimImages(c); } return r; } catch { return Response.error(); }
     }));
     return;
   }
@@ -27,3 +27,11 @@ self.addEventListener('fetch', (e) => {
     return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: true })));
 });
+
+// keep the picture cache to a sensible size (oldest out first), checked now and then
+let trimAt = 0;
+async function trimImages(c) {
+  if (Date.now() - trimAt < 60000) return; trimAt = Date.now();
+  const ks = await c.keys(); const MAX = 6000;
+  for (let i = 0; i < ks.length - MAX; i++) await c.delete(ks[i]);
+}
