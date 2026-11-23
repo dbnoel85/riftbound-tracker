@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v52';
+const SHELL_VERSION = 'v53';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -342,7 +342,7 @@ function renderCollection() {
   $('#sum-value').textContent = money(total);
   $('#sum-count').textContent = count;
   sumAllLine(cur);
-  if (typeof renderToday === 'function') { renderToday(); checkMilestones(); }
+  if (typeof renderToday === 'function') { renderToday(); checkMilestones(); renderTipCard(); }
   const d = total - totalPrev;
   $('#sum-change').innerHTML = rows.length ? chg(d, totalPrev ? (d / totalPrev) * 100 : null) + ' <span class="flat">this week</span>' : '';
 

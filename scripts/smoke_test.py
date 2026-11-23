@@ -43,6 +43,9 @@ ASYNC = [
     ("deck test draw", "async () => { const a = ranked()[0]; openDeckTest(a.list.main, a.list.leader || a.leader, a.name); const ok = DT.hand.length === 4 && !!document.querySelector('.dt-odds'); closeSheet(); return ok; }"),
     ("matchups", "async () => { D.tab = 'matrix'; await renderMatrix(); return !!document.querySelector('table.mx'); }"),
     ("events tab", "async () => { show('events'); await new Promise(r => setTimeout(r, 300)); return true; }"),
+    ("tips data", "async () => { const t = (await loadTips()).items; return t.length >= 20 && t.every(x => x.id && x.title && x.body); }"),
+    ("tip of the day", "async () => { await loadTips(); const a = tipOfDay(localDay()); return !!(a && a.title); }"),
+    ("tips archive", "async () => { pushSheet(renderTipList); await new Promise(r => setTimeout(r, 300)); const ok = document.querySelectorAll('.tiplist li').length >= 20; closeSheet(); return ok; }"),
     ("rules & guide", "async () => { pushSheet(renderLearn); await new Promise(r => setTimeout(r, 500)); const ok = !!document.querySelector('#sheet-content h2'); closeSheet(); return ok; }"),
 ]
 

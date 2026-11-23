@@ -456,6 +456,7 @@ async function fillDetailText(it) {
   try { await Promise.all([loadCardText(), loadGlossary()]); } catch { return; }
   const tx = textOf(it.n); if (!tx || !tx.text || $('#detail-text') !== box) { fillErrata(it); return; }
   const kws = keywordsIn(tx.text + ' ' + (tx.extra || ''));
+  setTimeout(() => fillCardTips(it), 0);
   box.innerHTML = `<div class="card-box ctext"><span class="label">Card text</span><p>${esc(tx.text).replace(/\[([^\]]+)\]/g, '<b>[$1]</b>')}</p>
     ${kws.length ? `<div class="kws">${kws.map((k) => `<div><b>${esc(k.k)}</b> — ${esc(k.text)}</div>`).join('')}</div>` : ''}</div>`;
   fillErrata(it);
@@ -511,6 +512,7 @@ async function renderLearn() {
       <button class="tile" id="lr-gloss"><b>Keywords</b><span>${Object.keys(GL || {}).length} explained</span></button>
       <button class="tile" id="lr-bans"><b>Ban list</b><span>${BAN.byKey.size} cards</span></button>
       <button class="tile" id="lr-errata"><b>Errata</b><span>${Object.keys(ERR || {}).length} updated cards</span></button>
+      <button class="tile" id="lr-tips"><b>Tips &amp; combos</b><span>${(TIPS && TIPS.items.length) || 'Daily'} ${TIPS ? 'tips' : ''}</span></button>
     </div>
     ${(R.articles || []).length ? `<div class="dsec">Rules updates &amp; FAQs</div><ul class="dl">${R.articles.slice(0, 12).map((a) => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener" class="nm" style="color:var(--text);text-decoration:none">${esc(a.title)}<small>${esc(fmtDate(a.date))}</small></a><span class="st">↗</span></li>`).join('')}</ul>` : ''}
     <p class="sub">Quick guide written for this app; when in doubt the official Core Rules win.</p></div>`;
@@ -518,6 +520,7 @@ async function renderLearn() {
   $('#lr-gloss').onclick = () => { GLQ = ''; pushSheet(renderGlossary); };
   $('#lr-bans').onclick = () => pushSheet(renderBanList);
   $('#lr-errata').onclick = () => pushSheet(renderErrataList);
+  $('#lr-tips').onclick = async () => { await loadTips(); pushSheet(renderTipList); };
 }
 function renderErrataList() {
   const e = ERR || {};
@@ -1267,3 +1270,78 @@ function renderToday() {
   el.querySelectorAll('[data-tdgo]').forEach((b) => b.onclick = () => { const g = b.dataset.tdgo; if (g === 'events') show('events'); else if (g === 'badges') pushSheet(renderMilestones); else if (g === 'previews' && typeof renderPreviews === 'function') pushSheet(renderPreviews); });
 }
 (function wireMs() { const b = $('#t-badges'); if (b) b.onclick = () => pushSheet(renderMilestones); })();
+
+
+/* ---------------------------------------------------------------- tip of the day: combos, cheaper plays, rune economy, rules */
+// data/tips.json holds the library. Items with a "date" are new posts for that day; otherwise the app rotates
+// through the library one a day, the same tip for everyone on a given day.
+let TIPS = null;
+const TIP_KINDS = { combo: 'Combo', cheat: 'Play it cheaper', rune: 'Rune economy', rules: 'Rules', play: 'Playstyle', deck: 'Deck tech' };
+const TIP_ICON = { combo: '⚡', cheat: '🪙', rune: '🔷', rules: '📜', play: '🎯', deck: '🛡️' };
+async function loadTips() { if (!TIPS) { try { TIPS = await (await fetch('data/tips.json', { cache: 'no-cache' })).json(); } catch { TIPS = { items: [] }; } } return TIPS; }
+const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function tipOfDay(day = localDay()) {
+  if (!TIPS || !TIPS.items.length) return null;
+  const dated = TIPS.items.find((t) => t.date === day); if (dated) return dated;
+  const pool = TIPS.items.filter((t) => !t.date || t.date < day); if (!pool.length) return null;
+  const n = Math.floor(new Date(day + 'T12:00:00').getTime() / 864e5);
+  return pool[((n % pool.length) + pool.length) % pool.length];
+}
+function tipCards(t) { return (t.cards || []).map((id) => { const c = D.rb && D.rb[id]; const name = c ? c.n : null; const r = name ? cardRef(name) : null; return { id, name: name || id, r }; }); }
+async function renderTipCard() {
+  const el = $('#tipday'); if (!el) return;
+  await loadTips(); if (!D.rb) { try { await loadDecks(); } catch {} }
+  const t = tipOfDay(); if (!t || S.prefs.tipHide === localDay() || (S.prefs.colSet && S.prefs.colSet !== 'all')) { el.classList.add('hidden'); return; }
+  const seen = (S.prefs.tipsSeen || []).includes(t.id);
+  const cs = tipCards(t).filter((c) => c.r);
+  el.innerHTML = `<button class="tipday-main" id="tip-open"><span class="tk">${TIP_ICON[t.kind] || '💡'} ${esc(TIP_KINDS[t.kind] || 'Tip')} of the day${seen ? '' : ' <i>new</i>'}</span>
+      <b>${esc(t.title)}</b><span class="tb">${esc(t.body)}</span></button>
+    ${cs.length ? `<div class="tipcards">${cs.slice(0, 3).map((c) => `<button data-tipk="${esc(c.r.k)}" title="${esc(c.name)}">${img(c.r.img)}</button>`).join('')}</div>` : ''}`;
+  el.classList.remove('hidden');
+  $('#tip-open').onclick = () => openTip(t);
+  el.querySelectorAll('[data-tipk]').forEach((b) => b.onclick = () => openDetail(b.dataset.tipk));
+}
+function openTip(t) {
+  const seen = new Set(S.prefs.tipsSeen || []); seen.add(t.id); S.prefs.tipsSeen = [...seen].slice(-400); savePrefs();
+  pushSheet(() => renderTip(t)); renderTipCard();
+}
+function renderTip(t) {
+  const cs = tipCards(t), saved = (S.prefs.tipsSaved || []).includes(t.id);
+  const own = (c) => c.r ? Object.entries(poolItems()).filter(([k]) => { const it = S.byKey.get(k); return it && printBase(it.n) === printBase(c.r.n); }).reduce((a, [, e]) => a + e.qty, 0) : 0;
+  $('#sheet-content').innerHTML = `<div class="detail tip"><div class="tk">${TIP_ICON[t.kind] || '💡'} ${esc(TIP_KINDS[t.kind] || 'Tip')}${t.date ? ' · ' + esc(fmtDate(t.date)) : ''}</div>
+    <h2>${esc(t.title)}</h2><p class="tipbody">${esc(t.body).replace(/\[([^\]]+)\]/g, '<b>[$1]</b>')}</p>
+    ${cs.length ? `<div class="dsec">Cards in this tip</div><ul class="dl prints">${cs.map((c) => c.r ? `<li data-open="${esc(c.r.k)}">${img(c.r.img)}<span class="nm">${esc(c.name)}<small>${own(c) ? `<span class="ok">you own ${own(c)}</span>` : 'not in your collection'}</small></span><span class="st"><b>${money(c.r.m)}</b></span></li>` : `<li><span class="nm">${esc(c.name)}</span></li>`).join('')}</ul>` : ''}
+    ${t.src ? `<p class="sub">Source: ${esc(t.src)}. Rules text can change with errata — the card pages show the latest.</p>` : ''}
+    <div class="row" style="gap:8px;margin-top:10px"><button class="ghost" id="tip-save">${saved ? '★ Saved' : '☆ Save'}</button><button class="ghost" id="tip-all" style="flex:1">All tips &amp; combos</button>${cs.some((c) => c.r && !own(c)) ? '<button class="ghost" id="tip-wish">♡ Wishlist cards</button>' : ''}</div></div>`;
+  $$('#sheet-content [data-open]').forEach((li) => li.onclick = () => openDetail(li.dataset.open));
+  $('#tip-save').onclick = () => { const s = new Set(S.prefs.tipsSaved || []); if (s.has(t.id)) s.delete(t.id); else s.add(t.id); S.prefs.tipsSaved = [...s]; savePrefs(); renderTip(t); };
+  $('#tip-all').onclick = () => pushSheet(renderTipList);
+  const w = $('#tip-wish'); if (w) w.onclick = () => { let n = 0; for (const c of cs) if (c.r && !own(c) && !WL.items[c.r.k]) { WL.items[c.r.k] = { qty: 1, max: null, added: Date.now(), note: t.title }; n++; } saveWL(); toast(`${n} card${n === 1 ? '' : 's'} added to your wishlist`); };
+}
+let TIPF = { k: 'all', q: '' };
+function renderTipList() {
+  const today = localDay();
+  const all = (TIPS ? TIPS.items : []).filter((t) => !t.date || t.date <= today);
+  const saved = new Set(S.prefs.tipsSaved || []), seen = new Set(S.prefs.tipsSeen || []);
+  const q = TIPF.q.toLowerCase();
+  const list = all.filter((t) => (TIPF.k === 'all' || (TIPF.k === 'saved' ? saved.has(t.id) : t.kind === TIPF.k)) && (!q || (t.title + ' ' + t.body + ' ' + tipCards(t).map((c) => c.name).join(' ')).toLowerCase().includes(q)))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>Tips &amp; combos</h2><p class="sub">A new one every day on your Collection screen. ${all.length} so far.</p>
+    <input type="search" id="tipq" placeholder="Search tips or a card name" value="${esc(TIPF.q)}" style="width:100%">
+    <div class="fchips" style="margin:8px 0">${[['all', 'All'], ...Object.entries(TIP_KINDS), ['saved', '★ Saved']].map(([k, l]) => `<button class="${TIPF.k === k ? 'on' : ''}" data-tipf="${k}">${esc(l)}</button>`).join('')}</div>
+    <ul class="dl tiplist">${list.map((t) => `<li data-tip="${esc(t.id)}"><span class="ti">${TIP_ICON[t.kind] || '💡'}</span><span class="nm">${esc(t.title)}${seen.has(t.id) ? '' : ' <i class="newdot">new</i>'}<small>${esc(TIP_KINDS[t.kind] || 'Tip')}${t.date ? ' · ' + esc(fmtDate(t.date)) : ''}</small></span></li>`).join('') || '<li class="sub">Nothing matches.</li>'}</ul></div>`;
+  const qi = $('#tipq'); qi.oninput = () => { TIPF.q = qi.value; const pos = qi.selectionStart; renderTipList(); const n = $('#tipq'); n.focus(); n.setSelectionRange(pos, pos); };
+  $$('#sheet-content [data-tipf]').forEach((b) => b.onclick = () => { TIPF.k = b.dataset.tipf; renderTipList(); });
+  $$('#sheet-content [data-tip]').forEach((li) => li.onclick = () => { const t = TIPS.items.find((x) => x.id === li.dataset.tip); if (t) openTip(t); });
+}
+/** on a card page: tips that use this card */
+async function fillCardTips(it) {
+  await loadTips(); if (!TIPS.items.length || !D.rb) return;
+  const box = $('#detail-text'); if (!box) return;
+  const today = localDay(), id = typeof rbIdOf === 'function' ? rbIdOf(it.n) : null; if (!id) return;
+  const base = printBase(it.n);
+  const hits = TIPS.items.filter((t) => (!t.date || t.date <= today) && (t.cards || []).some((c) => D.rb[c] && printBase(D.rb[c].n) === base));
+  if (!hits.length || $('#card-tips')) return;
+  box.insertAdjacentHTML('afterend', `<div class="card-box" id="card-tips"><span class="label">Tips with this card</span>${hits.slice(0, 4).map((t) => `<button class="tiprow" data-tip="${esc(t.id)}">${TIP_ICON[t.kind] || '💡'} <b>${esc(t.title)}</b></button>`).join('')}</div>`);
+  $$('#card-tips [data-tip]').forEach((b) => b.onclick = () => openTip(TIPS.items.find((x) => x.id === b.dataset.tip)));
+}

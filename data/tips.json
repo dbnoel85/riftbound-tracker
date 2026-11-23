@@ -1,0 +1,310 @@
+{
+ "updated": "2026-11-23",
+ "items": [
+  {
+   "id": "t001",
+   "kind": "rune",
+   "title": "Every rune has two jobs",
+   "body": "A basic rune can be exhausted to add 1 energy, or recycled to add 1 power of its own domain. Exhausting comes back next turn; recycling sends the rune to the bottom of your Rune Deck, so you're trading future energy for power right now. Recycle only when the power wins you the turn.",
+   "cards": [],
+   "src": "Core rules 164.2, 161.2.b"
+  },
+  {
+   "id": "t002",
+   "kind": "rune",
+   "title": "Spend it or lose it",
+   "body": "Energy and power sitting in your rune pool don't carry over — the pool empties between phases and at the end of the turn. Only exhaust or recycle runes when you're about to pay for something.",
+   "cards": [],
+   "src": "Core rules 165, 316.3"
+  },
+  {
+   "id": "t003",
+   "kind": "rune",
+   "title": "Going second? Plan a 3-energy turn one",
+   "body": "In 1v1 the player going second channels one extra rune on their first turn. Keep a 3-cost play in your opening hand when you know you're on the draw.",
+   "cards": [],
+   "src": "Core rules 488/489 First Turn Process"
+  },
+  {
+   "id": "t004",
+   "kind": "play",
+   "title": "Mulligan with a plan",
+   "body": "You may set aside up to 2 of your opening 4 and draw that many; the set-aside cards go to the bottom of your deck, not back into the shuffle. Ship expensive cards first — a hand that can act on turns 1–3 wins more than one with a single bomb.",
+   "cards": [],
+   "src": "Core rules 116–117"
+  },
+  {
+   "id": "t005",
+   "kind": "cheat",
+   "title": "Hidden: big cards for 1 power",
+   "body": "Any card with [Hidden] can be hidden facedown at a battlefield you control for 1 power of any domain. From your next turn it gains [Reaction] and you play it ignoring its base cost. A 4-energy Consult the Past (draw 2) becomes a 1-power instant draw on your opponent's turn.",
+   "cards": [
+    "OGN-083"
+   ],
+   "src": "Core rules 811.1.b"
+  },
+  {
+   "id": "t006",
+   "kind": "cheat",
+   "title": "Ava Achiever skips the hiding step",
+   "body": "When Ava Achiever attacks you may pay 1 Mind power to play a [Hidden] card from your hand at that battlefield, ignoring its cost — no need to hide it a turn early. Load your hand with high-cost Hidden cards and attack with Ava.",
+   "cards": [
+    "OGN-107",
+    "OGN-083"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t007",
+   "kind": "combo",
+   "title": "Ember Monk loves Hidden",
+   "body": "Ember Monk gets +2 might each time you play a card from [Hidden]. Hide cheap tricks for 1 power, then flip them during a fight Ember Monk is in to swing combat twice.",
+   "cards": [
+    "OGN-167",
+    "OGN-097"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t008",
+   "kind": "cheat",
+   "title": "Brazen Buccaneer for 4",
+   "body": "Brazen Buccaneer costs 6, but you may discard a card as you play it to reduce its cost by 2 energy. Pitch a card that's dead in the matchup (a late-game Catalyst, an extra copy of a situational spell).",
+   "cards": [
+    "OGN-002"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t009",
+   "kind": "cheat",
+   "title": "Commander Ledros eats the board",
+   "body": "As you play Commander Ledros you may kill any number of friendly units as an additional cost; each one reduces his cost by 1 Order power. Feed him units that have already done their job — especially ones with [Deathknell] so you get value twice.",
+   "cards": [
+    "OGN-231",
+    "UNL-152"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t010",
+   "kind": "combo",
+   "title": "Black Rose Dignitary pays for itself",
+   "body": "Black Rose Dignitary has [Deathknell]: channel 1 rune exhausted when it dies. Sacrificing it to Commander Ledros reduces Ledros by an Order power and ramps you a rune at the same time.",
+   "cards": [
+    "UNL-152",
+    "OGN-231"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t011",
+   "kind": "cheat",
+   "title": "Daisy! can cost almost nothing",
+   "body": "Daisy! costs 9 but is reduced by 1 energy for each of the tags Bird, Cat, Dog and Poro among your units — and she enters ready. With all four tags she's 5 energy, attacks immediately, and stuns an enemy unit when she attacks.",
+   "cards": [
+    "UNL-196"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t012",
+   "kind": "rune",
+   "title": "Acceleration Gate refunds itself",
+   "body": "Acceleration Gate readies up to 4 units, gear and/or runes. Ready 4 exhausted runes and you can exhaust them again for 4 energy — the 3-cost spell nets you energy and can also ready units for a second attack.",
+   "cards": [
+    "VEN-150"
+   ],
+   "src": "Card text + Core rules 164.2"
+  },
+  {
+   "id": "t013",
+   "kind": "rune",
+   "title": "Catalyst of Aeons is never dead",
+   "body": "Catalyst of Aeons channels 2 runes exhausted — and if you couldn't channel 2 (your Rune Deck ran low), it draws a card instead. Early it ramps, late it cycles.",
+   "cards": [
+    "OGN-138"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t014",
+   "kind": "rune",
+   "title": "Find Your Center gets cheaper when it matters",
+   "body": "Find Your Center draws 1 and channels a rune, and costs 2 energy less once an opponent is within 3 points of winning. Hold it for the turn they get close: 1 energy for a card and a rune.",
+   "cards": [
+    "OGN-047"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t015",
+   "kind": "combo",
+   "title": "Fiora + Dragon Form: instant ramp",
+   "body": "Fiora, Grand Duelist lets you exhaust her to channel a rune when one of your units becomes [Mighty] (5+ might). Dragon Form sets a unit's base Might to 5 — so it makes a unit Mighty on the spot, and you can recast it later from your trash with [Flow].",
+   "cards": [
+    "SFD-205",
+    "VEN-116"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t016",
+   "kind": "combo",
+   "title": "Arcane Shift: replay your best 'when you play me'",
+   "body": "Arcane Shift banishes a friendly unit and its owner plays it again ignoring its cost — then deals 3 to an enemy unit at a battlefield. Use it on a unit whose value is in its play effect to get that effect a second time for free.",
+   "cards": [
+    "SFD-200"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t017",
+   "kind": "rules",
+   "title": "'Ignoring its cost' still lets you pay extras",
+   "body": "When you play something ignoring its cost, its base energy and power costs become 0 — but optional additional costs like [Accelerate] can still be paid, and must be paid in full if you choose them.",
+   "cards": [],
+   "src": "Core rules 356.1.b.3"
+  },
+  {
+   "id": "t018",
+   "kind": "rules",
+   "title": "Order your discounts",
+   "body": "When several discounts apply, component discounts (like Eager Apprentice's −1 energy, minimum 1) apply before whole-cost discounts. With Eager Apprentice out, Sky Splitter can drop all the way to 0 if you apply the Apprentice first — the rulebook uses this exact example.",
+   "cards": [
+    "OGN-084"
+   ],
+   "src": "Core rules 356.4.e"
+  },
+  {
+   "id": "t019",
+   "kind": "rules",
+   "title": "Units enter exhausted",
+   "body": "Units come into play exhausted, so they can't attack the turn you play them — unless something says otherwise. [Accelerate] (1 energy + 1 power of the card's domain) makes a unit enter ready; Bushwhack readies everything you play that turn.",
+   "cards": [
+    "SFD-004"
+   ],
+   "src": "Core rules (units enter the board exhausted), Accelerate"
+  },
+  {
+   "id": "t020",
+   "kind": "combo",
+   "title": "Bushwhack turns a big turn into lethal",
+   "body": "Bushwhack makes friendly units enter ready this turn and gives you a Gold gear token. It has [Hidden], so you can hide it the turn before for 1 power and play it for 0 energy, leaving all your runes for the units you want to swing with.",
+   "cards": [
+    "SFD-004"
+   ],
+   "src": "Card text + Core rules 811"
+  },
+  {
+   "id": "t021",
+   "kind": "rune",
+   "title": "Coalesced Energy: best early",
+   "body": "At the end of your turn Coalesced Energy recycles all your runes, then channels 4 exhausted. With fewer than 4 runes out it's pure ramp; with more than 4 it shrinks you — play it early or when your runes are low.",
+   "cards": [
+    "RAD-016"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t022",
+   "kind": "combo",
+   "title": "Aphelios gets three bonuses a turn",
+   "body": "Each time you attach Equipment to Aphelios, Exalted you pick a different mode that turn: ready 2 runes, channel 1 rune, or buff a unit. Two equips can mean ready 2 runes (to pay for the second equip) plus a free extra rune.",
+   "cards": [
+    "SFD-049"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t023",
+   "kind": "cheat",
+   "title": "Baited Hook upgrades a unit",
+   "body": "Baited Hook (1 energy + 1 Order, exhaust) kills a friendly unit, then lets you play a unit from your top 5 with up to 1 more Might, ignoring its cost. Sacrifice a spent 2-might unit to hit a 3-might threat for free.",
+   "cards": [
+    "OGN-242"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t024",
+   "kind": "cheat",
+   "title": "Dazzling Aurora: a free unit every turn",
+   "body": "Dazzling Aurora is expensive at 9, but at the end of each of your turns it reveals cards until a unit and plays it ignoring its cost. Run it in decks heavy on big units and it pays back in two turns.",
+   "cards": [
+    "OGN-160"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t025",
+   "kind": "combo",
+   "title": "Death from Below comes back",
+   "body": "Death from Below kills a unit at a battlefield; if that unit had 3 might or less you may play it again from your trash for 1 power. Aim it at small threats first to get two kills from one card.",
+   "cards": [
+    "UNL-186"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t026",
+   "kind": "play",
+   "title": "Flow cards are two cards in one",
+   "body": "[Flow] lets you play a card again from your trash for its Flow cost, then banish it. Dredge Up draws 1 for 2 energy — and again later for 2 from the trash. Count Flow cards as card advantage when building.",
+   "cards": [
+    "VEN-049"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t027",
+   "kind": "rules",
+   "title": "Tank and Backline decide who dies",
+   "body": "Combat damage must go to [Tank] units first and to [Backline] units last. Protect a key unit by pairing it with a Tank, or give your best attacker Backline so blockers can't pick it off.",
+   "cards": [],
+   "src": "Keyword reminder text"
+  },
+  {
+   "id": "t028",
+   "kind": "rules",
+   "title": "Deflect taxes their removal",
+   "body": "[Deflect] makes opponents pay a rune of any color to choose your unit with a spell or ability. Against removal-heavy decks, that extra rune often breaks their turn's math.",
+   "cards": [],
+   "src": "Keyword reminder text"
+  },
+  {
+   "id": "t029",
+   "kind": "rules",
+   "title": "Recycling isn't shuffling",
+   "body": "Recycled cards go to the bottom of their deck — main deck cards to the main deck, runes to the Rune Deck. [Predict] and [Vision] let you push a dead top card to the bottom so you draw something better next.",
+   "cards": [],
+   "src": "Core rules 417"
+  },
+  {
+   "id": "t030",
+   "kind": "rules",
+   "title": "Temporary units die before you score",
+   "body": "[Temporary] units are killed at the start of their controller's Beginning Phase, before scoring. Don't count on a Temporary unit to hold a battlefield for points next turn.",
+   "cards": [],
+   "src": "Keyword reminder text"
+  },
+  {
+   "id": "t031",
+   "kind": "play",
+   "title": "Drag Under is cheaper from anywhere but your hand",
+   "body": "Drag Under (kill a unit at a battlefield) costs 2 energy less when played from anywhere other than your hand. Watch for effects that let you play cards from your trash or the top of your deck — that's a 3-energy kill.",
+   "cards": [
+    "SFD-164"
+   ],
+   "src": "Card text"
+  },
+  {
+   "id": "t032",
+   "kind": "deck",
+   "title": "Weaponmaster saves a rune",
+   "body": "[Weaponmaster] units can equip one of your Equipment when played for a rune less — even moving it off another unit. Equipment-heavy decks should count Weaponmaster units as extra rune economy.",
+   "cards": [],
+   "src": "Keyword reminder text"
+  }
+ ]
+}
