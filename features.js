@@ -445,6 +445,7 @@ async function featuresReady() {
   try { if (!D.rb) await loadDecks(); } catch {}
   loadGlossary();
   if (!EVS.news) { try { EVS.news = await (await fetch('data/news.json')).json(); } catch {} }
+  checkShareLink();
   updateBell(); notifyNew();
   if (!S.prefs.tourDone && !Object.keys(S.inv.items).length) setTimeout(() => showTour(0), 800);
 }
@@ -883,6 +884,8 @@ const CF_GROUPS = [
     ['up', 'Up this week', (it) => it.pc != null && it.pc > 0], ['down', 'Down this week', (it) => it.pc != null && it.pc < 0],
     ['dupes', 'Duplicates (2+)', (it, r) => r.e.qty >= 2], ['playset', 'Playset (3+)', (it, r) => r.e.qty >= 3], ['single', 'Only one copy', (it, r) => r.e.qty === 1],
     ['new', 'Added in last 7 days', (it, r) => Date.now() - (r.e.added || 0) < 7 * 864e5],
+    ['paid', 'Purchase price set', (it, r) => r.e.cost != null], ['profit', 'In profit', (it, r) => r.e.cost != null && it.m != null && it.m > r.e.cost],
+    ['loss', 'At a loss', (it, r) => r.e.cost != null && it.m != null && it.m < r.e.cost], ['graded', 'Graded', (it, r) => !!r.e.grader], ['played', 'Not Near Mint', (it, r) => !!r.e.cond && r.e.cond !== 'NM'],
   ] },
   { id: 'r', title: 'Rarity', chips: ['Common', 'Uncommon', 'Rare', 'Epic', 'Showcase', 'Promo'].map((x) => [x, x, (it) => it.r === x]) },
   { id: 'd', title: 'Domain', needsInfo: true, chips: ['Fury', 'Calm', 'Mind', 'Body', 'Chaos', 'Order', 'Colorless'].map((x) => [x, x, (it) => { const c = cardInfo(it.n); const d = (c && c.d) || []; return x === 'Colorless' ? c && !d.filter((y) => y !== 'Colorless').length : d.includes(x); }]) },
@@ -1049,3 +1052,191 @@ function renderDeckTest() {
   const nw = $('#dt-new'); if (nw) nw.onclick = () => { dtNewHand(); re(); };
   const al = $('#dt-all'); if (al) al.onclick = () => { DT.all = !DT.all; re(); };
 }
+
+/* ---------------------------------------------------------------- trade helper */
+const TR_KEY = 'rbt.trade.v1';
+const TR = Object.assign({ give: [], get: [] }, loadJSON(TR_KEY, {}));
+const saveTR = () => { try { localStorage.setItem(TR_KEY, JSON.stringify(TR)); } catch {} };
+function trSide(side) { return side === 'give' ? TR.give : TR.get; }
+function trTotal(side) { return trSide(side).reduce((t, x) => t + x.q * ((S.byKey.get(x.k) || {}).m || 0), 0); }
+function openTrade() { pushSheet(renderTrade); }
+function renderTrade() {
+  const g = trTotal('give'), r = trTotal('get'), diff = r - g, base = Math.max(g, r, 0.01), pct = diff / base;
+  const fair = Math.abs(pct) <= 0.05;
+  const meter = Math.max(-1, Math.min(1, pct / 0.3));
+  const row = (side) => (x, i) => { const it = S.byKey.get(x.k); if (!it) return ''; const own = S.inv.items[x.k]?.qty || 0;
+    return `<li>${img(it.img)}<span class="nm">${esc(it.n)}${variantTags(it)}<small>${money(it.m)} each${side === 'give' ? ` · you own ${own}` : own ? ` · you own ${own}` : ''}</small></span>
+      <span class="mstep"><button data-trq="${side}|${i}|-1">−</button><b>${x.q}</b><button data-trq="${side}|${i}|1">+</button></span></li>`; };
+  $('#sheet-content').innerHTML = `<div class="detail trade"><h2>Trade</h2>
+    <div class="tr-meter ${fair ? 'fair' : diff > 0 ? 'up' : 'down'}"><div class="tr-bar"><i style="left:${50 + meter * 50}%"></i></div>
+      <div class="tr-sum"><span>You give <b>${money(g)}</b></span><span>You get <b>${money(r)}</b></span></div>
+      <div class="tr-verdict">${!g && !r ? 'Add cards to both sides' : fair ? 'Fair trade (within 5%)' : diff > 0 ? `You come out ${money(diff)} ahead (${Math.round(pct * 100)}%)` : `You give ${money(-diff)} more (${Math.round(-pct * 100)}%)`}</div></div>
+    ${['give', 'get'].map((side) => `<div class="dsec">${side === 'give' ? 'I give' : 'I get'} (${trSide(side).reduce((t, x) => t + x.q, 0)})</div>
+      <input type="search" class="tr-q" data-trside="${side}" placeholder="${side === 'give' ? 'Search your cards…' : 'Search any card…'}" autocomplete="off">
+      <ul class="dl tr-res" id="tr-res-${side}"></ul>
+      <ul class="dl tr-list">${trSide(side).map(row(side)).join('') || '<li class="sub">Nothing yet</li>'}</ul>`).join('')}
+    <div class="row" style="gap:8px;margin-top:14px"><button class="primary" id="tr-done" style="flex:1" ${TR.give.length || TR.get.length ? '' : 'disabled'}>Complete trade</button><button class="ghost" id="tr-clear">Clear</button></div>
+    <p class="sub">Prices are TCGplayer market. Completing the trade takes the cards you give out of "${esc(colName())}" and adds the cards you get (a backup is saved first).</p></div>`;
+  const re = () => renderTrade();
+  $$('#sheet-content [data-trq]').forEach((b) => b.onclick = () => { const [side, i, d] = b.dataset.trq.split('|'); const l = trSide(side), x = l[+i]; x.q += +d; if (x.q <= 0) l.splice(+i, 1); saveTR(); re(); });
+  $$('#sheet-content .tr-q').forEach((inp) => inp.oninput = () => {
+    const side = inp.dataset.trside, q = normName(inp.value), out = $('#tr-res-' + side);
+    if (q.length < 2) { out.innerHTML = ''; return; }
+    let pool = side === 'give' ? Object.keys(S.inv.items).map((k) => S.byKey.get(k)).filter(Boolean) : S.cards.items.filter((i) => !i.sealed);
+    pool = pool.filter((it) => normName(it.n).includes(q)).sort((a, b) => (b.m || 0) - (a.m || 0)).slice(0, 12);
+    out.innerHTML = pool.map((it) => `<li data-tradd="${side}|${esc(it.k)}">${img(it.img)}<span class="nm">${esc(it.n)}${variantTags(it)}<small>${esc(setAbbr(it.g))} · ${esc(it.num || '')}${S.inv.items[it.k] ? ` · own ${S.inv.items[it.k].qty}` : ''}</small></span><span class="st"><b>${money(it.m)}</b></span></li>`).join('') || '<li class="sub">No match</li>';
+    out.querySelectorAll('[data-tradd]').forEach((li) => li.onclick = () => { const v = li.dataset.tradd, cut = v.indexOf('|'), sd = v.slice(0, cut), k = v.slice(cut + 1); const l = trSide(sd), x = l.find((y) => y.k === k); if (x) x.q++; else l.push({ k, q: 1 }); saveTR(); re(); });
+  });
+  $('#tr-clear').onclick = () => { TR.give = []; TR.get = []; saveTR(); re(); };
+  $('#tr-done').onclick = async () => {
+    const short = TR.give.filter((x) => (S.inv.items[x.k]?.qty || 0) < x.q);
+    if (!(await confirmBox(`Complete this trade?${short.length ? ` You don't own enough of ${short.length} card${short.length === 1 ? '' : 's'} you're giving — those will just go to zero.` : ''}`))) return;
+    try { await takeSnapshot('before trade'); } catch {}
+    for (const x of TR.give) invBump(x.k, -Math.min(x.q, S.inv.items[x.k]?.qty || 0));
+    for (const x of TR.get) invBump(x.k, x.q);
+    const log = loadJSON('rbt.trades.v1', []); log.push({ t: Date.now(), give: TR.give, get: TR.get, g: trTotal('give'), r: trTotal('get') }); try { localStorage.setItem('rbt.trades.v1', JSON.stringify(log.slice(-100))); } catch {}
+    TR.give = []; TR.get = []; saveTR(); closeSheet(); if (S.view === 'collection') renderCollection(); toast('Trade done — collection updated');
+  };
+}
+
+/* ---------------------------------------------------------------- shareable links (trade binder, wishlist, a filtered view) */
+// Everything travels inside the link itself (compressed), so friends can open it without an account.
+async function packShare(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let out = bytes, z = 0;
+  if (window.CompressionStream) { try { out = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); z = 1; } catch { out = bytes; } }
+  let bin = ''; for (const b of out) bin += String.fromCharCode(b);
+  return z + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function unpackShare(s) {
+  const z = s[0] === '1', b64 = s.slice(1).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64), bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  const raw = z ? new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()) : bytes;
+  return JSON.parse(new TextDecoder().decode(raw));
+}
+const shareItems = (entries) => entries.map(([k, q]) => [k, q]);
+function openShare() { pushSheet(renderShare); }
+function renderShare() {
+  const own = Object.entries(S.inv.items);
+  const extras = own.map(([k, e]) => { const it = S.byKey.get(k); return it && !it.sealed && e.qty > 3 ? [k, e.qty - 3] : null; }).filter(Boolean);
+  const wish = Object.entries(WL.items || {}).map(([k, w]) => [k, w.qty || 1]);
+  const view = [...document.querySelectorAll('#col-list li.item[data-k]')].map((li) => li.dataset.k).filter((k) => S.inv.items[k]).map((k) => [k, S.inv.items[k].qty]);
+  const opts = [['extras', 'My trade binder', `Copies beyond a playset (3) — ${extras.reduce((t, x) => t + x[1], 0)} cards`, extras],
+    ['wish', 'My wishlist', `${wish.length} cards you're looking for`, wish],
+    ['view', 'What I\'m looking at', `The ${view.length} cards in the current list (with your filters and search)`, view]];
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>Share a list</h2><p class="sub">Makes a link anyone can open — prices included, no account needed. Nothing is uploaded; the list travels inside the link.</p>
+    <ul class="dl shareopts">${opts.map(([id, t, d, l]) => `<li><span class="nm">${t}<small>${d}</small></span><span class="st"><button class="primary sm" data-share="${id}" ${l.length ? '' : 'disabled'}>Share</button></span></li>`).join('')}</ul></div>`;
+  $$('#sheet-content [data-share]').forEach((b) => b.onclick = async () => {
+    const o = opts.find((x) => x[0] === b.dataset.share);
+    const code = await packShare({ v: 1, t: o[0] === 'wish' ? 'wish' : 'have', n: o[1], d: Date.now(), i: shareItems(o[3]) });
+    const url = location.origin + location.pathname + '#share=' + code;
+    if (navigator.share) { try { await navigator.share({ title: o[1] + ' — Riftbound', url }); return; } catch {} }
+    try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { prompt('Copy this link', url); }
+  });
+}
+async function checkShareLink() {
+  const m = location.hash.match(/^#share=(.+)$/); if (!m) return;
+  let data; try { data = await unpackShare(m[1]); } catch { toast("That share link couldn't be read"); return; }
+  history.replaceState(null, '', location.pathname + location.search);
+  pushSheet(() => renderShared(data));
+}
+function renderShared(data) {
+  const rows = (data.i || []).map(([k, q]) => ({ it: S.byKey.get(k), k, q })).filter((x) => x.it);
+  const tot = rows.reduce((t, x) => t + x.q * (x.it.m || 0), 0);
+  const wishSide = data.t === 'wish';
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>${esc(data.n || 'Shared list')}</h2><div class="sub">Shared ${data.d ? new Date(data.d).toLocaleDateString() : ''} · ${rows.reduce((t, x) => t + x.q, 0)} cards · about ${money(tot)} today</div>
+    <div class="row" style="gap:8px;margin:12px 0"><button class="primary" id="sh-trade" style="flex:1">${wishSide ? 'Offer these in a trade' : 'Start a trade with these'}</button><button class="ghost" id="sh-wish">${wishSide ? '' : 'Add all to my wishlist'}</button></div>
+    <ul class="dl prints">${rows.sort((a, b) => (b.it.m || 0) - (a.it.m || 0)).map((x) => `<li data-open="${esc(x.k)}">${img(x.it.img)}<span class="nm">${x.q}× ${esc(x.it.n)}${variantTags(x.it)}<small>${esc(setAbbr(x.it.g))} · ${esc(x.it.num || '')}${S.inv.items[x.k] ? ` · you own ${S.inv.items[x.k].qty}` : ''}</small></span><span class="st"><b>${money(x.it.m)}</b></span></li>`).join('')}</ul></div>`;
+  if (wishSide) $('#sh-wish').remove();
+  $('#sh-trade').onclick = () => { const side = wishSide ? TR.give : TR.get; for (const x of rows) { const y = side.find((z) => z.k === x.k); if (y) y.q = Math.max(y.q, x.q); else side.push({ k: x.k, q: wishSide ? Math.min(x.q, S.inv.items[x.k]?.qty || 0) || 1 : x.q }); } saveTR(); openTrade(); };
+  const w = $('#sh-wish'); if (w) w.onclick = () => { for (const x of rows) if (!WL.items[x.k]) WL.items[x.k] = { qty: x.q, max: null, added: Date.now() }; saveWL(); toast(`${rows.length} cards added to your wishlist`); };
+  $$('#sheet-content [data-open]').forEach((li) => li.onclick = () => openDetail(li.dataset.open));
+}
+(function wireTools() {
+  const t = $('#t-trade'); if (t) t.onclick = openTrade;
+  const s = $('#t-share'); if (s) s.onclick = openShare;
+  window.addEventListener('hashchange', checkShareLink);
+})();
+
+/* ---------------------------------------------------------------- holo tilt on card pages */
+// Foils and special printings get a moving shine; any card tilts with your finger, or with the phone (after you allow motion).
+function holoKind(it) { return it.s !== 'Normal' || it.r === 'Showcase' || /\(/.test(it.n) ? (/(overnumbered|signature|serial)/i.test(it.n) ? 'rainbow' : it.r === 'Showcase' || /alternate/i.test(it.n) ? 'prism' : 'foil') : ''; }
+function holoWire(it) {
+  const img = $('#sheet .detail-img'); if (!img || img.closest('.holo')) return;
+  const wrap = document.createElement('div'); wrap.className = 'holo ' + holoKind(it); img.replaceWith(wrap); wrap.appendChild(img);
+  const shine = document.createElement('i'); shine.className = 'holo-shine'; wrap.appendChild(shine);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const set = (x, y) => { wrap.style.setProperty('--rx', ((0.5 - y) * 18).toFixed(2) + 'deg'); wrap.style.setProperty('--ry', ((x - 0.5) * 22).toFixed(2) + 'deg'); wrap.style.setProperty('--mx', (x * 100).toFixed(1) + '%'); wrap.style.setProperty('--my', (y * 100).toFixed(1) + '%'); };
+  const rest = () => { wrap.classList.remove('live'); set(0.5, 0.5); };
+  wrap.addEventListener('pointermove', (e) => { const r = wrap.getBoundingClientRect(); wrap.classList.add('live'); set((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); });
+  wrap.addEventListener('pointerleave', rest); wrap.addEventListener('pointerup', () => setTimeout(rest, 600));
+  const onTilt = (e) => { if (!document.body.contains(wrap)) { removeEventListener('deviceorientation', onTilt); return; } if (e.gamma == null) return; wrap.classList.add('live'); set(Math.max(0, Math.min(1, 0.5 + e.gamma / 50)), Math.max(0, Math.min(1, 0.5 + (e.beta - 45) / 60))); };
+  if (S.prefs.tilt) addEventListener('deviceorientation', onTilt);
+  else if (window.DeviceOrientationEvent && holoKind(it)) {
+    const b = document.createElement('button'); b.className = 'ghost sm holo-btn'; b.textContent = '✨ Tilt with my phone'; wrap.after(b);
+    b.onclick = async () => { try { if (DeviceOrientationEvent.requestPermission) { const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') { toast('Motion access not allowed'); return; } } S.prefs.tilt = true; savePrefs(); addEventListener('deviceorientation', onTilt); b.remove(); toast('Tilt your phone to catch the light'); } catch { toast('Motion not available here'); } };
+  }
+  rest();
+}
+
+/* ---------------------------------------------------------------- milestones */
+function allOwned() { const out = []; for (const c of colList()) for (const [k, e] of Object.entries(colItems(c.id))) { const it = S.byKey.get(k); if (it && !it.sealed) out.push({ k, it, e }); } return out; }
+function milestones() {
+  const own = allOwned(), cards = own.reduce((t, x) => t + x.e.qty, 0), value = own.reduce((t, x) => t + x.e.qty * (x.it.m || 0), 0);
+  const has = (fn) => own.some(fn), out = [];
+  const step = (id, icon, title, cur, goal, unit = '') => out.push({ id, icon, title, done: cur >= goal, prog: Math.min(1, cur / goal), note: cur >= goal ? '' : `${unit === '$' ? money(cur) : Math.floor(cur).toLocaleString()} / ${unit === '$' ? money(goal) : goal.toLocaleString()}` });
+  for (const n of [1, 100, 500, 1000, 2500, 5000]) step('cards' + n, '🃏', n === 1 ? 'First card' : `${n.toLocaleString()} cards`, cards, n);
+  for (const v of [100, 500, 1000, 5000, 10000]) step('value' + v, '💰', `Collection worth ${money(v).replace('.00', '')}`, value, v, '$');
+  const first = [['foil', '✨', 'First foil', (x) => x.it.s !== 'Normal'], ['alt', '🎨', 'First alternate art', (x) => /alternate art/i.test(x.it.n)], ['over', '🌌', 'First overnumbered', (x) => /overnumbered/i.test(x.it.n)],
+    ['sig', '✍️', 'First signature card', (x) => /signature/i.test(x.it.n)], ['serial', '🔢', 'First serialized card', (x) => /serial/i.test(x.it.n)], ['promo', '🎟️', 'First promo', (x) => !!promoKind(x.it)],
+    ['graded', '🏆', 'First graded card', (x) => !!x.e.grader], ['lang', '🌏', 'First card in another language', (x) => langOf(x.k) !== 'en'], ['hundred', '💎', 'A single card worth $100+', (x) => (x.it.m || 0) >= 100]];
+  for (const [id, icon, title, fn] of first) out.push({ id, icon, title, done: has(fn), prog: has(fn) ? 1 : 0, note: '' });
+  // set completion: one of every card in each main set (any finish or version counts)
+  const bySet = new Map(); for (const items of S.byPid.values()) { const f = items[0]; if (f.sealed || /\(/.test(f.n) || PROMO_GROUPS[f.g]) continue; if (!bySet.has(f.g)) bySet.set(f.g, new Set()); bySet.get(f.g).add(printBase(f.n)); }
+  const ownNames = new Map(); for (const x of own) { if (!ownNames.has(x.it.g)) ownNames.set(x.it.g, new Set()); ownNames.get(x.it.g).add(printBase(x.it.n)); }
+  for (const [g, names] of bySet) { if (names.size < 40) continue; const got = [...names].filter((n) => ownNames.get(g)?.has(n)).length; for (const pct of [50, 100]) step(`set${g}-${pct}`, pct === 100 ? '👑' : '📚', `${setName(g)} ${pct === 100 ? 'complete' : 'half done'}`, got, Math.ceil(names.size * pct / 100)); }
+  const trades = loadJSON('rbt.trades.v1', []).length; step('trade1', '🤝', 'First trade', trades, 1);
+  if (MD.decks.length) step('deck1', '🛡️', 'Built a deck', MD.decks.length, 1);
+  return out;
+}
+function checkMilestones(quiet) {
+  const ms = milestones(), seen = new Set(S.prefs.badges || []), fresh = ms.filter((m) => m.done && !seen.has(m.id));
+  if (!fresh.length) return;
+  S.prefs.badges = [...seen, ...fresh.map((m) => m.id)]; savePrefs();
+  if (!quiet && seen.size) toast(`${fresh[0].icon} Milestone: <b>${esc(fresh[0].title)}</b>${fresh.length > 1 ? ` (+${fresh.length - 1} more)` : ''}`, 3500);
+}
+function renderMilestones() {
+  const ms = milestones(), done = ms.filter((m) => m.done);
+  const next = ms.filter((m) => !m.done).sort((a, b) => b.prog - a.prog);
+  const tile = (m) => `<div class="ms ${m.done ? 'done' : ''}"><span class="ms-i">${m.icon}</span><b>${esc(m.title)}</b>${m.done ? '' : `<div class="bar"><i style="width:${Math.round(m.prog * 100)}%"></i></div><small>${esc(m.note)}</small>`}</div>`;
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>Milestones</h2><div class="sub">${done.length} of ${ms.length} earned</div>
+    ${next.length ? `<div class="dsec">Closest next</div><div class="msgrid">${next.slice(0, 6).map(tile).join('')}</div>` : ''}
+    <div class="dsec">Earned</div><div class="msgrid">${done.map(tile).join('') || '<p class="sub">Add some cards to start.</p>'}</div>
+    ${next.length > 6 ? `<div class="dsec">Still to go</div><div class="msgrid">${next.slice(6).map(tile).join('')}</div>` : ''}</div>`;
+}
+
+/* ---------------------------------------------------------------- Today: what changed since you last looked */
+function renderToday() {
+  const el = $('#today'); if (!el) return;
+  const today = new Date().toISOString().slice(0, 10);
+  if (S.prefs.todayHide === today || (S.prefs.colSet && S.prefs.colSet !== 'all') || !Object.keys(S.inv.items).length) { el.classList.add('hidden'); return; }
+  const rows = ownedRows().filter((r) => r.dval);
+  const up = rows.slice().sort((a, b) => b.dval - a.dval).filter((r) => r.dval > 0).slice(0, 2);
+  const down = rows.slice().sort((a, b) => a.dval - b.dval).filter((r) => r.dval < 0).slice(0, 1);
+  const items = [];
+  for (const r of up.concat(down)) items.push(`<button class="td" data-tdk="${esc(r.it.k)}">${img(r.it.img)}<span><b>${esc(r.it.n.split(',')[0])}</b><small class="${r.dval > 0 ? 'up' : 'down'}">${r.dval > 0 ? '▲' : '▼'} ${money(Math.abs(r.dval))} this week</small></span></button>`);
+  const news = (EVS.news && EVS.news.headlines || []).find((h) => (Date.now() - new Date(h.date || 0)) < 3 * 864e5);
+  if (news) items.push(`<a class="td" href="${esc(news.url)}" target="_blank" rel="noopener"><span class="ti">📰</span><span><b>${esc(news.title)}</b><small>News · ${esc(fmtDate(news.date))}</small></span></a>`);
+  const pv = typeof previewCards === 'function' ? previewCards() : []; if (pv.length) items.push(`<button class="td" data-tdgo="previews"><span class="ti">👁️</span><span><b>${pv.length} newly revealed card${pv.length === 1 ? '' : 's'}</b><small>See the previews</small></span></button>`);
+  const nextEv = (EV.events || []).filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
+  if (nextEv) items.push(`<button class="td" data-tdgo="events"><span class="ti">🏆</span><span><b>${esc(nextEv.name || 'Event')}</b><small>${nextEv.date === today ? 'Today' : esc(fmtDate(nextEv.date))}</small></span></button>`);
+  const ms = milestones().filter((m) => !m.done && m.prog >= 0.6).sort((a, b) => b.prog - a.prog)[0];
+  if (ms) items.push(`<button class="td" data-tdgo="badges"><span class="ti">${ms.icon}</span><span><b>${esc(ms.title)}</b><small>${Math.round(ms.prog * 100)}% there</small></span></button>`);
+  if (!items.length) { el.classList.add('hidden'); return; }
+  el.innerHTML = `<div class="td-h"><b>Today</b><button class="linkbtn" id="td-hide">Hide for today</button></div><div class="td-row">${items.join('')}</div>`;
+  el.classList.remove('hidden');
+  $('#td-hide').onclick = () => { S.prefs.todayHide = today; savePrefs(); el.classList.add('hidden'); };
+  el.querySelectorAll('[data-tdk]').forEach((b) => b.onclick = () => openDetail(b.dataset.tdk));
+  el.querySelectorAll('[data-tdgo]').forEach((b) => b.onclick = () => { const g = b.dataset.tdgo; if (g === 'events') show('events'); else if (g === 'badges') pushSheet(renderMilestones); else if (g === 'previews' && typeof renderPreviews === 'function') pushSheet(renderPreviews); });
+}
+(function wireMs() { const b = $('#t-badges'); if (b) b.onclick = () => pushSheet(renderMilestones); })();

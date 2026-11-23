@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v50';
+const SHELL_VERSION = 'v51';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -95,6 +95,7 @@ function confirmBox(text) {
 function variantTags(it) {
   let t = it.lang && it.lang !== 'en' ? `<span class="tag lang" title="${esc(langName(it.lang))}">${esc(langTag(it.lang))}</span>` : '';
   const pk = promoKind(it); if (pk) t += `<span class="tag promo" title="${esc(printLabel(it))}">${esc(pk)}</span>`;
+  const en = S.inv && S.inv.items[it.k]; if (en && en.grader) t += `<span class="tag graded">${esc(en.grader)}${en.grade != null ? ' ' + en.grade : ''}</span>`; else if (en && en.cond && en.cond !== 'NM') t += `<span class="tag cond">${esc(en.cond)}</span>`;
   if (it.s && it.s !== 'Normal') t += `<span class="tag foil">${esc(it.s)}</span>`;
   return t + banTag(it.n);
 }
@@ -301,6 +302,8 @@ function sumAllLine(cur) {
     html += `<div>Whole ${many ? esc(colName()) : 'collection'} <b>${money(v)}</b> · ${n.toLocaleString()} cards <button class="linkbtn" id="sum-allbtn">Show all</button></div>`; }
   if (many) { let v = 0, n = 0; for (const c of colList()) for (const [k, e] of Object.entries(colItems(c.id))) { v += (e.qty || 0) * ((S.byKey.get(k) || {}).m || 0); n += e.qty || 0; }
     html += `<div>All ${colList().length} collections <b>${money(v)}</b> · ${n.toLocaleString()} cards</div>`; }
+  { let cost = 0, val = 0, n = 0; for (const r of ownedRows()) if (r.e.cost != null) { cost += r.e.cost * r.e.qty; val += r.value; n += r.e.qty; }
+    if (n) { const pl = val - cost; html += `<div>Paid <b>${money(cost)}</b> for ${n.toLocaleString()} cards · now ${money(val)} · <span class="${pl >= 0 ? 'up' : 'down'}">${pl >= 0 ? '+' : '−'}${money(Math.abs(pl))} (${cost ? (pl >= 0 ? '+' : '') + Math.round(pl / cost * 100) + '%' : '—'})</span></div>`; } }
   el.innerHTML = html; el.classList.toggle('hidden', !html);
   const b = $('#sum-allbtn'); if (b) b.onclick = () => { S.prefs.colSet = 'all'; savePrefs(); renderCollection(); };
 }
@@ -339,6 +342,7 @@ function renderCollection() {
   $('#sum-value').textContent = money(total);
   $('#sum-count').textContent = count;
   sumAllLine(cur);
+  if (typeof renderToday === 'function') { renderToday(); checkMilestones(); }
   const d = total - totalPrev;
   $('#sum-change').innerHTML = rows.length ? chg(d, totalPrev ? (d / totalPrev) * 100 : null) + ' <span class="flat">this week</span>' : '';
 
@@ -662,16 +666,23 @@ function renderDetail(k) {
       <input id="cost" type="number" inputmode="decimal" step="0.01" min="0" style="width:110px" value="${owned && owned.cost != null ? owned.cost : ''}" ${owned ? '' : 'disabled'}>
       <span id="pl" class="sub"></span>
     </div>
+    <div class="row condrow" style="align-items:center;gap:8px">
+      <label class="sub" for="cond">Condition</label>
+      <select id="cond" ${owned ? '' : 'disabled'}>${['', 'NM', 'LP', 'MP', 'HP', 'DMG'].map((c) => `<option value="${c}" ${(owned && owned.cond || '') === c ? 'selected' : ''}>${c ? { NM: 'Near Mint', LP: 'Lightly Played', MP: 'Moderately Played', HP: 'Heavily Played', DMG: 'Damaged' }[c] : '—'}</option>`).join('')}</select>
+      <select id="grader" aria-label="Grading company" ${owned ? '' : 'disabled'}>${['', 'PSA', 'BGS', 'CGC', 'TAG', 'SGC'].map((c) => `<option ${(owned && owned.grader || '') === c ? 'selected' : ''} value="${c}">${c || 'Ungraded'}</option>`).join('')}</select>
+      <input id="grade" type="number" inputmode="decimal" step="0.5" min="1" max="10" placeholder="Grade" style="width:74px" value="${owned && owned.grade != null ? owned.grade : ''}" ${owned && owned.grader ? '' : 'disabled'}>
+    </div>
     <div class="card-box wishbox" id="wishbox"></div>
     <button class="ghost" id="d-todeck" style="width:100%;margin:-4px 0 12px">＋ Add to a deck</button>
     ${siblings.length ? `<div class="row">${siblings.map((v) => `<button class="ghost" data-open="${esc(withLang(v.k, it.lang))}">${esc(v.s)} · ${money(v.m)}</button>`).join('')}</div>` : ''}
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
   $('#sheet-content').innerHTML = html;
+  if (typeof holoWire === 'function') holoWire(it);
   const upd = () => {
     const e = S.inv.items[k];
     $('#qty').textContent = e ? e.qty : 0;
-    $('#cost').disabled = !e;
+    $('#cost').disabled = !e; $('#cond').disabled = !e; $('#grader').disabled = !e;
     if (e && e.cost != null && it.m != null) {
       const pl = (it.m - e.cost) * e.qty;
       $('#pl').innerHTML = 'Profit ' + chg(pl, e.cost ? ((it.m - e.cost) / e.cost) * 100 : null);
@@ -684,6 +695,8 @@ function renderDetail(k) {
     if (cur + +b.dataset.q <= 0 && cur > 0) { setQty(k, 0); } else if (cur + +b.dataset.q > 0) { S.inv.items[k].qty = cur + +b.dataset.q; saveInv(); }
     upd(); refreshCurrent();
   });
+  const saveMeta = () => { const en = S.inv.items[k]; if (!en) return; en.cond = $('#cond').value || undefined; en.grader = $('#grader').value || undefined; const g = parseFloat($('#grade').value); en.grade = en.grader && !isNaN(g) ? g : undefined; $('#grade').disabled = !en.grader; saveInv(); if (S.view === 'collection') renderCollection(); };
+  $('#cond').onchange = saveMeta; $('#grader').onchange = saveMeta; $('#grade').onchange = saveMeta;
   $('#cost').oninput = (e) => { const en = S.inv.items[k]; if (!en) return; const v = parseFloat(e.target.value); en.cost = isNaN(v) ? null : v; saveInv(); upd(); };
   $$('#sheet [data-open]').forEach((b) => b.onclick = () => { SHEET[SHEET.length - 1] = () => renderDetail(b.dataset.open); renderDetail(b.dataset.open); });
   $$('#sheet [data-mv1]').forEach((b) => b.onclick = (e) => {
@@ -2613,11 +2626,32 @@ function sideBg(side) {
     strip.classList.remove('hidden');
   } else { strip.innerHTML = ''; strip.classList.add('hidden'); }
 }
+/* ---- round timer (tournament mode): tap to start/pause, press and hold to reset or change the length */
+function tmLeft() { const t = SC.tm || (SC.tm = { len: 50, start: null, left: 50 * 60 }); return t.start ? Math.max(0, t.left - (Date.now() - t.start) / 1000) : t.left; }
+function tmDraw() {
+  const b = $('#sc-timer'); if (!b) return; const t = SC.tm || (SC.tm = { len: 50, start: null, left: 50 * 60 }), left = tmLeft();
+  const m = Math.floor(left / 60), sec = Math.floor(left % 60);
+  b.textContent = `${t.start ? '⏸' : '⏱'} ${m}:${String(sec).padStart(2, '0')}`;
+  b.classList.toggle('run', !!t.start); b.classList.toggle('low', left <= 300); b.classList.toggle('out', left <= 0);
+  if (t.start && left <= 0 && !t.rang) { t.rang = true; t.left = 0; t.start = null; saveScore(); if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 600]); toast('Time in round — finish the current turn, then follow your event\'s end-of-round rules', 6000); }
+}
+setInterval(() => { if (S.view === 'score' && SC.tm && SC.tm.start) tmDraw(); }, 500);
+function wireTimer() {
+  const b = $('#sc-timer'); if (!b || b._w) return; b._w = true;
+  let hold = null, long = false;
+  b.addEventListener('pointerdown', () => { long = false; hold = setTimeout(async () => { long = true;
+    const pick = prompt(`Round length in minutes (now ${SC.tm.len}). Leave as is and press OK to reset the clock.`, SC.tm.len);
+    if (pick != null) { const n = Math.max(1, Math.min(180, parseInt(pick, 10) || SC.tm.len)); SC.tm = { len: n, start: null, left: n * 60 }; saveScore(); tmDraw(); } }, 650); });
+  const cancel = () => clearTimeout(hold);
+  b.addEventListener('pointerup', cancel); b.addEventListener('pointerleave', cancel);
+  b.addEventListener('click', () => { if (long) return; const t = SC.tm; if (t.start) { t.left = tmLeft(); t.start = null; } else { if (t.left <= 0) { t.left = t.len * 60; t.rang = false; } t.start = Date.now(); } saveScore(); tmDraw(); });
+}
 function renderScore() {
   scoreExtras();
   $('#sc-me').textContent = SC.me; $('#sc-opp').textContent = SC.opp;
   $('#sc-target').textContent = SC.target;
   $('#sc-games').textContent = `Games ${SC.gamesMe}–${SC.gamesOpp}`;
+  wireTimer(); tmDraw();
   $('#sc-oppname').value = SC.oppName;
   $('#sc-flip').checked = SC.flip;
   $('#pl-opp').classList.toggle('flipped', SC.flip);

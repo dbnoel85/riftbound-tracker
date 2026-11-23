@@ -665,3 +665,55 @@ table.dt-odds td[style]{background:linear-gradient(90deg,transparent calc(100% -
 .dt-curve div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:3px}
 .dt-curve i{width:100%;background:linear-gradient(180deg,var(--gold),rgba(241,212,142,.35));border-radius:3px 3px 0 0;min-height:3px}
 .dt-curve b{font-size:12px}.dt-curve small{font-size:11px;color:var(--sub)}
+/* collection tools row */
+.tools{display:flex;gap:8px;margin:8px 0 10px;overflow-x:auto;scrollbar-width:none}
+.tools button{flex:1 0 auto;background:var(--deep);border:1px solid var(--line2);border-radius:18px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap}
+/* trade */
+.tr-meter{border:1px solid var(--line2);border-radius:4px;padding:12px;margin:8px 0;background:rgba(13,18,40,.7)}
+.tr-bar{position:relative;height:10px;border-radius:5px;background:linear-gradient(90deg,var(--ember),#3a4580 42%,#5fe08a 50%,#3a4580 58%,var(--rift))}
+.tr-bar i{position:absolute;top:-5px;width:4px;height:20px;margin-left:-2px;background:#fff;border-radius:2px;box-shadow:0 0 8px #fff}
+.tr-sum{display:flex;justify-content:space-between;margin-top:10px;font-size:13px;color:var(--sub)}.tr-sum b{color:var(--text);font-size:16px}
+.tr-verdict{margin-top:6px;font-weight:700}
+.tr-meter.fair .tr-verdict{color:#5fe08a}.tr-meter.up .tr-verdict{color:var(--rift)}.tr-meter.down .tr-verdict{color:var(--ember)}
+.tr-q{width:100%;margin:4px 0}
+.tr-res li,.tr-list li{display:flex;gap:10px;align-items:center}
+.tr-res li img,.tr-list li img,.tr-res .thumb,.tr-list .thumb{width:34px;height:47px;object-fit:cover;border-radius:3px;flex:none}
+.tr-res .nm,.tr-list .nm{flex:1;min-width:0}
+.tr-res li{cursor:pointer;background:rgba(241,212,142,.05)}
+.tag.graded{background:rgba(241,212,142,.16);color:var(--gold);border:1px solid rgba(241,212,142,.6)}
+.tag.cond{background:rgba(160,170,210,.12);color:var(--sub);border:1px solid var(--line2)}
+.sumall .up{color:#5fe08a;font-weight:700}.sumall .down{color:var(--ember);font-weight:700}
+.condrow select{padding:7px 8px;font-size:13px}
+.sctimer{background:rgba(10,14,30,.6);border:1px solid var(--line2);color:var(--text);border-radius:16px;padding:6px 12px;font-weight:700;font-variant-numeric:tabular-nums;font-size:15px;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.sctimer.run{border-color:var(--rift);color:var(--rift)}
+.sctimer.low{border-color:var(--gold);color:var(--gold)}
+.sctimer.out{border-color:var(--ember);color:#fff;background:var(--ember);animation:tmPulse 1s ease-in-out infinite}
+@keyframes tmPulse{50%{opacity:.6}}
+@media (prefers-reduced-motion:reduce){.sctimer.out{animation:none}}
+/* holo */
+.holo{position:relative;display:block;width:min(78%,340px);margin:0 auto 12px;perspective:900px;--rx:0deg;--ry:0deg;--mx:50%;--my:50%}
+.holo .detail-img{display:block;width:100%;margin:0;border-radius:4.5%/3.3%;transform:rotateX(var(--rx)) rotateY(var(--ry));transition:transform .5s cubic-bezier(.2,.8,.2,1);box-shadow:0 18px 40px rgba(0,0,0,.5)}
+.holo.live .detail-img,.holo.live .holo-shine{transition:transform .06s linear}
+.holo-shine{position:absolute;inset:0;border-radius:4.5%/3.3%;pointer-events:none;transform:rotateX(var(--rx)) rotateY(var(--ry));mix-blend-mode:color-dodge;opacity:0;transition:opacity .3s}
+.holo.live .holo-shine{opacity:1}
+.holo:not(.foil):not(.prism):not(.rainbow) .holo-shine{background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.35),transparent 45%);mix-blend-mode:soft-light}
+.holo.foil .holo-shine{opacity:.55;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.55),transparent 40%),linear-gradient(115deg,transparent 20%,rgba(255,240,200,.35) calc(var(--mx) - 10%),rgba(180,220,255,.35) var(--mx),transparent calc(var(--mx) + 20%))}
+.holo.prism .holo-shine{opacity:.6;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.5),transparent 38%),repeating-linear-gradient(120deg,rgba(255,0,128,.22) calc(var(--mx) - 40%),rgba(255,200,0,.22) calc(var(--mx) - 25%),rgba(0,255,200,.22) calc(var(--mx) - 10%),rgba(80,120,255,.22) calc(var(--mx) + 5%),rgba(255,0,128,.22) calc(var(--mx) + 20%))}
+.holo.rainbow .holo-shine{opacity:.7;background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.6),transparent 35%),conic-gradient(from calc(var(--ry) * 8) at var(--mx) var(--my),#ff3b8d55,#ffd23f55,#3bffb455,#3b8dff55,#c43bff55,#ff3b8d55)}
+.holo-btn{display:block;margin:-4px auto 12px}
+@media (prefers-reduced-motion:reduce){.holo .detail-img,.holo-shine{transform:none!important}}
+/* milestones */
+.msgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ms{border:1px solid var(--line2);border-radius:4px;padding:10px;background:rgba(13,18,40,.6);display:flex;flex-direction:column;gap:4px;opacity:.75}
+.ms.done{opacity:1;border-color:rgba(241,212,142,.6);background:linear-gradient(160deg,rgba(241,212,142,.12),rgba(13,18,40,.6))}
+.ms-i{font-size:24px}.ms b{font-size:13.5px}.ms small{font-size:11.5px;color:var(--sub)}.ms .bar{margin:2px 0 0}
+/* today */
+.today{border:1px solid rgba(241,212,142,.35);border-radius:4px;padding:10px 10px 8px;margin:0 0 4px;background:linear-gradient(135deg,rgba(241,212,142,.08),rgba(69,224,208,.05))}
+.td-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.td-h b{font:400 17px var(--display);color:var(--gold)}.td-h .linkbtn{font-size:12px}
+.td-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.td{flex:none;display:flex;gap:8px;align-items:center;max-width:230px;background:var(--deep);border:1px solid var(--line2);border-radius:4px;padding:6px 10px 6px 6px;color:var(--text);text-align:left;text-decoration:none}
+.td img,.td .thumb{width:30px;height:42px;object-fit:cover;border-radius:3px;flex:none}
+.td .ti{font-size:22px;width:30px;text-align:center;flex:none}
+.td b{display:block;font-size:12.5px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.td small{font-size:11px;color:var(--sub)}.td small.up{color:#5fe08a}.td small.down{color:var(--ember)}
