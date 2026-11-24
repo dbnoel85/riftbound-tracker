@@ -746,3 +746,17 @@ table.dt-odds td[style]{background:linear-gradient(90deg,transparent calc(100% -
 .bset .bsc{color:var(--sub);font-size:13px}
 .bset>summary::after{content:'▾';color:var(--gold);transition:transform .2s}
 .bset:not([open])>summary::after{transform:rotate(-90deg)}
+/* ---- deck finder */
+.fd-pool{list-style:none;margin:6px 0 10px;padding:0;border:1px solid var(--line);border-radius:6px;max-height:280px;overflow:auto}
+.fd-pool button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);color:var(--text);padding:10px 12px;font:inherit}
+.fd-pool small{color:var(--sub);margin-left:6px}
+.fd-picks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px;align-items:center}
+.fd-picks button[data-fdrm]{background:rgba(201,168,92,.14);border:1px solid rgba(201,168,92,.5);color:var(--text);border-radius:14px;padding:5px 10px;font:inherit;font-size:13px}
+.fd-picks b{color:var(--gold);margin-left:2px}
+.fd-hits{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.fd-hits span{font-size:12px;padding:2px 7px;border-radius:10px;border:1px solid var(--line)}
+.fd-hits .ok{color:#7fd6a0;border-color:rgba(127,214,160,.45)}
+.fd-hits .part{color:#e6c46f;border-color:rgba(230,196,111,.45)}
+.fd-hits .no{color:var(--sub);opacity:.75}
+.btnlink{display:inline-flex;align-items:center;text-decoration:none}
+.fd-row .mini{padding:6px 12px;font-size:13px;min-height:0}

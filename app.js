@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v56';
+const SHELL_VERSION = 'v57';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -680,7 +680,7 @@ function renderDetail(k) {
       <input id="grade" type="number" inputmode="decimal" step="0.5" min="1" max="10" placeholder="Grade" style="width:74px" value="${owned && owned.grade != null ? owned.grade : ''}" ${owned && owned.grader ? '' : 'disabled'}>
     </div>
     <div class="card-box wishbox" id="wishbox"></div>
-    <button class="ghost" id="d-todeck" style="width:100%;margin:-4px 0 12px">＋ Add to a deck</button>
+    <div class="row" style="gap:8px;margin:-4px 0 12px"><button class="ghost" id="d-todeck" style="flex:1">＋ Add to a deck</button><button class="ghost" id="d-finddeck" style="flex:1">Decks that play it</button></div>
     ${siblings.length ? `<div class="row">${siblings.map((v) => `<button class="ghost" data-open="${esc(withLang(v.k, it.lang))}">${esc(v.s)} · ${money(v.m)}</button>`).join('')}</div>` : ''}
     ${it.u ? `<p><a href="${esc(it.u)}" target="_blank" rel="noopener">View on TCGplayer ↗</a></p>` : ''}
   </div>`;
@@ -717,6 +717,7 @@ function renderDetail(k) {
   const la = $('#sheet [data-langadd]'); if (la) la.onchange = () => { if (!la.value) return; const nk = withLang(la.dataset.langadd, la.value); SHEET[SHEET.length - 1] = () => renderDetail(nk); renderDetail(nk); };
   renderWishBox(k);
   const td = $('#d-todeck'); if (td) td.onclick = () => openAddToDeck(it.n);
+  const fdb = $('#d-finddeck'); if (fdb) fdb.onclick = () => openDeckFinder(it.n);
   drawChart(it);
   if (typeof fillDetailText === 'function') fillDetailText(it);
 }
@@ -1753,6 +1754,8 @@ async function renderDecks() {
     const post = lastBan && lastBan <= todayISO() ? Math.floor((Date.now() - new Date(lastBan + 'T00:00:00')) / 864e5) : -1;
     $('#dk-info').innerHTML += `<br><span class="banline">Showing only decks with no banned cards. ${post < 0 ? `Stats still come from tournaments before the ${shortDate(lastBan)} bans — once they take effect, the 7-day view shows only post-ban play after a week.` : post < 7 ? `Bans took effect ${post} day${post === 1 ? '' : 's'} ago; the 7-day view will be fully post-ban in ${7 - post} day${7 - post === 1 ? '' : 's'}.` : 'The 7-day view now reflects only post-ban tournaments.'}</span>`;
   }
+  $('#dk-info').innerHTML += '<br><button class="ghost" id="dk-find" style="width:100%;margin-top:8px">Find a deck for cards I want to play</button>';
+  $('#dk-find').onclick = () => openDeckFinder();
   const rows = deckCandidates();
   $('#dk-list').innerHTML = rows.map((a) => deckRowHTML(a)).join('') || `<li class="empty">${S.prefs.legalOnly ? 'No decks here are free of banned cards yet — new lists appear as post-ban tournaments are reported.' : 'Nothing here yet.'}</li>`;
 }
@@ -2012,10 +2015,11 @@ function renderMyDecksList() {
       <div class="meta">You own ${Math.round(an.pct * 100)}% · ${an.costMain > 0 ? money(an.costMain) + ' to finish' : 'ready to play'}</div>
       <div class="bar"><i style="width:${Math.round(an.pct * 100)}%"></i></div></div></li>`;
   }).join('');
-  $('#dk-list').innerHTML = `<li class="row" style="list-style:none;margin-bottom:10px"><button class="primary ghost" id="md-new" style="flex:2;padding:13px">＋ New deck</button><button class="ghost" id="md-import" style="flex:1">Import list</button></li>` +
+  $('#dk-list').innerHTML = `<li class="row" style="list-style:none;margin-bottom:10px"><button class="primary ghost" id="md-new" style="flex:2;padding:13px">＋ New deck</button><button class="ghost" id="md-import" style="flex:1">Import list</button></li><li style="list-style:none;margin:-2px 0 10px"><button class="ghost" id="md-find" style="width:100%">Find a deck for cards I want to play</button></li>` +
     (rows || '<li class="empty">No decks yet. Tap <b>New deck</b> and pick a legend to start.</li>');
   $('#md-new').onclick = () => pushSheet(() => renderNewDeck());
   $('#md-import').onclick = () => pushSheet(renderDeckImport);
+  $('#md-find').onclick = () => openDeckFinder();
 }
 
 /** start a deck from scratch: name it, then pick a legend now or later. withCard = a card id to put in straight away */

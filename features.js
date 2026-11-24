@@ -1416,3 +1416,70 @@ async function fillCardTips(it) {
   box.insertAdjacentHTML('afterend', `<div class="card-box" id="card-tips"><span class="label">Tips with this card</span>${hits.slice(0, 4).map((t) => `<button class="tiprow" data-tip="${esc(t.id)}">${TIP_ICON[t.kind] || '💡'} <b>${esc(t.title)}</b></button>`).join('')}</div>`);
   $$('#card-tips [data-tip]').forEach((b) => b.onclick = () => openTip(TIPS.items.find((x) => x.id === b.dataset.tip)));
 }
+
+/* ---------------------------------------------------------------- deck finder: pick cards you want to play, get decks */
+// Ranks every tournament list (riftbound.gg) by how many of your picked cards it plays, strongest first on ties.
+const FD = { q: '' };
+const fdPicks = () => { const seen = new Set(); return (S.prefs.fdPicks || []).filter((id) => D.rb && D.rb[id] && !seen.has(D.rb[id].n) && seen.add(D.rb[id].n)); };
+async function openDeckFinder(cardName) {
+  if (!D.rb) { toast('Loading decks…'); try { await loadDecks(); } catch { toast('Could not load deck data — check your connection'); return; } }
+  if (cardName) { const id = rbIdOf(cardName); if (id) { const p = fdPicks(); if (!p.includes(id)) S.prefs.fdPicks = [...p, id]; savePrefs(); } }
+  pushSheet(renderDeckFinder);
+}
+function fdMatches(picks) {
+  const names = picks.map((id) => D.rb[id].n);
+  return ranked().map((a) => {
+    const l = a.list || {}, ids = { ...(l.main || {}) }, side = l.side || {};
+    const inDeck = new Map(); // card name → copies in main / side
+    for (const [id, n] of Object.entries(ids)) { const c = D.rb[id]; if (c) inDeck.set(c.n, { n: (inDeck.get(c.n)?.n || 0) + n, side: 0 }); }
+    if (a.leader && D.rb[a.leader]) inDeck.set(D.rb[a.leader].n, { n: 1, side: 0 });
+    for (const [id, n] of Object.entries(side)) { const c = D.rb[id]; if (c) { const e = inDeck.get(c.n) || { n: 0, side: 0 }; e.side += n; inDeck.set(c.n, e); } }
+    const hit = names.map((n) => inDeck.get(n) || null);
+    const score = hit.reduce((t, h) => t + (h ? (h.n ? 1 : 0.5) : 0), 0);
+    return { a, hit, score };
+  }).filter((m) => m.score > 0).sort((x, y) => y.score - x.score || (x.a.pos ?? 999) - (y.a.pos ?? 999));
+}
+function renderDeckFinder() {
+  const picks = fdPicks(), q = FD.q.trim().toLowerCase();
+  const doms = [...new Set(picks.flatMap((id) => D.rb[id].d || []).filter((d) => d !== 'Colorless'))];
+  const legs = picks.filter((id) => D.rb[id].t === 'Legend');
+  let results = '';
+  if (picks.length) {
+    const ms = fdMatches(picks), full = ms.filter((m) => m.hit.every(Boolean));
+    const warn = doms.length > 2 ? `<p class="banline">These cards span ${doms.length} domains (${doms.join(', ')}). A legend gives a deck 2, so no single deck can play all of them — the closest lists are below.</p>`
+      : legs.length > 1 ? '<p class="banline">A deck has one legend, so no list plays all the legends you picked.</p>' : '';
+    results = `<div class="dsec">${full.length ? `${full.length} deck${full.length > 1 ? 's' : ''} play${full.length > 1 ? '' : 's'} all ${picks.length}` : ms.length ? 'Closest decks' : 'No tournament list plays these yet'}</div>${warn}
+      <ul class="list">${ms.slice(0, 15).map((m) => { const a = m.a, r = cardRef(D.rb[a.leader]?.n || ''), b = a.best || {};
+        return `<li class="item fd-row" data-fdarch="${esc(a.slug)}">${img(r && r.img)}<div class="info"><div class="nm">${esc(a.name)}</div>
+          <div class="meta wrap">${domTags(a.colors)} <b class="rk">#${a.pos ?? a.rank}</b> ${pctTxt(a.winrate)} wins · ${a.share}% of decks</div>
+          <div class="fd-hits">${picks.map((id, i) => { const h = m.hit[i]; return `<span class="${h ? (h.n ? 'ok' : 'part') : 'no'}">${h ? (h.n ? h.n + '× ' : 'side ') : '✗ '}${esc(D.rb[id].n.split(',')[0])}</span>`; }).join('')}</div>
+          <div class="row" style="gap:8px;margin-top:6px"><button class="ghost mini" data-fdopen="${esc(a.slug)}">Open in app</button>${b.slug ? `<a class="ghost mini btnlink" href="https://riftbound.gg/decks/${esc(b.slug)}/" target="_blank" rel="noopener">riftbound.gg ↗</a>` : ''}</div></div></li>`; }).join('')}</ul>
+      ${!full.length && doms.length <= 2 && legs.length <= 1 ? '<button class="primary ghost" id="fd-build" style="width:100%;padding:13px;margin-top:8px">Start my own deck with these cards</button>' : ''}`;
+  }
+  const pickedN = new Set(picks.map((id) => D.rb[id].n)), seenN = new Set();
+  const pool = q.length >= 2 ? Object.entries(D.rb).filter(([id, c]) => isBaseId(id) && c.t !== 'Rune' && c.t !== 'Token' && !pickedN.has(c.n) && c.n.toLowerCase().includes(q) && !seenN.has(c.n) && seenN.add(c.n)).sort((x, y) => x[1].n.localeCompare(y[1].n)).slice(0, 12) : [];
+  $('#sheet-content').innerHTML = `<div class="detail"><h2>Find a deck for my cards</h2>
+    <p class="sub">Add the cards you want to play. You'll get the tournament lists that run them — strongest first — with a link to each list.</p>
+    <div class="toolbar"><input id="fd-q" type="search" placeholder="Add a card or legend…" value="${esc(FD.q)}" autocomplete="off"></div>
+    ${pool.length ? `<ul class="fd-pool">${pool.map(([id, c]) => `<li><button data-fdadd="${esc(id)}">${esc(c.n)} <small>${esc([c.t, (c.d || []).join('/')].filter(Boolean).join(' · '))}</small></button></li>`).join('')}</ul>` : q.length >= 2 ? '<p class="sub">No card by that name.</p>' : ''}
+    ${picks.length ? `<div class="fd-picks">${picks.map((id) => `<button data-fdrm="${esc(id)}" title="Remove">${esc(D.rb[id].n)} <b>×</b></button>`).join('')}<button class="linkbtn" id="fd-clear">Clear</button></div>` : '<p class="sub">Try a champion you love, a combo pair, or a legend.</p>'}
+    ${results}</div>`;
+  const re = () => renderDeckFinder();
+  const inp = $('#fd-q'); inp.oninput = () => { FD.q = inp.value; const pos = inp.selectionStart; re(); const n = $('#fd-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  $$('#sheet-content [data-fdadd]').forEach((b) => b.onclick = () => { S.prefs.fdPicks = [...fdPicks(), b.dataset.fdadd]; FD.q = ''; savePrefs(); re(); });
+  $$('#sheet-content [data-fdrm]').forEach((b) => b.onclick = () => { S.prefs.fdPicks = fdPicks().filter((x) => x !== b.dataset.fdrm); savePrefs(); re(); });
+  const cl = $('#fd-clear'); if (cl) cl.onclick = () => { S.prefs.fdPicks = []; savePrefs(); re(); };
+  $$('#sheet-content [data-fdopen]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); openDeck(b.dataset.fdopen); });
+  $$('#sheet-content .fd-row').forEach((li) => li.onclick = (e) => { if (e.target.closest('a,button')) return; openDeck(li.dataset.fdarch); });
+  const bd = $('#fd-build'); if (bd) bd.onclick = () => {
+    const leg = legs[0] || ''; const lc = D.rb[leg];
+    const main = {}; if (leg) main[leg] = 1;
+    if (lc) { const runes = Object.entries(D.rb).filter(([rid, r]) => r.t === 'Rune' && isBaseId(rid) && r.d.length === 1 && lc.d.includes(r.d[0])); const used = new Set();
+      for (const [rid, r] of runes) if (!used.has(r.d[0]) && used.size < 2) { main[rid] = 6; used.add(r.d[0]); } }
+    for (const id of picks) if (id !== leg) main[id] = D.rb[id].t === 'Battlefield' ? 1 : 3;
+    const name = picks.filter((id) => id !== leg).map((id) => D.rb[id].n.split(',')[0]).slice(0, 2).join(' + ') || 'New deck';
+    const dk = { id: Date.now().toString(36), name, leader: leg, main, side: {}, created: Date.now(), updated: Date.now() };
+    MD.decks.push(dk); saveMD(); toast(`Created <b>${esc(dk.name)}</b>${leg ? '' : ' — pick a legend next'}`);
+    SHEET[SHEET.length - 1] = () => renderMyDeck(dk.id); renderMyDeck(dk.id); $('#sheet .sheet-body').scrollTop = 0;
+  };
+}
