@@ -40,6 +40,7 @@ ASYNC = [
     ("deck analysis", "async () => { const a = ranked()[0]; const an = analyzeDeck(a, { legal: true }); return an.lines.length > 5; }"),
     ("decks tab", "async () => { show('decks'); await renderDecks(); return true; }"),
     ("share link round trip", "async () => { const c = await packShare({ i: [[Object.keys(S.inv.items)[0], 2]] }); const d = await unpackShare(c); return d.i[0][1] === 2; }"),
+    ("deck test mulligan odds", "async () => { const a = ranked()[0]; openDeckTest(a.list.main, a.list.leader || a.leader, a.name); const cell = () => parseInt(document.querySelector('.dt-odds tbody td:nth-child(3)').textContent, 10); DT.mOdds = 0; renderDeckTest(); const p0 = cell(); document.querySelector('#dt-modds [data-v=\"2\"]').click(); const p2 = cell(); const N = DT.deckAll.length, k = +document.querySelector('.dt-odds tbody td:nth-child(2)').textContent; const want = Math.round(hyperAtLeast1(N, k, 6) * 100); DT.mOdds = 0; closeSheet(); return p2 > p0 && p2 === want; }"),
     ("deck test draw", "async () => { const a = ranked()[0]; openDeckTest(a.list.main, a.list.leader || a.leader, a.name); const ok = DT.hand.length === 4 && !!document.querySelector('.dt-odds'); closeSheet(); return ok; }"),
     ("matchups", "async () => { D.tab = 'matrix'; await renderMatrix(); return !!document.querySelector('table.mx'); }"),
     ("events tab", "async () => { show('events'); await new Promise(r => setTimeout(r, 300)); return true; }"),
