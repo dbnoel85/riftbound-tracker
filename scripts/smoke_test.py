@@ -46,6 +46,7 @@ ASYNC = [
     ("tips data", "async () => { const t = (await loadTips()).items; return t.length >= 20 && t.every(x => x.id && x.title && x.body); }"),
     ("tip of the day", "async () => { await loadTips(); const a = tipOfDay(localDay()); return !!(a && a.title); }"),
     ("tips archive", "async () => { pushSheet(renderTipList); await new Promise(r => setTimeout(r, 300)); const ok = document.querySelectorAll('.tiplist li').length >= 20; closeSheet(); return ok; }"),
+    ("all-sets binder", "async () => { show('collection'); S.prefs.colSet = 'all'; S.prefs.colModeAll = 'binder'; renderCollection(); const ok = document.querySelectorAll('details.bset').length > 2 && document.querySelectorAll('.bslot').length > 50; S.prefs.colModeAll = 'list'; renderCollection(); return ok; }"),
     ("rules & guide", "async () => { pushSheet(renderLearn); await new Promise(r => setTimeout(r, 500)); const ok = !!document.querySelector('#sheet-content h2'); closeSheet(); return ok; }"),
 ]
 

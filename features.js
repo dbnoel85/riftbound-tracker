@@ -117,6 +117,34 @@ function renderBinder(groupId) {
     return `<button class="bslot ${q ? 'own' : ''}" data-k="${esc(it.k)}" title="${esc(it.n)}">${it.img ? `<img loading="lazy" decoding="async" src="${esc(it.img)}" alt="">` : '<div class="thumb"></div>'}${q ? `<span class="bq">×${q}</span>` : ''}<span class="bn">${esc(it.num || '')}</span></button>`;
   }).join('')}</div>`;
 }
+/** binder across every set: one page per set, in release order */
+function renderBinderAll() {
+  const only = !!S.prefs.binderOwned;
+  const { st } = setStats();
+  const groups = S.cards.groups.filter((g) => st.get(g.id)?.total);
+  let tot = 0, own = 0, val = 0, cnt = 0;
+  const secs = groups.map((g) => {
+    const items = S.cards.items.filter((it) => it.g === g.id && !it.sealed);
+    const byP = new Map(); for (const it of items) { if (!byP.has(it.p)) byP.set(it.p, []); byP.get(it.p).push(it); }
+    let prods = [...byP.values()].sort((a, b) => numSort(a[0].num) - numSort(b[0].num) || a[0].n.localeCompare(b[0].n));
+    const have = (list) => list.reduce((t, it) => t + ((S.inv.items[it.k] || {}).qty || 0), 0);
+    for (const l of prods) { const q = have(l); if (q) { own++; for (const it of l) { const e = S.inv.items[it.k]; if (e) { val += (e.qty || 0) * (it.m || 0); cnt += e.qty || 0; } } } }
+    const ownedN = prods.filter((l) => have(l) > 0).length; tot += prods.length;
+    if (only) prods = prods.filter((l) => have(l) > 0);
+    if (!prods.length) return '';
+    const pc = Math.floor(ownedN / (byP.size || 1) * 100);
+    return `<details class="bset" ${S.prefs.binderShut && S.prefs.binderShut.includes(g.id) ? '' : 'open'} data-g="${g.id}"><summary>${g.abbr ? `<img loading="lazy" src="assets/sets/${esc(g.abbr)}.jpg" alt="" onerror="this.remove()">` : ''}<span class="bsn">${esc(shortSet(g.name))}</span><span class="bsc">${ownedN} / ${byP.size} · ${pc}%</span></summary>
+      <div class="binder">${prods.map((l) => { const q = have(l), it = l[0];
+        return `<button class="bslot ${q ? 'own' : ''}" data-k="${esc(it.k)}" title="${esc(it.n)}">${it.img ? `<img loading="lazy" decoding="async" src="${esc(it.img)}" alt="">` : '<div class="thumb"></div>'}${q ? `<span class="bq">×${q}</span>` : ''}<span class="bn">${esc(it.num || '')}</span></button>`; }).join('')}</div></details>`;
+  }).join('');
+  $('#col-list').classList.remove('missing');
+  $('#col-list').innerHTML = `<li style="list-style:none"><div class="row bhead"><p class="sub" style="margin:0;flex:1">${own} of ${tot} cards across ${groups.length} sets.</p>
+    <div class="seg" id="bin-only"><button data-o="0" class="${only ? '' : 'on'}">Full binder</button><button data-o="1" class="${only ? 'on' : ''}">Owned only</button></div></div>${secs || '<p class="sub">No cards yet — scan or search to start filling your binder.</p>'}</li>`;
+  $('#sum-value').textContent = money(val); $('#sum-count').textContent = cnt;
+  $$('#col-list .bslot').forEach((b) => b.onclick = () => openDetail(b.dataset.k));
+  $$('#bin-only [data-o]').forEach((b) => b.onclick = () => { S.prefs.binderOwned = b.dataset.o === '1'; savePrefs(); renderBinderAll(); });
+  $$('#col-list details.bset').forEach((d) => d.ontoggle = () => { const s = new Set(S.prefs.binderShut || []); if (d.open) s.delete(+d.dataset.g); else s.add(+d.dataset.g); S.prefs.binderShut = [...s]; savePrefs(); });
+}
 const numSort = (n) => { const m = String(n || '').match(/(\d+)/); return m ? +m[1] : 9999; };
 
 /* ---------------------------------------------------------------- match log + matchups */

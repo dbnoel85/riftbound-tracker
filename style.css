@@ -735,3 +735,14 @@ table.dt-odds td[style]{background:linear-gradient(90deg,transparent calc(100% -
 .tiplist .nm{flex:1;min-width:0}
 .tiprow{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid rgba(42,51,96,.6);padding:9px 0;color:var(--text);font-size:13.5px}
 .tiprow:first-of-type{border-top:0}
+
+/* ---- binder: all sets */
+.bhead{gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 8px}
+.bset{border:1px solid var(--line);border-radius:6px;background:rgba(10,14,32,.5);margin:0 0 10px;padding:0 8px}
+.bset>summary{display:flex;align-items:center;gap:10px;padding:10px 2px;cursor:pointer;list-style:none}
+.bset>summary::-webkit-details-marker{display:none}
+.bset>summary img{width:44px;height:28px;object-fit:cover;border-radius:3px;flex:none}
+.bset .bsn{flex:1;font-weight:600}
+.bset .bsc{color:var(--sub);font-size:13px}
+.bset>summary::after{content:'▾';color:var(--gold);transition:transform .2s}
+.bset:not([open])>summary::after{transform:rotate(-90deg)}

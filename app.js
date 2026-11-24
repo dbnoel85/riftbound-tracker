@@ -1,7 +1,7 @@
 /* Riftbound Tracker — phone app (runs entirely in the browser; collection stays on this device). */
 'use strict';
 
-const SHELL_VERSION = 'v53';
+const SHELL_VERSION = 'v54';
 const INV_KEY = 'rbt.inventory.v1';
 const PREF_KEY = 'rbt.prefs.v1';
 const $ = (s) => document.querySelector(s);
@@ -317,7 +317,13 @@ function renderCollection() {
   renderSetStrip();
   const cur = S.prefs.colSet || 'all';
   const inSet = (it) => cur === 'all' || String(it.g) === cur;
-  $('#col-setmode').classList.toggle('hidden', cur === 'all');
+  $('#col-setmode').classList.remove('hidden');
+  $('#col-setmode [data-m=missing]').classList.toggle('hidden', cur === 'all');
+  if (cur === 'all') {
+    $$('#col-setmode button').forEach((b) => b.classList.toggle('on', b.dataset.m === (S.prefs.colModeAll === 'binder' ? 'binder' : 'owned')));
+    $('#col-setmode [data-m=owned]').textContent = 'List';
+    $('#col-setmode [data-m=binder]').textContent = 'Binder';
+  }
   if (cur !== 'all') {
     const g = S.groups.get(+cur); const x = setStats().st.get(+cur) || { total: 0, have: 0 };
     $$('#col-setmode button').forEach((b) => b.classList.toggle('on', b.dataset.m === (S.prefs.colMode || 'owned')));
@@ -328,6 +334,7 @@ function renderCollection() {
   } else $('#sum-label').textContent = colList().length > 1 ? `${colName()} value` : 'Collection value';
   if (typeof renderColPickers === 'function') renderColPickers();
   if (cur !== 'all' && S.prefs.colMode === 'missing') { renderMissing(+cur); return; }
+  if (cur === 'all' && S.prefs.colModeAll === 'binder' && typeof renderBinderAll === 'function') { renderBinderAll(); sumAllLine(cur); if (typeof renderToday === 'function') { renderToday(); renderTipCard(); } return; }
   if (cur !== 'all' && S.prefs.colMode === 'binder') { $('#col-list').innerHTML = '<li style="list-style:none">' + renderBinder(cur) + '</li>'; $$('#col-list .bslot').forEach((b) => b.onclick = () => openDetail(b.dataset.k)); return; }
   $('#col-list').classList.remove('missing');
   const langs = [...new Set(Object.keys(S.inv.items).map(langOf))];
@@ -1473,7 +1480,7 @@ function wire() {
   // mouse wheel scrolls side-scrolling strips on a computer
   document.addEventListener('wheel', (e) => { const el = e.target.closest('.setstrip,.chips'); if (!el || Math.abs(e.deltaX) > Math.abs(e.deltaY) || el.scrollWidth <= el.clientWidth) return; el.scrollLeft += e.deltaY; e.preventDefault(); }, { passive: false });
   $('#col-sets').onclick = (e) => { const b = e.target.closest('[data-colset]'); if (!b) return; S.prefs.colSet = b.dataset.colset; savePrefs(); renderCollection(); };
-  $('#col-setmode').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; S.prefs.colMode = b.dataset.m; savePrefs(); renderCollection(); };
+  $('#col-setmode').onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; if ((S.prefs.colSet || 'all') === 'all') S.prefs.colModeAll = b.dataset.m === 'binder' ? 'binder' : 'list'; else S.prefs.colMode = b.dataset.m; savePrefs(); renderCollection(); };
   $('#col-sort').value = S.prefs.sort;
   $('#col-sort').onchange = (e) => { S.prefs.sort = e.target.value; savePrefs(); renderCollection(); };
   let t; $('#add-q').oninput = () => { clearTimeout(t); t = setTimeout(renderAdd, 150); };
