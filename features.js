@@ -668,8 +668,9 @@ function impIndex() {
     const it = items[0]; if (it.sealed) continue;
     const add = (m, k) => { if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(items); };
     add(byName, impKey(it.n)); add(byName, impKey(it.n.replace(/\s*\([^)]*\)\s*$/, '')) + ' §base');
-    const m = String(it.num || '').match(/^0*(\d{1,3})([a-z*]?)/i), ab = abbr.get(it.g);
-    if (m && ab) add(byCode, `${ab}-${+m[1]}${(m[2] || '').toLowerCase()}`);
+    if (/ \/\/ /.test(it.n)) for (const side of it.n.replace(/\s*\([^)]*\)/g, '').split(' // ')) add(byName, impKey(side) + ' §side');
+    const ab = abbr.get(it.g);
+    if (ab) for (const n of impNums(it.num)) add(byCode, `${ab}-${n}`);
   }
   return (IMPIDX = { byName, byCode });
 }
@@ -684,15 +685,31 @@ function parseImport(text) {
   const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
   if (!lines.length) return [];
   const sep = (lines[0].match(/\t/g) || []).length > (lines[0].match(/,/g) || []).length ? '\t' : lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
-  const head = splitCSV(lines[0], sep).map((h) => h.toLowerCase());
-  const col = (...names) => head.findIndex((h) => names.some((n) => h === n || h.replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, '')));
+  const CODE = /^[A-Z]{2,6}-[A-Z]?\d{1,3}[a-z*]?$/;
+  const first = splitCSV(lines[0], sep);
+  // no header row: the first line is already a card ("VEN-038a","Akali, Silent Alternate Art","Foil","English",1,…)
+  const noHead = sep !== ' ' && first.length >= 3 && first.some((c) => CODE.test(c) || /^(normal|foil)$/i.test(c));
+  const head = noHead ? first.map(() => '') : first.map((h) => h.toLowerCase());
+  const col = (...names) => head.findIndex((h) => h && names.some((n) => h === n || h.replace(/[^a-z]/g, '') === n.replace(/[^a-z]/g, '')));
   const ci = { qty: col('quantity', 'qty', 'count', 'total quantity', 'add to quantity', 'amount', 'owned'), name: col('name', 'card name', 'product name', 'card', 'title', 'simple name'),
-    set: col('set', 'set name', 'edition', 'expansion', 'group'), code: col('set code', 'setcode'), num: col('card number', 'number', 'collector number', 'no', '#'),
+    set: col('set', 'set name', 'edition', 'expansion', 'group'), code: col('set code', 'setcode'), num: col('card number', 'number', 'collector number', 'no', '#', 'card id', 'id', 'code', 'card code', 'sku', 'collector id'),
     foil: col('printing', 'foil', 'finish', 'variance', 'treatment', 'foil type'), variant: col('variant', 'version', 'art', 'edition type'), rarity: col('rarity'), lang: col('language', 'lang'), pid: col('product id', 'tcgplayer id', 'tcgplayer product id', 'productid') };
+  // columns the header didn't name: work them out from what's in them
+  const body = (noHead ? lines : lines.slice(1)).slice(0, 40).map((l) => splitCSV(l, sep));
+  if (body.length && body[0].length > 1) {
+    const ncol = Math.max(...body.map((c) => c.length)), used = new Set(Object.values(ci).filter((i) => i >= 0));
+    const share = (i, re) => body.filter((c) => re.test(c[i] || '')).length / body.length;
+    const pick = (key, re, min = 0.6) => { if (ci[key] >= 0) return; for (let i = 0; i < ncol; i++) if (!used.has(i) && share(i, re) >= min) { ci[key] = i; used.add(i); return; } };
+    pick('num', CODE, 0.5);
+    pick('foil', /^(normal|foil|non-?foil|holo|promo|full art)$/i);
+    pick('lang', /^(english|chinese|simplified chinese|traditional chinese|korean|japanese|french|german|spanish|italian|portuguese|en|zh|ko|ja)$/i);
+    if (noHead || ci.qty < 0) pick('qty', /^\d{1,4}$/);
+    if (ci.name < 0) { let best = -1, bs = 0; for (let i = 0; i < ncol; i++) if (!used.has(i)) { const sc = body.filter((c) => /[a-z]{3}/i.test(c[i] || '') && !/^\d/.test(c[i] || '')).length; if (sc > bs) { bs = sc; best = i; } } if (bs >= body.length * 0.6) ci.name = best; }
+  }
   const rows = [];
   if (ci.name >= 0 || ci.pid >= 0 || ci.num >= 0) {
-    for (const l of lines.slice(1)) { const c = splitCSV(l, sep), g = (i) => (i >= 0 ? c[i] || '' : '');
-      const f = g(ci.foil); rows.push({ raw: l, csv: true, fRaw: f, qty: parseInt(g(ci.qty), 10) || (ci.qty >= 0 ? 0 : 1), name: g(ci.name), set: g(ci.set), code: g(ci.code), num: g(ci.num), pid: g(ci.pid), rarity: g(ci.rarity), variant: g(ci.variant), lang: impLang(g(ci.lang)), foil: /foil|holo/i.test(f) && !/non/i.test(f) ? true : f && /normal|non/i.test(f) ? false : null }); }
+    for (const l of noHead ? lines : lines.slice(1)) { const c = splitCSV(l, sep), g = (i) => (i >= 0 ? c[i] || '' : '');
+      const f = g(ci.foil), prices = c.filter((x) => /^\$?\d+\.\d{2}$/.test(x)).map((x) => parseFloat(x.replace('$', ''))); rows.push({ raw: l, csv: true, price: prices.length ? prices[prices.length - 1] : null, fRaw: f, qty: parseInt(g(ci.qty), 10) || (ci.qty >= 0 ? 0 : 1), name: g(ci.name), set: g(ci.set), code: g(ci.code), num: g(ci.num), pid: g(ci.pid), rarity: g(ci.rarity), variant: g(ci.variant), lang: impLang(g(ci.lang)), foil: /foil|holo/i.test(f) && !/non/i.test(f) ? true : f && /normal|non/i.test(f) ? false : null }); }
   } else {
     for (const l of lines) { let t = l.trim(); let qty = 1; const m = t.match(/^(\d+)\s*x?\s+(.*)$/i) || t.match(/^(.*?)\s+x\s*(\d+)$/i);
       if (m) { if (/^\d/.test(m[1])) { qty = +m[1]; t = m[2]; } else { t = m[1]; qty = +m[2]; } }
@@ -724,35 +741,55 @@ function impGroups(r) {
     for (const g of groups) { const gn = impKey(g.name).replace(/^riftbound\s*/, ''); if (w && gn && (gn === w || gn.includes(w) || w.includes(gn) || (g.abbr || '').toLowerCase() === w)) out.add(g.id); } }
   return out;
 }
-const impNum = (s) => { const m = String(s || '').replace(/^\s*[A-Z]{2,4}[-\s]+/i, '').match(/0*(\d{1,3})([a-z*]?)/i); return m ? `${+m[1]}${(m[2] || '').toLowerCase()}` : ''; };
+/** "VEN-038a" → "38a", "RAD-R04a" → "R4a", "UNL-T02" → "T2", "271/298" → "271" */
+const impNum = (s) => { const m = String(s || '').replace(/^\s*[A-Z]{2,6}[-\s]+/i, '').match(/^\s*([RT]?)0*(\d{1,3})([a-z*]?)/i) || String(s || '').match(/0*(\d{1,3})([a-z*]?)/i);
+  if (!m) return ''; return m.length === 4 ? `${(m[1] || '').toUpperCase()}${+m[2]}${(m[3] || '').toLowerCase()}` : `${+m[1]}${(m[2] || '').toLowerCase()}`; };
+/** every number a printing carries: tokens print two ("T02 // T05") */
+const impNums = (s) => String(s || '').split('//').map(impNum).filter(Boolean);
+/** a card name with the variant words some apps append ("Akali, Silent Alternate Art", "Recruit v2") taken off */
+const impClean = (n) => String(n || '').replace(/\s*[\[(]?\b(alternate art|alt art|overnumbered|signature|showcase|full art|promo|v\d)\b[\])]?\s*/ig, ' ').replace(/\s+/g, ' ').trim();
 /** words in the row that point to a special printing */
 function impVariantWant(r) {
   const t = (r.csv ? [r.name, r.variant, r.rarity, r.fRaw].join(' ') : r.raw + ' ' + (r.variant || '')).toLowerCase();
-  return { alt: /alt(ernate)?[\s-]*art|\balt\b/.test(t), over: /over[\s-]*number/.test(t), sig: /signature|signed/.test(t), show: /showcase/.test(t), promo: /\bpromo/.test(t) };
+  return { alt: /alt(ernate)?[\s-]*art|\balt\b/.test(t), over: /over[\s-]*number/.test(t), sig: /signature|signed/.test(t), show: /showcase/.test(t), promo: /\bpromo|full[\s-]*art/.test(t) };
 }
 function matchImport(r) {
   const X = impIndex();
   if (r.pid && S.byPid.get(+r.pid)) return impLangPick(S.byPid.get(+r.pid), r);
   // every printing this row could be: by name (with or without a variant tag) and by set + number
   const pool = new Map(); const addL = (l) => { for (const items of l || []) pool.set(items[0].p, items); };
-  if (r.name) { addL(X.byName.get(impKey(r.name))); addL(X.byName.get(impKey(r.name.replace(/\s*\([^)]*\)\s*/g, ' ')) + ' §base')); }
+  const clean = impClean(r.name);
+  if (r.name) { addL(X.byName.get(impKey(r.name))); addL(X.byName.get(impKey(r.name.replace(/\s*\([^)]*\)\s*/g, ' ')) + ' §base'));
+    if (clean !== r.name) { addL(X.byName.get(impKey(clean))); addL(X.byName.get(impKey(clean) + ' §base')); }
+    addL(X.byName.get(impKey(clean) + ' §side')); }
   const gs = impGroups(r), num = impNum(r.num);
   if (num) for (const [code, l] of X.byCode) if (code.endsWith('-' + num) && (!gs.size || l.some((x) => gs.has(x[0].g)))) addL(l.filter((x) => !gs.size || gs.has(x[0].g)));
   let l = [...pool.values()]; if (!l.length) return null;
-  const nm = (x) => (r.name ? printBase(x[0].n) === printBase(r.name) : true);
+  const sides = (x) => x[0].n.replace(/\s*\([^)]*\)/g, '').split(' // ').map((v) => impKey(v));
+  const nm = (x) => (r.name ? printBase(x[0].n) === printBase(r.name) || printBase(x[0].n) === printBase(clean) || sides(x).includes(impKey(clean)) : true);
   if (r.name && l.some(nm)) l = l.filter(nm);
   // narrow down: exact number first (027a = alternate art, 299 = overnumbered), then set, then variant words
   const numOf = (x) => impNum(x[0].num), want = impVariantWant(r), wantAny = Object.values(want).some(Boolean);
   // a plain number ("240") next to words like "Alternate Art" may be the base number: then only the digits must agree
   const loose = wantAny && /^\d+$/.test(num);
-  const numOk = (x) => (loose ? parseInt(numOf(x), 10) === +num : numOf(x) === num);
+  const numOk = (x) => (loose ? parseInt(numOf(x), 10) === +num : impNums(x[0].num).includes(num));
   if (num && l.some(numOk)) l = l.filter(numOk);
+  // a token: the side with this name should carry this number ("Bird" = T02 in "Bird // Gold")
+  const sideOk = (x) => { const sd = sides(x), ns = impNums(x[0].num); const i = sd.indexOf(impKey(clean)); return i >= 0 && (!num || ns[i] === num || ns.length < 2); };
+  if (l.length > 1 && l.some(sideOk)) l = l.filter(sideOk);
+  const isPromo = (x) => x[0].r === 'Promo' || !!PROMO_GROUPS[x[0].g] || /full art/i.test(x[0].n);
+  // "Promo" printing of a token may live in the promo set or be the set's full-art foil
+  if (want.promo && l.some(isPromo)) l = l.filter(isPromo);
   if (gs.size && l.some((x) => gs.has(x[0].g))) l = l.filter((x) => gs.has(x[0].g));
   const tags = (x) => x[0].n.toLowerCase();
   const prefer = [[want.alt, (x) => /alternate art/.test(tags(x))], [want.over, (x) => /overnumbered/.test(tags(x))], [want.sig, (x) => /signature/.test(tags(x))],
-    [want.show, (x) => x[0].r === 'Showcase'], [want.promo, (x) => x[0].r === 'Promo' || !!PROMO_GROUPS[x[0].g]]];
+    [want.show, (x) => x[0].r === 'Showcase'], [want.promo, isPromo]];
   for (const [on, fn] of prefer) if (on && l.some(fn)) l = l.filter(fn);
-  if (l.length > 1 && !(num && !loose) && !wantAny) { // nothing says it's special: standard art from a main set
+  // still several (e.g. the same token printed on different double-sided cards): the export's own price picks the closest
+  if (l.length > 1 && r.price > 0) {
+    const pr = (x) => { const v = pickFinish0(x, r); return v && v.m != null ? Math.abs(Math.log((v.m + 0.05) / (r.price + 0.05))) : 99; };
+    l.sort((a, b) => pr(a) - pr(b));
+  } else if (l.length > 1 && !(num && !loose) && !wantAny) { // nothing says it's special: standard art from a main set
     const g2 = impGroupSize();
     l.sort((a, b) => /\(/.test(a[0].n) - /\(/.test(b[0].n) || (g2.get(b[0].g) || 0) - (g2.get(a[0].g) || 0) || (a[0].m ?? 1e9) - (b[0].m ?? 1e9));
   }

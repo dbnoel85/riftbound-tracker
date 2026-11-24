@@ -46,6 +46,8 @@ ASYNC = [
     ("tips data", "async () => { const t = (await loadTips()).items; return t.length >= 20 && t.every(x => x.id && x.title && x.body); }"),
     ("tip of the day", "async () => { await loadTips(); const a = tipOfDay(localDay()); return !!(a && a.title); }"),
     ("tips archive", "async () => { pushSheet(renderTipList); await new Promise(r => setTimeout(r, 300)); const ok = document.querySelectorAll('.tiplist li').length >= 20; closeSheet(); return ok; }"),
+    ("import: headerless alt art + tokens", "() => { IMPIDX = null; const rows = parseImport('\"VEN-038a\",\"Akali, Silent Alternate Art\",\"Foil\",\"English\",1,,5.66,9.72\\n\"RAD-R04a\",\"Body Rune Alternate Art\",\"Foil\",\"English\",1,,1.59,3.40\\n\"VEN-T05\",\"Shadow Clone\",\"Normal\",\"English\",8,,0.02,0.02'); const m = rows.map(matchImport); return rows.length === 3 && m.every(Boolean) && /Alternate Art/.test(m[0].n) && m[1].num === 'R04a' && m[2].qty !== 0 && rows[2].qty === 8; }"),
+    ("import: TCGplayer header", "() => { IMPIDX = null; const rows = parseImport('Quantity,Name,Set,Card Number,Printing\\n2,\"Jinx, Loose Cannon\",Origins,OGN-202,Foil'); const m = rows.map(matchImport); return rows.length === 1 && !!m[0] && rows[0].qty === 2; }"),
     ("all-sets binder", "async () => { show('collection'); S.prefs.colSet = 'all'; S.prefs.colModeAll = 'binder'; renderCollection(); const ok = document.querySelectorAll('details.bset').length > 2 && document.querySelectorAll('.bslot').length > 50; S.prefs.colModeAll = 'list'; renderCollection(); return ok; }"),
     ("rules & guide", "async () => { pushSheet(renderLearn); await new Promise(r => setTimeout(r, 500)); const ok = !!document.querySelector('#sheet-content h2'); closeSheet(); return ok; }"),
 ]
